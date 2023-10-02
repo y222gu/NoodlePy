@@ -1,10 +1,3 @@
-# TODO:One function for generating spectra with different concentrations out of a list of molecular spectra
-# TODO:One function augment the spectra
-# TODO:add a proper main when run the script
-# TODO:CHANGE VARIBLES TO GLOBAL VARIBALES TO ALL CAPITALS
-# TODO: add a convolution to simulate the laser
-
-
 # Loading the required packages:
 import numpy as np
 import ramanspy
@@ -36,7 +29,7 @@ def create_mixture_spectrum(spectrum_range: np.array,
     """
 
     num_spectra = len(mixing_conc)
-    num_points = len(spectrum_range[0])
+    num_points = len(spectrum_range)
     spectrum = np.zeros(num_points)
 
     for i in range(num_spectra):
@@ -48,14 +41,14 @@ def create_mixture_spectrum(spectrum_range: np.array,
             spectrum += mixing_conc[i]*stats.norm.pdf(spectrum_range, peak_location[peak_i], peak_shape[peak_i]) * peak_intensity[peak_i]
 
     # Normalize the mixture spectrum
-    # spectrum = spectrum / np.max(spectrum)
+    spectrum = spectrum / np.max(spectrum)
 
     return spectrum
 
 
 def add_transforms(spectrum_range: np.array,
               spectrum: np.array,
-              number_spikes: int) -> np.array:
+              number_spikes: int=None) -> np.array:
 
     """
     This function transforms the spectrum by adding shot noise, cosmic rays, polynomial fluorescence background.
@@ -74,15 +67,15 @@ def add_transforms(spectrum_range: np.array,
     """
 
     # add shot noise
-    spectrum = spectrum + np.random.normal(0,0.4,len(spectrum))
+    spectrum = spectrum + np.random.normal(0,0.06,len(spectrum))
 
     # add spikes of cosmic rays: 
     spikes = np.random.randint(0, len(spectrum_range),number_spikes)
     for spike in spikes:
-        spectrum[spike] = spectrum[spike] + 10*np.random.random()
+        spectrum[spike] = spectrum[spike] + 2*np.random.random()
 
     # adding a polynomial baseline as fluorescence background:
-    poly = 0.05 * np.ones(len(spectrum_range)) + 0.00005 * spectrum_range + 0.000005 * (spectrum_range - 680)**2 
+    poly = 0.03 * np.ones(len(spectrum_range)) + 0.00003 * spectrum_range + 0.000003 * (spectrum_range - 680)**2 
     spectrum = spectrum + poly
 
     return spectrum
@@ -95,10 +88,10 @@ pipe = ramanspy.preprocessing.protocols.Pipeline([
     ramanspy.preprocessing.normalise.MinMax(pixelwise=True),
 ])
 
-def main(spectrum_range, mixing_conc):
+def main():
     # Initiate constant variables
     # color scheme for ploting
-    colors = plt.cm.get_cmap()(np.linspace(0, 1, 4))
+    colors = ['#FF5733', '#33FF57', '#3366FF', '#FFFF33']
 
     # signal_intensity_level
     w=0.05
@@ -136,6 +129,11 @@ def main(spectrum_range, mixing_conc):
     peak_location_list = [peak_location_valine, peak_location_histidine, peak_location_tryptophan]
     peak_intensity_list = [peak_intensity_valine, peak_intensity_histidine, peak_intensity_tryptophan]
     peak_shape_list = [peak_shape_valine, peak_shape_histidine, peak_shape_tryptophan]
+    
+    # spectrum range to be created in wavenumbers
+    spectrum_range=  np.linspace(350, 1800, 1450) 
+    # concentration of valine : histidine : tryptophan
+    mixing_conc = [5, 3, 2] 
 
     # Create the spectrum of a mixture
     mixture_spectrum = create_mixture_spectrum(spectrum_range, peak_location_list, peak_shape_list, peak_intensity_list, mixing_conc)
@@ -158,10 +156,5 @@ def main(spectrum_range, mixing_conc):
     plt.savefig('plot_after_preprocessing.pdf', bbox_inches='tight', dpi=300)
     plt.close()
 
-
-# Manual input
-SPECTRUM_RANGE=  np.linspace(350, 1800, 1450) # spectrum range to be created in wavenumbers
-MIXING_CONC = [5, 3, 2] # concentration of valine : histidine : tryptophan
-
 if __name__ == "__main__":
-    main(spectrum_range=SPECTRUM_RANGE, mixing_conc=MIXING_CONC)
+    main()
