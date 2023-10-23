@@ -46,8 +46,10 @@ def create_mixture_spectrum(
 
 
 
-def add_transforms(
-    spectrum_range: np.array, spectrum: np.array, number_spikes: int = None
+def add_transforms(exp_conditions: dict,
+                   spectrum_range: np.array, 
+                   spectrum: np.array, 
+                   number_spikes: int = None
 ) -> np.array:
     """
     This function transforms the spectrum by adding shot noise, cosmic rays, polynomial fluorescence background.
@@ -64,22 +66,41 @@ def add_transforms(
     spectrum: np.array
         The transformed spectrum.
     """
+   
 
     # add shot noise
-    spectrum = spectrum + np.random.normal(0, 0.06, len(spectrum))
+    shot_noise_factor = exp_conditions["shot_noise_factor"]
+    spectrum = spectrum + np.random.normal(0, shot_noise_factor, len(spectrum))
 
     # add spikes of cosmic rays:
+    number_spikes = exp_conditions["spike_num"]
+    spike_amplitude = exp_conditions["spike_amplitude"]
     spikes = np.random.randint(0, len(spectrum_range), number_spikes)
     for spike in spikes:
-        spectrum[spike] = spectrum[spike] + 2 * np.random.random()
+        spectrum[spike] = spectrum[spike] + spike_amplitude * np.random.random()
 
-    # adding a polynomial baseline as fluorescence background:
-    poly = (
-        0.03 * np.ones(len(spectrum_range))
-        + 0.00003 * spectrum_range
-        + 0.000003 * (spectrum_range - 680) ** 2
-    )
-    spectrum = spectrum + poly
+    # adding a baseline with different options: 
+    baseline_type = exp_conditions["baseline_type"]
+    if baseline_type == "polynomial":
+        poly_orders = exp_conditions["poly_orders"]
+        poly_pars = exp_conditions["poly_pars"]
+        poly_shift = exp_conditions["poly_shift"]
+        baseline = 0
+        for i in range(poly_orders + 1):
+            baseline += poly_pars[i] * (spectrum_range - poly_shift[i]) ** i
+        return baseline  
+    elif baseline_type == "sine":# Sine wave baseline
+        sine_amplitude = exp_conditions["sine_amplitude"]
+        sine_frequency = exp_conditions["sine_frequency"]
+        sine_phase = exp_conditions["sine_phase"]
+        baseline = sine_amplitude * np.sin(sine_frequency * spectrum_range
+                                       + sine_phase) 
+        return baseline   
+    else:
+        baseline = np.zeros_like(spectrum_range)  # No baseline
+        return baseline
+
+    spectrum = spectrum + baseline
     return spectrum
 
 

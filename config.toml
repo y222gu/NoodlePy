@@ -9,11 +9,24 @@ spectrum_range_pars = [350, 1800, 1450] # unit is nm
 substrate = "quartz" # quartz, glass, PDMS
 laser_source = 785 # 785, 532, unit is nm
 temperture = 22 # unit is celsius
+baseline_type = "poly"
 
-[baseline]
+# polynomial baseline
 poly_orders = 3
 poly_pars = [0.03, 0.00003, 0.000003]
 poly_shift = [0, 0, -680]
+
+# sine baseline
+sine_amplitude = 0.1  # Define parameters for the sine wave baseline
+sine_frequency = 0.05  # Adjust the frequency as needed
+sine_phase = 0  # Phase offset (initial phase)
+
+# cosmic rays
+spike_num = 2
+spike_amplitude = 2
+
+# shot noise
+shot_noise_factor = 0.06
 
 
 
