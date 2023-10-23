@@ -1,0 +1,85 @@
+# This is a TOML file
+
+[sample_info]
+mixing_conc = [5, 3, 2]
+
+[experiment_conditions]
+spectrum_range_pars = [350, 1800, 1450]
+
+# Amplitude of the Gaussian peaks in a spectrum (signal intensity level)
+[signal_intensity]
+w = 0.05
+mw = 0.1
+m = 0.2
+ms = 0.25
+s = 0.5
+vs = 1
+
+# Sigma of the Gaussian peaks in a spectrum (signal peak shape)
+[sigma]
+norm = 5
+sh = 10
+br = 15
+
+[plot_design]
+colors = ["#FF5733", "#33FF57", "#3366FF", "#FFFF33"]
+
+
+# Stored database
+# valine
+[valine]
+peak_locations = [
+    374, 396, 429, 472, 497, 542, 664, 715, 753, 776, 824, 849, 891, 902, 923, 948,
+    964, 1029, 1035, 1066, 1106, 1125, 1146, 1179, 1191, 1272, 1321, 1330, 1343,
+    1351, 1398, 1427, 1452, 1508, 1567, 1587, 1619, 1633, 1660
+]
+peak_intensities = [
+    "mw", "mw", "mw", "w", "w", "vs", "mw", "m", "m", "s", "m", "s", "w", "m",
+    "mw", "s", "m", "mw", "mw", "mw", "w", "m", "mw", "mw", "m", "m", "m", "m",
+    "s", "s", "m", "m", "s", "mw", "w", "w", "mw", "mw", "w"
+]
+peak_shapes = [
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm',
+    'norm', 'norm', 'norm', 'sh', 'norm', 'sh', 'norm', 'norm', 'norm', 'norm',
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'sh', 'norm', 'sh',
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm'
+]
+
+# histidine
+[histidine]
+peak_locations = [
+    404, 422, 540, 623, 656, 680, 731, 784, 804, 824, 852, 918, 929, 963, 976,
+    1061, 1087, 1111, 1140, 1174, 1224, 1250, 1271, 1317, 1336, 1347, 1407, 1430, 
+    1476, 1498, 1538, 1571, 1608, 1639
+]
+peak_intensities = [
+    "m", "mw", "mw", "mw", "m", "w", "mw", "mw", "m", "mw", "m", "m", "mw", "m",
+    "m", "m", "s", "m", "mw", "m", "m", "m", "s", "vs", "m", "m", "m", "m", "mw", 
+    "m", "w", "m", "w", "w"
+]
+peak_shapes = [
+    'norm', 'sh', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm',
+    'norm', 'norm', 'sh', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm'
+]
+
+# tryptophan
+[tryptophan]
+peak_locations = [
+    393, 425, 456, 498, 509, 534, 548, 574, 596, 626, 683, 706, 741, 755, 766, 778, 
+    802, 840, 848, 865, 874, 988, 1009, 1046, 1076, 1103, 1118, 1160, 1207, 1231, 1253,
+    1278, 1309, 1314, 1328, 1338, 1358, 1423, 1450, 1457, 1486, 1556, 1576, 1616
+]
+peak_intensities = [
+    "w", "w", "w", "m", "m", "m", "w", "m", "m", "m", "w", "m", "m", "vs", "m", "m", 
+    "w", "m", "m", "m", "s", "w", "vs", "w", "w", "w", "m", "w", "w", "m", "w", "w",
+    "w", "m", "m", "s", "s", "s", "m", "m", "m", "s", "m", "m"
+]
+peak_shapes = [
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm',
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
+    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
+    'norm', 'norm', 'norm'
+]

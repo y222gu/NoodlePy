@@ -3,7 +3,7 @@ import numpy as np
 import ramanspy
 import matplotlib.pyplot as plt
 from scipy import stats
-
+import toml
 
 def create_mixture_spectrum(
     spectrum_range: np.array,
@@ -105,293 +105,45 @@ pipe = ramanspy.preprocessing.protocols.Pipeline(
 )
 
 def main():
+
     # Initiate constant variables
-    # color scheme for ploting
-    colors = ["#FF5733", "#33FF57", "#3366FF", "#FFFF33"]
-
+    with open("config.toml", "r") as toml_file:
+        config = toml.load(toml_file)
+        
     # signal_intensity_level
-    w = 0.05
-    mw = 0.1
-    m = 0.2
-    ms = 0.25
-    s = 0.5
-    vs = 1
-
+    w = config["signal_intensity"]["w"]
+    mw = config["signal_intensity"]["mw"]
+    m = config["signal_intensity"]["m"]
+    ms = config["signal_intensity"]["ms"]
+    s = config["signal_intensity"]["s"]
+    vs = config["signal_intensity"]["vs"]
     # sigma
-    sh = 10
-    br = 15
+    norm = config["sigma"]["norm"]
+    sh = config["sigma"]["sh"]
+    br = config["sigma"]["br"]
+    # color scheme for ploting
+    colors = ["plot_design"]["colors"]
+    # spectrum range to be created in wavenumbers
+    spectrum_range_pars = config["experiment_conditions"]["spectrum_range_pars"]
+    spectrum_range = np.linspace(spectrum_range_pars[0], spectrum_range_pars[1], spectrum_range_pars[2])
+    # concentration of the components of the sample
+    mixing_conc = config["sample_info"]["mixing_conc"]
 
-    # Stored database
+    # Load Stored data
     # valine
-    peak_location_valine = np.array(
-        [
-            374,
-            396,
-            429,
-            472,
-            497,
-            542,
-            664,
-            715,
-            753,
-            776,
-            824,
-            849,
-            891,
-            902,
-            923,
-            948,
-            964,
-            1029,
-            1035,
-            1066,
-            1106,
-            1125,
-            1146,
-            1179,
-            1191,
-            1272,
-            1321,
-            1330,
-            1343,
-            1351,
-            1398,
-            1427,
-            1452,
-            1508,
-            1567,
-            1587,
-            1619,
-            1633,
-            1660,
-        ]
-    )
-    peak_intensity_valine = np.array(
-        [
-            mw,
-            mw,
-            mw,
-            w,
-            w,
-            vs,
-            mw,
-            m,
-            m,
-            s,
-            m,
-            s,
-            w,
-            m,
-            mw,
-            s,
-            m,
-            mw,
-            mw,
-            mw,
-            w,
-            m,
-            mw,
-            mw,
-            m,
-            m,
-            m,
-            m,
-            s,
-            s,
-            m,
-            m,
-            s,
-            mw,
-            w,
-            w,
-            mw,
-            mw,
-            w,
-        ]
-    )
-    peak_shape_valine = 5 * np.ones(len(peak_location_valine))
-    peak_shape_valine[12] = sh
-    peak_shape_valine[14] = sh
-    peak_shape_valine[26] = sh
-    peak_shape_valine[28] = sh
+    peak_location_valine = config["valine"]["peak_locations"]
+    peak_intensity_valine = config["valine"]["peak_intensities"]
+    peak_shape_valine = config["valine"]["peak_shapes"]
     # histidine
-    peak_location_histidine = np.array(
-        [
-            404,
-            422,
-            540,
-            623,
-            656,
-            680,
-            731,
-            784,
-            804,
-            824,
-            852,
-            918,
-            929,
-            963,
-            976,
-            1061,
-            1087,
-            1111,
-            1140,
-            1174,
-            1224,
-            1250,
-            1271,
-            1317,
-            1336,
-            1347,
-            1407,
-            1430,
-            1476,
-            1498,
-            1538,
-            1571,
-            1608,
-            1639,
-        ]
-    )
-    peak_intensity_histidine = np.array(
-        [
-            m,
-            mw,
-            mw,
-            mw,
-            m,
-            w,
-            mw,
-            mw,
-            m,
-            mw,
-            m,
-            m,
-            mw,
-            m,
-            m,
-            m,
-            s,
-            m,
-            mw,
-            m,
-            m,
-            m,
-            s,
-            vs,
-            m,
-            m,
-            m,
-            m,
-            mw,
-            m,
-            w,
-            m,
-            w,
-            w,
-        ]
-    )
-    peak_shape_histidine = 5 * np.ones(len(peak_location_histidine))
-    peak_shape_histidine[1] = sh
-    peak_shape_histidine[12] = sh
+    peak_location_histidine = config["histidine"]["peak_location"]
+    peak_intensity_histidine = config["histidine"]["peak_intensities"]
+    peak_shape_histidine = config["histidine"]["peak_shapes"]
     # tryptophan
-    peak_location_tryptophan = np.array(
-        [
-            393,
-            425,
-            456,
-            498,
-            509,
-            534,
-            548,
-            574,
-            596,
-            626,
-            683,
-            706,
-            741,
-            755,
-            766,
-            778,
-            802,
-            840,
-            848,
-            865,
-            874,
-            988,
-            1009,
-            1046,
-            1076,
-            1103,
-            1118,
-            1160,
-            1207,
-            1231,
-            1253,
-            1278,
-            1309,
-            1314,
-            1328,
-            1338,
-            1358,
-            1423,
-            1450,
-            1457,
-            1486,
-            1556,
-            1576,
-            1616,
-        ]
-    )
-    peak_intensity_tryptophan = np.array(
-        [
-            w,
-            w,
-            w,
-            m,
-            m,
-            m,
-            w,
-            m,
-            m,
-            m,
-            w,
-            m,
-            m,
-            vs,
-            m,
-            m,
-            w,
-            m,
-            m,
-            m,
-            s,
-            w,
-            vs,
-            w,
-            w,
-            w,
-            m,
-            w,
-            w,
-            m,
-            w,
-            w,
-            w,
-            m,
-            m,
-            s,
-            s,
-            s,
-            m,
-            m,
-            m,
-            s,
-            m,
-            m,
-        ]
-    )
-    peak_shape_tryptophan = 5 * np.ones(len(peak_location_tryptophan))
+    peak_location_tryptophan = config["tryptophan"]["peak_location"]
+    peak_intensity_tryptophan = config["tryptophan"]["peak_intensities"]
+    peak_shape_tryptophan = config["tryptophan"]["peak_shapes"]
+
+
 
     # Make all components into a list
     peak_location_list = [
@@ -406,10 +158,7 @@ def main():
     ]
     peak_shape_list = [peak_shape_valine, peak_shape_histidine, peak_shape_tryptophan]
 
-    # spectrum range to be created in wavenumbers
-    spectrum_range = np.linspace(350, 1800, 1450)
-    # concentration of valine : histidine : tryptophan
-    mixing_conc = [5, 3, 2]
+
 
     # Create the spectrum of a mixture
     mixture_spectrum = create_mixture_spectrum(
