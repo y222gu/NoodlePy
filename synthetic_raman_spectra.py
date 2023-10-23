@@ -7,28 +7,21 @@ import tomllib
 
 def create_mixture_spectrum(
     sample_pars: dict,
-    component_spectrum_list: dict,
+    component_spectrum_list: list,
     exp_conditions: dict,
-    gaussian_pars: dict,
-) -> np.array:
+    gaussian_pars: dict
+) -> tuple:
     """
-    This function creates a mixture spectrum from multiple individual spectra.
+    Create a mixture spectrum from individual spectra.
 
     Parameters:
-    spectrum_range_list: np.array
-        Array of wavenumber for the spectrum range of the pristine spectrum.
-    peak_location_list: list of np.array
-        List of peak locations for each individual spectrum.
-    peak_shape_list: list of np.array
-        List of peak shapes for each individual spectrum.
-    peak_intensity_list: list of np.array
-        List of peak intensities for each individual spectrum.
-    mixing_conc: np.array
-        Array of concentrations of each individual spectrum in the mixture spectrum.
+    exp_conditions (dict): Experiment conditions.
+    sample_pars (dict): Sample parameters.
+    component_spectrum_list (list of dict): List of component spectra.
+    gaussian_pars (dict): Parameters for Gaussian peaks.
 
     Returns:
-    spectrum: np.array
-        The spectrum of the mixture.
+    Tuple[np.array, np.array]: The generated spectrum and corresponding wavenumbers.
     """
     mixing_conc = sample_pars["mixing_conc"]
     spectrum_range_pars = exp_conditions["spectrum_range_pars"]
@@ -48,7 +41,6 @@ def create_mixture_spectrum(
                 )
                 * peak_intensities[peak_i]
             )
-
     spectrum /= np.max(spectrum)  # Normalize the mixture spectrum
     return spectrum, spectrum_range
 
@@ -101,6 +93,24 @@ pipe = ramanspy.preprocessing.protocols.Pipeline(
     ]
 )
 
+def plot_spectrum(spectrum: np.array, spectrum_range: np.array, color: str, filename: str):
+    """
+    Plot and save a spectrum to a file.
+
+    Parameters:
+    spectrum (np.array): The spectrum to be plotted.
+    spectrum_range (np.array): The corresponding wavenumbers.
+    color (str): The color for the plot.
+    filename (str): The filename for the saved plot.
+    """
+    ramanspy.plot.spectra(
+        ramanspy.Spectrum(spectrum, spectrum_range),
+        color=color,
+        plot_type="stacked",
+    )
+    plt.savefig(filename, bbox_inches="tight", dpi=300)
+    plt.close()
+
 
 def main():
 
@@ -121,29 +131,18 @@ def main():
         exp_conditions,
         gaussian_pars,
     )
-    ramanspy.plot.spectra(
-        ramanspy.Spectrum(mixture_spectrum, spectrum_range),
-        color=colors[1],
-        plot_type="stacked",
-    )
-    plt.savefig("plot_after_mixing_molecules.pdf", bbox_inches="tight", dpi=300)
-    plt.close()
+    plot_spectrum(mixture_spectrum, spectrum_range, colors[1], "plot_after_mixing_molecules.pdf")
+
 
     # Transform the spectrum
     transformed_spectrum = add_transforms(spectrum_range, mixture_spectrum, 3)
-
-    # Wrap spectrum into a ramanspy container
-    wrapped_spectrum = ramanspy.Spectrum(transformed_spectrum, spectrum_range)
-    ramanspy.plot.spectra(wrapped_spectrum, color=colors[1], plot_type="stacked")
-    plt.savefig("plot_after_adding_transforms.pdf", bbox_inches="tight", dpi=300)
-    plt.close()
+    plot_spectrum(transformed_spectrum, spectrum_range, colors[1], "plot_after_adding_transforms.pdf")
 
     # Preprocess the spectra with the assembled pipeline
-    preprocessed_spectrum = pipe.apply(wrapped_spectrum)
+    preprocessed_spectrum = pipe.apply(ramanspy.Spectrum(transformed_spectrum, spectrum_range))
     ramanspy.plot.spectra(preprocessed_spectrum, color=colors[3], plot_type="stacked")
     plt.savefig("plot_after_preprocessing.pdf", bbox_inches="tight", dpi=300)
     plt.close()
-
 
 if __name__ == "__main__":
     main()

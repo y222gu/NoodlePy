@@ -1,7 +1,7 @@
 # This is a TOML file
 
 [sample_pars]
-components = ["valine", "tryptophan"]
+components = ["valine","tryptophan"]
 mixing_conc = [5, 2]
 
 [exp_conditions]
@@ -9,6 +9,13 @@ spectrum_range_pars = [350, 1800, 1450] # unit is nm
 substrate = "quartz" # quartz, glass, PDMS
 laser_source = 785 # 785, 532, unit is nm
 temperture = 22 # unit is celsius
+
+[baseline]
+poly_orders = 3
+poly_pars = [0.03, 0.00003, 0.000003]
+poly_shift = [0, 0, -680]
+
+
 
 [gaussian_pars]
 "w" = 0.05 # Amplitude of the Gaussian peaks in a spectrum (signal intensity level)
