@@ -6,11 +6,10 @@ from scipy import stats
 import tomllib
 
 def create_mixture_spectrum(
-    spectrum_range: np.array,
-    peak_location_list: list,
-    peak_shape_list: list,
-    peak_intensity_list: list,
-    mixing_conc: np.array,
+    sample_pars: dict,
+    component_spectrum_list: dict,
+    exp_conditions: dict,
+    gaussian_pars: dict,
 ) -> np.array:
     """
     This function creates a mixture spectrum from multiple individual spectra.
@@ -31,29 +30,33 @@ def create_mixture_spectrum(
     spectrum: np.array
         The spectrum of the mixture.
     """
-
+    mixing_conc = sample_pars["mixing_conc"]
     num_spectra = len(mixing_conc)
-    num_points = len(spectrum_range)
-    spectrum = np.zeros(num_points)
+    spectrum_range_pars = exp_conditions["spectrum_range_pars"]
+    spectrum_range = np.linspace(spectrum_range_pars[0], spectrum_range_pars[1], spectrum_range_pars[2])
+    spectrum = np.zeros(len(spectrum_range))
 
     for i in range(num_spectra):
-        peak_location = peak_location_list[i]
-        peak_shape = peak_shape_list[i]
-        peak_intensity = peak_intensity_list[i]
+        component_i = component_spectrum_list[i]
+        peak_locations = component_i["peak_locations"]
+        peak_shapes = component_i["peak_shapes"]
+        peak_shapes = [gaussian_pars[peak] for peak in peak_shapes]
+        peak_intensities = component_i["peak_intensities"]
+        peak_intensities = [gaussian_pars[peak] for peak in peak_intensities]
 
-        for peak_i in np.arange(len(peak_location)):
+        for peak_i in np.arange(len(peak_locations)):
             spectrum += (
                 mixing_conc[i]
                 * stats.norm.pdf(
-                    spectrum_range, peak_location[peak_i], peak_shape[peak_i]
+                    spectrum_range, peak_locations[peak_i], peak_shapes[peak_i]
                 )
-                * peak_intensity[peak_i]
+                * peak_intensities[peak_i]
             )
 
     # Normalize the mixture spectrum
     spectrum = spectrum / np.max(spectrum)
 
-    return spectrum
+    return spectrum, spectrum_range
 
 
 def add_transforms(
@@ -90,7 +93,6 @@ def add_transforms(
         + 0.000003 * (spectrum_range - 680) ** 2
     )
     spectrum = spectrum + poly
-
     return spectrum
 
 
@@ -104,33 +106,6 @@ pipe = ramanspy.preprocessing.protocols.Pipeline(
     ]
 )
 
-'''
-def prep_spectrum():
-    # Initiate constant variables
-    with open("config.toml", "rb") as toml_file:
-        config = tomllib.load(toml_file)
-
-    # signal_intensity_level
-    gaussian_amplitude_pars = config["signal_intensity_pars"]
-    w = gaussian_amplitude_pars["w"]
-    mw = gaussian_amplitude_pars["mw"]
-    m = gaussian_amplitude_pars["m"]
-    ms = gaussian_amplitude_pars["ms"]
-    s = gaussian_amplitude_pars["s"]
-    vs = gaussian_amplitude_pars["vs"]
-    # sigma
-    gaussian_sigma_pars = config["gaussian_sigma_pars"]
-    n = gaussian_sigma_pars["norm"]
-    sh = gaussian_sigma_pars["sh"]
-    br = gaussian_sigma_pars["br"]
-
-    # Create a mapping from strings to numbers using dictionary comprehension
-    string_to_number = {string: num for num, string in enumerate(set(str_array))}
-
-    # Convert the array of strings to an array of numbers using list comprehension
-    num_array = [string_to_number[string] for string in str_array]
-    return
-'''
 
 def main():
 
@@ -138,64 +113,18 @@ def main():
     with open("config.toml", "rb") as toml_file:
         config = tomllib.load(toml_file)
 
-    # signal_intensity_level
-    gaussian_amplitude_pars = config["signal_intensity_pars"]
-    w = gaussian_amplitude_pars["w"]
-    mw = gaussian_amplitude_pars["mw"]
-    m = gaussian_amplitude_pars["m"]
-    ms = gaussian_amplitude_pars["ms"]
-    s = gaussian_amplitude_pars["s"]
-    vs = gaussian_amplitude_pars["vs"]
-    # sigma
-    gaussian_sigma_pars = config["gaussian_sigma_pars"]
-    n = gaussian_sigma_pars["n"]
-    sh = gaussian_sigma_pars["sh"]
-    br = gaussian_sigma_pars["br"]
-    # color scheme for ploting
-    colors = config["plot_design"]["colors"]
-    # spectrum range to be created in wavenumbers
-    spectrum_range_pars = config["experiment_conditions"]["spectrum_range_pars"]
-    spectrum_range = np.linspace(spectrum_range_pars[0], spectrum_range_pars[1], spectrum_range_pars[2])
-    # concentration of the components of the sample
-    mixing_conc = config["sample_info"]["mixing_conc"]
-
-    # Load Stored data
-    # valine
-    peak_location_valine = config["valine"]["peak_locations"]
-    peak_intensity_valine = config["valine"]["peak_intensities"]
-    peak_shape_valine = config["valine"]["peak_shapes"]
-    # histidine
-    peak_location_histidine = config["histidine"]["peak_locations"]
-    peak_intensity_histidine = config["histidine"]["peak_intensities"]
-    peak_shape_histidine = config["histidine"]["peak_shapes"]
-    # tryptophan
-    peak_location_tryptophan = config["tryptophan"]["peak_locations"]
-    peak_intensity_tryptophan = config["tryptophan"]["peak_intensities"]
-    peak_shape_tryptophan = config["tryptophan"]["peak_shapes"]
-
-
-    # Make all components into a list
-    peak_location_list = [
-        peak_location_valine,
-        peak_location_histidine,
-        peak_location_tryptophan,
-    ]
-    peak_intensity_list = [
-        peak_intensity_valine,
-        peak_intensity_histidine,
-        peak_intensity_tryptophan,
-    ]
-    peak_shape_list = [peak_shape_valine, peak_shape_histidine, peak_shape_tryptophan]
-
-
-
+    colors = config["plot_design"]["colors"]# load color scheme for ploting
+    sample_pars = config["sample_pars"]# load concentration of the sample
+    component_spectrum_list = [config[component] for component in sample_pars["components"]]# load components spectra
+    exp_conditions = config["exp_conditions"]# load spectrum range to be created in wavenumbers
+    gaussian_pars = config["gaussian_pars"]# load the pars for gaussian amplitude and sigma
+    
     # Create the spectrum of a mixture
-    mixture_spectrum = create_mixture_spectrum(
-        spectrum_range,
-        peak_location_list,
-        peak_shape_list,
-        peak_intensity_list,
-        mixing_conc,
+    mixture_spectrum, spectrum_range = create_mixture_spectrum(
+        sample_pars,
+        component_spectrum_list,
+        exp_conditions,
+        gaussian_pars,
     )
     ramanspy.plot.spectra(
         ramanspy.Spectrum(mixture_spectrum, spectrum_range),
