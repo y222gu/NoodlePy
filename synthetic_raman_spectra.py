@@ -49,24 +49,19 @@ def create_mixture_spectrum(
 def add_transforms(exp_conditions: dict,
                    spectrum_range: np.array, 
                    spectrum: np.array, 
-                   number_spikes: int = None
 ) -> np.array:
     """
-    This function transforms the spectrum by adding shot noise, cosmic rays, polynomial fluorescence background.
+    Transform the spectrum by adding shot noise, cosmic rays, and baseline.
 
     Parameters:
-    spectrum_range: np.array
-        Array of wavenumbers for the spectrum range of the spectrum.
-    spectrum: np.array
-        Array of intensities for the spectrum.
-    number_spikes: int
-        The number of random cosmic ray spikes to add.
+    exp_conditions (dict): Experiment conditions.
+    spectrum_range (np.array): Array of wavenumbers for the spectrum range.
+    spectrum (np.array): Array of intensities for the spectrum.
+    number_spikes (int): The number of random cosmic ray spikes to add.
 
     Returns:
-    spectrum: np.array
-        The transformed spectrum.
+    np.array: The transformed spectrum.
     """
-   
 
     # add shot noise
     shot_noise_factor = exp_conditions["shot_noise_factor"]
@@ -81,24 +76,21 @@ def add_transforms(exp_conditions: dict,
 
     # adding a baseline with different options: 
     baseline_type = exp_conditions["baseline_type"]
-    if baseline_type == "polynomial":
+    if baseline_type == "poly":
         poly_orders = exp_conditions["poly_orders"]
         poly_pars = exp_conditions["poly_pars"]
         poly_shift = exp_conditions["poly_shift"]
         baseline = 0
         for i in range(poly_orders + 1):
             baseline += poly_pars[i] * (spectrum_range - poly_shift[i]) ** i
-        return baseline  
     elif baseline_type == "sine":# Sine wave baseline
         sine_amplitude = exp_conditions["sine_amplitude"]
         sine_frequency = exp_conditions["sine_frequency"]
         sine_phase = exp_conditions["sine_phase"]
         baseline = sine_amplitude * np.sin(sine_frequency * spectrum_range
                                        + sine_phase) 
-        return baseline   
     else:
         baseline = np.zeros_like(spectrum_range)  # No baseline
-        return baseline
 
     spectrum = spectrum + baseline
     return spectrum
@@ -156,7 +148,7 @@ def main():
 
 
     # Transform the spectrum
-    transformed_spectrum = add_transforms(spectrum_range, mixture_spectrum, 3)
+    transformed_spectrum = add_transforms(exp_conditions, spectrum_range, mixture_spectrum)
     plot_spectrum(transformed_spectrum, spectrum_range, colors[1], "plot_after_adding_transforms.pdf")
 
     # Preprocess the spectra with the assembled pipeline

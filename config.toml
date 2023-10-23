@@ -12,7 +12,7 @@ temperture = 22 # unit is celsius
 baseline_type = "poly"
 
 # polynomial baseline
-poly_orders = 3
+poly_orders = 2
 poly_pars = [0.03, 0.00003, 0.000003]
 poly_shift = [0, 0, -680]
 
@@ -27,8 +27,6 @@ spike_amplitude = 2
 
 # shot noise
 shot_noise_factor = 0.06
-
-
 
 [gaussian_pars]
 "w" = 0.05 # Amplitude of the Gaussian peaks in a spectrum (signal intensity level)
