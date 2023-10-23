@@ -31,20 +31,16 @@ def create_mixture_spectrum(
         The spectrum of the mixture.
     """
     mixing_conc = sample_pars["mixing_conc"]
-    num_spectra = len(mixing_conc)
     spectrum_range_pars = exp_conditions["spectrum_range_pars"]
-    spectrum_range = np.linspace(spectrum_range_pars[0], spectrum_range_pars[1], spectrum_range_pars[2])
+    spectrum_range = np.linspace(*spectrum_range_pars)
     spectrum = np.zeros(len(spectrum_range))
 
-    for i in range(num_spectra):
-        component_i = component_spectrum_list[i]
+    for i, component_i in enumerate(component_spectrum_list):
         peak_locations = component_i["peak_locations"]
-        peak_shapes = component_i["peak_shapes"]
-        peak_shapes = [gaussian_pars[peak] for peak in peak_shapes]
-        peak_intensities = component_i["peak_intensities"]
-        peak_intensities = [gaussian_pars[peak] for peak in peak_intensities]
+        peak_shapes = [gaussian_pars[peak] for peak in component_i["peak_shapes"]]
+        peak_intensities = [gaussian_pars[peak] for peak in component_i["peak_intensities"]]
 
-        for peak_i in np.arange(len(peak_locations)):
+        for peak_i in range(len(peak_locations)):
             spectrum += (
                 mixing_conc[i]
                 * stats.norm.pdf(
@@ -53,10 +49,9 @@ def create_mixture_spectrum(
                 * peak_intensities[peak_i]
             )
 
-    # Normalize the mixture spectrum
-    spectrum = spectrum / np.max(spectrum)
-
+    spectrum /= np.max(spectrum)  # Normalize the mixture spectrum
     return spectrum, spectrum_range
+
 
 
 def add_transforms(
