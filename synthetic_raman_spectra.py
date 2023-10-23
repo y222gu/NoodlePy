@@ -3,7 +3,7 @@ import numpy as np
 import ramanspy
 import matplotlib.pyplot as plt
 from scipy import stats
-import toml
+import tomllib
 
 def create_mixture_spectrum(
     spectrum_range: np.array,
@@ -104,25 +104,55 @@ pipe = ramanspy.preprocessing.protocols.Pipeline(
     ]
 )
 
+'''
+def prep_spectrum():
+    # Initiate constant variables
+    with open("config.toml", "rb") as toml_file:
+        config = tomllib.load(toml_file)
+
+    # signal_intensity_level
+    gaussian_amplitude_pars = config["signal_intensity_pars"]
+    w = gaussian_amplitude_pars["w"]
+    mw = gaussian_amplitude_pars["mw"]
+    m = gaussian_amplitude_pars["m"]
+    ms = gaussian_amplitude_pars["ms"]
+    s = gaussian_amplitude_pars["s"]
+    vs = gaussian_amplitude_pars["vs"]
+    # sigma
+    gaussian_sigma_pars = config["gaussian_sigma_pars"]
+    n = gaussian_sigma_pars["norm"]
+    sh = gaussian_sigma_pars["sh"]
+    br = gaussian_sigma_pars["br"]
+
+    # Create a mapping from strings to numbers using dictionary comprehension
+    string_to_number = {string: num for num, string in enumerate(set(str_array))}
+
+    # Convert the array of strings to an array of numbers using list comprehension
+    num_array = [string_to_number[string] for string in str_array]
+    return
+'''
+
 def main():
 
     # Initiate constant variables
-    with open("config.toml", "r") as toml_file:
-        config = toml.load(toml_file)
-        
+    with open("config.toml", "rb") as toml_file:
+        config = tomllib.load(toml_file)
+
     # signal_intensity_level
-    w = config["signal_intensity"]["w"]
-    mw = config["signal_intensity"]["mw"]
-    m = config["signal_intensity"]["m"]
-    ms = config["signal_intensity"]["ms"]
-    s = config["signal_intensity"]["s"]
-    vs = config["signal_intensity"]["vs"]
+    gaussian_amplitude_pars = config["signal_intensity_pars"]
+    w = gaussian_amplitude_pars["w"]
+    mw = gaussian_amplitude_pars["mw"]
+    m = gaussian_amplitude_pars["m"]
+    ms = gaussian_amplitude_pars["ms"]
+    s = gaussian_amplitude_pars["s"]
+    vs = gaussian_amplitude_pars["vs"]
     # sigma
-    norm = config["sigma"]["norm"]
-    sh = config["sigma"]["sh"]
-    br = config["sigma"]["br"]
+    gaussian_sigma_pars = config["gaussian_sigma_pars"]
+    n = gaussian_sigma_pars["n"]
+    sh = gaussian_sigma_pars["sh"]
+    br = gaussian_sigma_pars["br"]
     # color scheme for ploting
-    colors = ["plot_design"]["colors"]
+    colors = config["plot_design"]["colors"]
     # spectrum range to be created in wavenumbers
     spectrum_range_pars = config["experiment_conditions"]["spectrum_range_pars"]
     spectrum_range = np.linspace(spectrum_range_pars[0], spectrum_range_pars[1], spectrum_range_pars[2])
@@ -135,14 +165,13 @@ def main():
     peak_intensity_valine = config["valine"]["peak_intensities"]
     peak_shape_valine = config["valine"]["peak_shapes"]
     # histidine
-    peak_location_histidine = config["histidine"]["peak_location"]
+    peak_location_histidine = config["histidine"]["peak_locations"]
     peak_intensity_histidine = config["histidine"]["peak_intensities"]
     peak_shape_histidine = config["histidine"]["peak_shapes"]
     # tryptophan
-    peak_location_tryptophan = config["tryptophan"]["peak_location"]
+    peak_location_tryptophan = config["tryptophan"]["peak_locations"]
     peak_intensity_tryptophan = config["tryptophan"]["peak_intensities"]
     peak_shape_tryptophan = config["tryptophan"]["peak_shapes"]
-
 
 
     # Make all components into a list
@@ -194,3 +223,5 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+

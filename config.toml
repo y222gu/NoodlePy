@@ -7,19 +7,19 @@ mixing_conc = [5, 3, 2]
 spectrum_range_pars = [350, 1800, 1450]
 
 # Amplitude of the Gaussian peaks in a spectrum (signal intensity level)
-[signal_intensity]
-w = 0.05
-mw = 0.1
-m = 0.2
-ms = 0.25
-s = 0.5
-vs = 1
+[signal_intensity_pars]
+"w" = 0.05
+"mw" = 0.1
+"m" = 0.2
+"ms" = 0.25
+"s" = 0.5
+"vs" = 1
 
 # Sigma of the Gaussian peaks in a spectrum (signal peak shape)
-[sigma]
-norm = 5
-sh = 10
-br = 15
+[gaussian_sigma_pars]
+"n" = 5
+"sh" = 10
+"br" = 15
 
 [plot_design]
 colors = ["#FF5733", "#33FF57", "#3366FF", "#FFFF33"]
@@ -39,10 +39,10 @@ peak_intensities = [
     "s", "s", "m", "m", "s", "mw", "w", "w", "mw", "mw", "w"
 ]
 peak_shapes = [
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm',
-    'norm', 'norm', 'norm', 'sh', 'norm', 'sh', 'norm', 'norm', 'norm', 'norm',
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'sh', 'norm', 'sh',
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm'
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n',
+    'n', 'n', 'n', 'sh', 'n', 'sh', 'n', 'n', 'n', 'n',
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'sh', 'n', 'sh',
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n'
 ]
 
 # histidine
@@ -58,10 +58,10 @@ peak_intensities = [
     "m", "w", "m", "w", "w"
 ]
 peak_shapes = [
-    'norm', 'sh', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm',
-    'norm', 'norm', 'sh', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm'
+    'n', 'sh', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n',
+    'n', 'n', 'sh', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n'
 ]
 
 # tryptophan
@@ -77,9 +77,9 @@ peak_intensities = [
     "w", "m", "m", "s", "s", "s", "m", "m", "m", "s", "m", "m"
 ]
 peak_shapes = [
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm',
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
-    'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 'norm', 
-    'norm', 'norm', 'norm'
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n',
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n',
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n',
+    'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n', 'n',
+    'n', 'n', 'n'
 ]
