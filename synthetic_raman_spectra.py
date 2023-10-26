@@ -3,7 +3,7 @@ import numpy as np
 import ramanspy
 import matplotlib.pyplot as plt
 from scipy import stats
-import tomllib
+import yaml
 
 def create_mixture_spectrum(
     sample_pars: dict,
@@ -68,8 +68,9 @@ def add_transforms(exp_conditions: dict,
     spectrum = spectrum + np.random.normal(0, shot_noise_factor, len(spectrum))
 
     # add spikes of cosmic rays:
-    number_spikes = exp_conditions["spike_num"]
-    spike_amplitude = exp_conditions["spike_amplitude"]
+    cosmic_ray = exp_conditions["cosmic_ray"]
+    number_spikes = cosmic_ray["spike_num"]
+    spike_amplitude = cosmic_ray["spike_amplitude"]
     spikes = np.random.randint(0, len(spectrum_range), number_spikes)
     for spike in spikes:
         spectrum[spike] = spectrum[spike] + spike_amplitude * np.random.random()
@@ -77,20 +78,30 @@ def add_transforms(exp_conditions: dict,
     # adding a baseline with different options: 
     baseline_type = exp_conditions["baseline_type"]
     if baseline_type == "poly":
-        poly_orders = exp_conditions["poly_orders"]
-        poly_pars = exp_conditions["poly_pars"]
-        poly_shift = exp_conditions["poly_shift"]
+        baseline_pars = exp_conditions["poly"]
+        poly_orders = baseline_pars["poly_orders"]
+        poly_pars = baseline_pars["poly_pars"]
+        poly_shift = baseline_pars["poly_shift"]
         baseline = 0
         for i in range(poly_orders + 1):
             baseline += poly_pars[i] * (spectrum_range - poly_shift[i]) ** i
     elif baseline_type == "sine":# Sine wave baseline
-        sine_amplitude = exp_conditions["sine_amplitude"]
-        sine_frequency = exp_conditions["sine_frequency"]
-        sine_phase = exp_conditions["sine_phase"]
+        baseline_pars = exp_conditions["sine"]
+        sine_amplitude = baseline_pars["sine_amplitude"]
+        sine_frequency = baseline_pars["sine_frequency"]
+        sine_phase = baseline_pars["sine_phase"]
         baseline = sine_amplitude * np.sin(sine_frequency * spectrum_range
                                        + sine_phase) 
     else:
         baseline = np.zeros_like(spectrum_range)  # No baseline
+
+
+    # shift the whole spectrum
+    # constant amplification factor
+    # convolution kernel
+    # cropping spectrum, interpo, multiple
+    # generate random experiment conditions
+    # add all above in the 
 
     spectrum = spectrum + baseline
     return spectrum
@@ -128,8 +139,8 @@ def plot_spectrum(spectrum: np.array, spectrum_range: np.array, color: str, file
 def main():
 
     # Initiate constant variables
-    with open("config.toml", "rb") as toml_file:
-        config = tomllib.load(toml_file)
+    with open("config.yml", "rb") as yaml_file:
+        config = yaml.safe_load(yaml_file)
 
     colors = config["plot_design"]["colors"]# load color scheme for ploting
     sample_pars = config["sample_pars"]# load concentration of the sample
