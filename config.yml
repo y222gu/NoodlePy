@@ -4,26 +4,40 @@ sample_pars:
     - valine
     - histidine
     - tryptophan
-  mixing_conc:
+  mixing_conc_ratio:
     - 5
     - 3
     - 2
 
+ 
 exp_conditions:
   spectrum_range_pars:
     - 350
     - 1800
     - 1450
+
   substrate: quartz # quartz, glass, PDMS
-  laser_source: 785 # 785, 532, unit is nm
-  temperture: 22 # unit is celsius
+
+  spectrum_amplifying_factor: [0.01 100]
+  baseline_amplifying_factor: [0.01 100]
+
+  laser_pars: 
+    laser_wavelength: 785 # 785, 532, unit is nm
+    laser_std: 5
+
+    kernel_location: 0
+    kernel_shape: 5
+
+  instrumment_shift: 0.5 # The unit is cm-1
+  temperature: 22 # unit is celsius
+  
   baseline_type: poly # sine
   poly:
     poly_orders: 2
     poly_pars:
-      - 0.003 # coef for zero order
-      - 0.000003 # coef for second order
-      - 0.0000003 # coef for third order...
+      - 0.03 # coef for zero order
+      - 0.00003 # coef for second order
+      - 0.000003 # coef for third order...
     poly_shift:
       - 0
       - 0
@@ -32,10 +46,15 @@ exp_conditions:
     sine_amplitude: 0.1
     sine_frequency: 0.05
     sine_phase: 0
-  cosmic_ray:
-    spike_num: 2
+    
+  cosmic_ray_pars:
+    spike_num: [0 5]
     spike_amplitude: 2
-  shot_noise_factor: 0.06
+    # spectrum_amplifying_factor
+
+
+  shot_noise_factor: [0.1 0.5]
+
 
 gaussian_pars:
   w: 0.05 # Amplitude of the Gaussian peaks in a spectrum (signal intensity level)

@@ -3,6 +3,7 @@ import numpy as np
 import ramanspy
 import matplotlib.pyplot as plt
 from scipy import stats
+from scipy import signal
 import yaml
 
 def create_mixture_spectrum(
@@ -15,15 +16,15 @@ def create_mixture_spectrum(
     Create a mixture spectrum from individual spectra.
 
     Parameters:
-    exp_conditions (dict): Experiment conditions.
-    sample_pars (dict): Sample parameters.
+    sample_pars (dict): Sample parameters.   
     component_spectrum_list (list of dict): List of component spectra.
+    exp_conditions (dict): Experiment conditions.
     gaussian_pars (dict): Parameters for Gaussian peaks.
 
     Returns:
-    Tuple[np.array, np.array]: The generated spectrum and corresponding wavenumbers.
+    tuple[np.array, np.array]: The generated spectrum and corresponding wavenumbers.
     """
-    mixing_conc = sample_pars["mixing_conc"]
+    mixing_conc_ratio = sample_pars["mixing_conc_ratio"]
     spectrum_range_pars = exp_conditions["spectrum_range_pars"]
     spectrum_range = np.linspace(*spectrum_range_pars)
     spectrum = np.zeros(len(spectrum_range))
@@ -35,15 +36,152 @@ def create_mixture_spectrum(
 
         for peak_i in range(len(peak_locations)):
             spectrum += (
-                mixing_conc[i]
+                mixing_conc_ratio[i]
                 * stats.norm.pdf(
                     spectrum_range, peak_locations[peak_i], peak_shapes[peak_i]
                 )
                 * peak_intensities[peak_i]
             )
-    spectrum /= np.max(spectrum)  # Normalize the mixture spectrum
+    spectrum /= np.max(spectrum)
+    spectrum *= exp_conditions["spectrum_amplifying_factor"]# Normalize the mixture spectrum
     return spectrum, spectrum_range
 
+def add_shot_noise(spectrum: np.array, shot_noise_factor: float)-> np.array:
+    """
+    Add shot noise to a spectrum.
+
+    Parameters:
+    spectrum (np.array): The input spectrum.
+    shot_noise_factor (float): The factor determining the amount of shot noise.
+
+    Returns:
+    np.array: The spectrum with added shot noise.
+    """
+    spectrum = spectrum + np.random.normal(0, shot_noise_factor, len(spectrum))
+    return spectrum
+
+def add_cosmic_rays(spectrum: np.array, cosmic_ray_pars: dict)-> np.array:
+    """
+    Add cosmic rays to a spectrum.
+
+    Parameters:
+    spectrum (np.array): The input spectrum.
+    cosmic_ray_pars (dict): Parameters for cosmic rays.
+
+    Returns:
+    np.array: The spectrum with added cosmic rays.
+    """
+    number_spikes = cosmic_ray_pars["spike_num"]
+    spike_amplitude = cosmic_ray_pars["spike_amplitude"]
+    spikes = np.random.randint(0, len(spectrum), number_spikes)
+    for spike in spikes:
+        spectrum[spike] = spectrum[spike] + spike_amplitude * np.random.random()
+    return spectrum
+
+
+def add_baseline(spectrum_range: np.array, spectrum: np.array, exp_conditions: dict)-> np.array:
+    """
+    Add a baseline to a spectrum.
+
+    Parameters:
+    spectrum_range (np.array): The array of wavenumbers.
+    spectrum (np.array): The input spectrum.
+    exp_conditions (dict): Experiment conditions.
+
+    Returns:
+    np.array: The spectrum with the added baseline.
+    """
+    baseline_type = exp_conditions["baseline_type"]
+    baseline_pars = exp_conditions[baseline_type]
+    if baseline_type == "poly":
+        poly_orders = baseline_pars["poly_orders"]
+        poly_pars = baseline_pars["poly_pars"]
+        poly_shift = baseline_pars["poly_shift"]
+        baseline = 0
+        for i in range(poly_orders + 1):
+            baseline += poly_pars[i] * (spectrum_range - poly_shift[i]) ** i
+    elif baseline_type == "sine":# Sine wave baseline
+        sine_amplitude = baseline_pars["sine_amplitude"]
+        sine_frequency = baseline_pars["sine_frequency"]
+        sine_phase = baseline_pars["sine_phase"]
+        baseline = sine_amplitude * np.sin(sine_frequency * spectrum_range
+                                       + sine_phase) 
+    else:
+        baseline = np.zeros_like(spectrum_range)  # No baseline
+
+    spectrum = spectrum + baseline * exp_conditions["baseline_amplifying_factor"]
+    return spectrum 
+
+def shift_spectrum(spectrum_range: np.array, shift: float)-> np.array:
+    """
+    Shift the spectrum's wavenumbers.
+
+    Parameters:
+    spectrum_range (np.array): The array of wavenumbers.
+    shift (float): The amount to shift the wavenumbers.
+
+    Returns:
+    np.array: The shifted wavenumbers.
+    """
+    spectrum_range = spectrum_range + shift
+    return spectrum_range
+
+def amplify_spectrum(spectrum: np.array, amplifying_factor: float)-> np.array:
+    """
+    Amplify a spectrum.
+
+    Parameters:
+    spectrum (np.array): The input spectrum.
+    amplifying_factor (float): The factor to amplify the spectrum.
+
+    Returns:
+    np.array: The amplified spectrum.
+    """
+    spectrum = spectrum * amplifying_factor
+    return spectrum
+
+def convolute_kernel(spectrum_range: np.array, spectrum: np.array, laser_pars: dict)-> np.array:
+    """
+    Convolute the spectrum with a kernel.
+
+    Parameters:
+    spectrum_range (np.array): The array of wavenumbers.
+    spectrum (np.array): The input spectrum.
+    laser_pars (dict): Parameters for the convolution kernel.
+
+    Returns:
+    np.array: The convoluted spectrum.
+    """
+    laser_std = laser_pars["laser_std"]
+    kernel = signal.windows.gaussian(len(spectrum_range), laser_std)
+    # Calculate the convolution
+    spectrum = signal.convolve(kernel, spectrum, mode='same') * sum(kernel)
+    return spectrum
+
+
+def crop_spectrum(spectrum_range:np.array, spectrum: np.array, start_wavenumber: np.array, end_wavenumber: np.array)-> tuple[np.array, np.array]:
+    """
+    Crop a spectrum based on a specified wavelength range.
+
+    Args:
+        spectrum_range (np.array): Array of wavenumber values starting with.
+        spectrum (np.array): Array of corresponding spectrum values.
+        start_wavenumber (np.array): The starting wavenumber for cropping.
+        end_wavenumber (np.array): The ending wavenumber for cropping.
+
+    Returns:
+        cropped_spectrum_range (np.array): Cropped wavenumber values.
+        cropped_spectrum (np.array): Cropped spectrum values.
+    """
+    # Find the indices corresponding to the start and end wavelengths
+    start_index = np.searchsorted(spectrum_range, start_wavenumber)
+    end_index = np.searchsorted(spectrum_range, end_wavenumber, side='right')
+
+    # Crop the spectrum based on the specified wavelength range
+    cropped_spectrum_range = spectrum_range[start_index:end_index]
+    cropped_spectrum = spectrum[start_index:end_index]
+
+    return cropped_spectrum_range, cropped_spectrum
 
 
 def add_transforms(exp_conditions: dict,
@@ -63,49 +201,35 @@ def add_transforms(exp_conditions: dict,
     np.array: The transformed spectrum.
     """
 
-    # add shot noise
-    shot_noise_factor = exp_conditions["shot_noise_factor"]
-    spectrum = spectrum + np.random.normal(0, shot_noise_factor, len(spectrum))
+    colors = ["#FF5733", "#33FF57", "#3366FF", "#FFFF33"]
 
-    # add spikes of cosmic rays:
-    cosmic_ray = exp_conditions["cosmic_ray"]
-    number_spikes = cosmic_ray["spike_num"]
-    spike_amplitude = cosmic_ray["spike_amplitude"]
-    spikes = np.random.randint(0, len(spectrum_range), number_spikes)
-    for spike in spikes:
-        spectrum[spike] = spectrum[spike] + spike_amplitude * np.random.random()
+    # smear a guassian curve on the spectrum to simulate the laser instability
+    laser_kernel_pars = exp_conditions["laser_pars"]
+    spectrum = convolute_kernel(spectrum_range, spectrum, laser_kernel_pars)
+    plot_spectrum(spectrum, spectrum_range, colors[1], "plot_after_kernel.pdf")
 
     # adding a baseline with different options: 
-    baseline_type = exp_conditions["baseline_type"]
-    if baseline_type == "poly":
-        baseline_pars = exp_conditions["poly"]
-        poly_orders = baseline_pars["poly_orders"]
-        poly_pars = baseline_pars["poly_pars"]
-        poly_shift = baseline_pars["poly_shift"]
-        baseline = 0
-        for i in range(poly_orders + 1):
-            baseline += poly_pars[i] * (spectrum_range - poly_shift[i]) ** i
-    elif baseline_type == "sine":# Sine wave baseline
-        baseline_pars = exp_conditions["sine"]
-        sine_amplitude = baseline_pars["sine_amplitude"]
-        sine_frequency = baseline_pars["sine_frequency"]
-        sine_phase = baseline_pars["sine_phase"]
-        baseline = sine_amplitude * np.sin(sine_frequency * spectrum_range
-                                       + sine_phase) 
-    else:
-        baseline = np.zeros_like(spectrum_range)  # No baseline
+    spectrum = add_baseline(spectrum_range, spectrum, exp_conditions)
+    plot_spectrum(spectrum, spectrum_range, colors[1], "plot_after_baseline.pdf")
 
+    # add shot noise
+    shot_noise_factor = exp_conditions["shot_noise_factor"]
+    spectrum = add_shot_noise(spectrum, shot_noise_factor)
+    plot_spectrum(spectrum, spectrum_range, colors[1], "plot_after_noise.pdf")
+    
+    # add spikes of cosmic rays:
+    cosmic_ray_pars = exp_conditions["cosmic_ray_pars"]
+    spectrum = add_cosmic_rays(spectrum, cosmic_ray_pars)
+    plot_spectrum(spectrum, spectrum_range, colors[1], "plot_after_ray.pdf")
+    
+    # adding shifting from the instrument
+    instrument_shift = exp_conditions["instrumment_shift"]
+    spectrum_range = shift_spectrum(spectrum_range, instrument_shift)
+    plot_spectrum(spectrum, spectrum_range, colors[1], "plot_after_shift.pdf")
 
-    # shift the whole spectrum
-    # constant amplification factor
-    # convolution kernel
-    # cropping spectrum, interpo, multiple
-    # generate random experiment conditions
-    # add all above in the 
+    
 
-    spectrum = spectrum + baseline
-    return spectrum
-
+    return spectrum_range, spectrum
 
 # Assemble the pipeline for preprocessing using RamanSpy
 pipe = ramanspy.preprocessing.protocols.Pipeline(
@@ -159,8 +283,8 @@ def main():
 
 
     # Transform the spectrum
-    transformed_spectrum = add_transforms(exp_conditions, spectrum_range, mixture_spectrum)
-    plot_spectrum(transformed_spectrum, spectrum_range, colors[1], "plot_after_adding_transforms.pdf")
+    transformed_spectrum_range, transformed_spectrum = add_transforms(exp_conditions, spectrum_range, mixture_spectrum)
+    plot_spectrum(transformed_spectrum, transformed_spectrum_range, colors[1], "plot_after_adding_transforms.pdf")
 
     # Preprocess the spectra with the assembled pipeline
     preprocessed_spectrum = pipe.apply(ramanspy.Spectrum(transformed_spectrum, spectrum_range))
