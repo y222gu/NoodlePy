@@ -5,10 +5,12 @@ import matplotlib.pyplot as plt
 from scipy import stats
 from scipy import signal
 import yaml
+import pandas as pd
 
-def create_mixture_spectrum(
-    sample_pars: dict,
+
+def create_mixture_spectrum( 
     component_spectrum_list: list,
+    concentrations: np.array,
     exp_conditions: dict,
     gaussian_pars: dict
 ) -> tuple:
@@ -16,15 +18,14 @@ def create_mixture_spectrum(
     Create a mixture spectrum from individual spectra.
 
     Parameters:
-    sample_pars (dict): Sample parameters.   
     component_spectrum_list (list of dict): List of component spectra.
+    concentrations: (np.array): Concentrations of the components.
     exp_conditions (dict): Experiment conditions.
     gaussian_pars (dict): Parameters for Gaussian peaks.
 
     Returns:
     tuple[np.array, np.array]: The generated spectrum and corresponding wavenumbers.
     """
-    mixing_conc_ratio = sample_pars["mixing_conc_ratio"]
     spectrum_range_pars = exp_conditions["spectrum_range_pars"]
     spectrum_range = np.linspace(*spectrum_range_pars)
     spectrum = np.zeros(len(spectrum_range))
@@ -36,7 +37,7 @@ def create_mixture_spectrum(
 
         for peak_i in range(len(peak_locations)):
             spectrum += (
-                mixing_conc_ratio[i]
+                concentrations[i]
                 * stats.norm.pdf(
                     spectrum_range, peak_locations[peak_i], peak_shapes[peak_i]
                 )
@@ -140,20 +141,19 @@ def amplify_spectrum(spectrum: np.array, amplifying_factor: float)-> np.array:
     spectrum = spectrum * amplifying_factor
     return spectrum
 
-def convolute_kernel(spectrum_range: np.array, spectrum: np.array, laser_pars: dict)-> np.array:
+def convolute_kernel(spectrum_range: np.array, spectrum: np.array, kernel_std: float)-> np.array:
     """
     Convolute the spectrum with a kernel.
 
     Parameters:
     spectrum_range (np.array): The array of wavenumbers.
     spectrum (np.array): The input spectrum.
-    laser_pars (dict): Parameters for the convolution kernel.
+    kernel_std (float): The standard deviation of the kernel.
 
     Returns:
     np.array: The convoluted spectrum.
     """
-    laser_std = laser_pars["laser_std"]
-    kernel = signal.windows.gaussian(len(spectrum_range), laser_std)
+    kernel = signal.windows.gaussian(len(spectrum_range), kernel_std)
     # Calculate the convolution
     spectrum = signal.convolve(kernel, spectrum, mode='same') * sum(kernel)
     return spectrum
@@ -204,8 +204,8 @@ def add_transforms(exp_conditions: dict,
     colors = ["#FF5733", "#33FF57", "#3366FF", "#FFFF33"]
 
     # smear a guassian curve on the spectrum to simulate the laser instability
-    laser_kernel_pars = exp_conditions["laser_pars"]
-    spectrum = convolute_kernel(spectrum_range, spectrum, laser_kernel_pars)
+    kernel_std = exp_conditions["abbreviation_pars"]["kernel_std"]
+    spectrum = convolute_kernel(spectrum_range, spectrum, kernel_std)
     plot_spectrum(spectrum, spectrum_range, colors[1], "plot_after_kernel.pdf")
 
     # adding a baseline with different options: 
@@ -227,9 +227,42 @@ def add_transforms(exp_conditions: dict,
     spectrum_range = shift_spectrum(spectrum_range, instrument_shift)
     plot_spectrum(spectrum, spectrum_range, colors[1], "plot_after_shift.pdf")
 
-    
-
     return spectrum_range, spectrum
+
+
+def load_metabolomics(file_path: str, sample_type: str)-> tuple[list, np.array]:
+    """
+    Load metabolomics data from an Excel file.
+
+    Parameters:
+    file_path (str): The path to the Excel file.
+    sample_type (str): The type of sample.
+
+    Returns:
+    tuple[list, np.array]: The list of components and the corresponding concentrations.   
+    """
+    # Load the XLSX file into a DataFrame
+    df = pd.read_excel(file_path)
+    # Extract the column as a NumPy array
+    if sample_type == 'Saliva':
+        components = df['label']
+        concentration = df['Saliva'].to_numpy()
+    elif sample_type == 'Plasma':
+        components = df['label']
+        concentration = df['Plasma'].to_numpy()
+    elif sample_type == 'Serum':
+        components = df['label']
+        concentration = df['Serum'].to_numpy()
+    else:
+        raise ValueError('sample_type must be either Saliva, Plasma or Serum')
+    
+    components = components[~np.isnan(concentration)]
+    concentration = concentration[~np.isnan(concentration)]
+    components = [x for _, x in sorted(zip(concentration, components), reverse=True)]
+    concentration = sorted(concentration, reverse=True)   
+
+    return components, concentration
+
 
 # Assemble the pipeline for preprocessing using RamanSpy
 pipe = ramanspy.preprocessing.protocols.Pipeline(
@@ -265,17 +298,17 @@ def main():
     # Initiate constant variables
     with open("config.yml", "rb") as yaml_file:
         config = yaml.safe_load(yaml_file)
-
+    components, concentrations = load_metabolomics("metabolomics.xlsx", "Saliva")
+    
     colors = config["plot_design"]["colors"]# load color scheme for ploting
-    sample_pars = config["sample_pars"]# load concentration of the sample
-    component_spectrum_list = [config[component] for component in sample_pars["components"]]# load components spectra
+    component_spectrum_list = [config[component] for component in components]# load components spectra
     exp_conditions = config["exp_conditions"]# load spectrum range to be created in wavenumbers
     gaussian_pars = config["gaussian_pars"]# load the pars for gaussian amplitude and sigma
     
     # Create the spectrum of a mixture
     mixture_spectrum, spectrum_range = create_mixture_spectrum(
-        sample_pars,
         component_spectrum_list,
+        concentrations,
         exp_conditions,
         gaussian_pars,
     )

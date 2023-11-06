@@ -21,12 +21,8 @@ exp_conditions:
   spectrum_amplifying_factor: [0.01 100]
   baseline_amplifying_factor: [0.01 100]
 
-  laser_pars: 
-    laser_wavelength: 785 # 785, 532, unit is nm
-    laser_std: 5
-
-    kernel_location: 0
-    kernel_shape: 5
+  abbreviation_pars: 
+    kernel_std: 5
 
   instrumment_shift: 0.5 # The unit is cm-1
   temperature: 22 # unit is celsius
