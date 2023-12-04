@@ -1,15 +1,17 @@
 # This is a YAML file 
-metabolomics_file_path: metabolomics.xlsx
+metabolomics_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodleSpy/noodlespy/data/metabolomics.xlsx
 sample_type: Saliva # or Plasma, Serum
 
-DFT_file_path: raman_rpbe_1106.pickle
+DFT_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodleSpy/noodlespy/data/raman_rpbe_1106.pickle
 
 laser_wavelength: 785
+exposure_time: 30 # seconds
+quantumn_efficiency: 0.95
 
 raman_shift_range_pars: 
-  - 350 
-  - 1800 
-  - 1450
+  start_wavenumber: 350 
+  end_wavenumber: 1800
+  step_wavenumber: 1 
 
 normalization_option_for_individual_spectrum: area # or max
 
@@ -19,22 +21,35 @@ normalization_option_for_mixture_spectrum: area # or max
 spectrum_amplifying_factor: 20  # Uniform, [low, high]
 baseline_amplifying_factor: 20  # Uniform, [low, high]
 
-shot_noise_pars: 
+photon_shot_noise_pars: 
   noise_type: poisson
   lam: 1 # lambda for poisson noise
 
-instrumment_shift: 1
+dark_current_shot_noise_pars: 
+  noise_type: poisson
+  lam: 1 # lambda for poisson noise
+
+photo_response_non_uniformity_pars:
+  noise_type: gaussian
+  mean: 0.5
+  std: 1
+
+dark_signal_FPN_noise_pars:
+  noise_type: lognormal
+  mean: 0.5
+  sigma: 1
+
+instrument_shift: 1
   # The unit is cm-1   
 
-abbreviation_pars: 
-  kernel_std: 4
+abbreviation_kernel_std: 4
 
 cosmic_ray_pars:
   spike_num: 0 
   spike_amplitude: 1 
 
-baseline_type: poly # sine
-poly:
+baseline_pars: 
+  baseline_type: poly # sine
   poly_orders: 2
   poly_coefficients:
     - 0.01 # coef for zero order
@@ -45,9 +60,10 @@ poly:
     - 0
     - -680
     - 0
+    
 sine:
-  sine_amplitude: 1 
-  sine_frequency: 5 
+  sine_amplitude: 1
+  sine_frequency: 5
   sine_phase: 1
 
 gaussian_pars:

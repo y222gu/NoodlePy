@@ -20,7 +20,7 @@ import yaml
 # TODO: Define the range of the parameters
 # TODO: Define the distribution of the parameters
 # TODO: Decide the structure of the configuration file
-# TODO: Read the pickle file and generate spectra database
+# TODO: Read the pickle file and generate spectra database, DONE
 # TODO: Test the distribution of the parameters
 # TODO: Automate the experiment
 
