@@ -300,7 +300,7 @@ def add_noise(spectrum_dict: dict, noise_pars: dict) -> dict:
 
         # intensity
         intensity = spectrum_dict[name]["intensity"]
-        noise_type = noise_pars[name]["noise_type"]
+        noise_type = noise_pars["noise_type"]
 
         if noise_type == "poisson":
             intensity += rng.poisson(noise_pars["lam"], len(intensity))
@@ -335,6 +335,7 @@ def add_cosmic_rays(spectrum_dict: dict, cosmic_ray_pars: dict) -> dict:
     Returns:
     np.array: The spectrum with added cosmic rays.
     """
+
     for name in spectrum_dict:
         # intensity
         intensity = spectrum_dict[name]["intensity"]
@@ -396,8 +397,29 @@ def create_baseline(
         baseline_dict[name] = {"raman_shift": raman_shift ,"intensity": baseline_intensity}
     return baseline_dict
 
+def add_baseline(spectrum_dict: dict, baseline_dict: dict) -> dict:
+    """
+    Add a baseline to a spectrum.
 
-def shift_spectrum(spectrum_dict: dict, shift: float) -> dict:
+    Parameters:
+    spectrum_range (np.array): The array of wavenumbers.
+    spectrum (np.array): The input spectrum.
+    baseline (np.array): The baseline.
+
+    Returns:
+    np.array: The spectrum with the added baseline.
+    """
+    for name in spectrum_dict:
+        # intensity
+        intensity = spectrum_dict[name]["intensity"]
+        baseline_intensity = baseline_dict[name]["intensity"]
+
+        intensity = intensity + baseline_intensity
+        spectrum_dict[name]["intensity"] = intensity
+
+    return spectrum_dict
+
+def shift_spectrum(spectrum_dict: dict, instrument_shift: float) -> dict:
     """
     Shift the spectrum's wavenumbers.
 
@@ -410,14 +432,14 @@ def shift_spectrum(spectrum_dict: dict, shift: float) -> dict:
     """
     for name in spectrum_dict:
             
-        spectrum_dict[name]["raman_shift"] = spectrum_dict[name]["raman_shift"] + shift
+        spectrum_dict[name]["raman_shift"] = spectrum_dict[name]["raman_shift"] + instrument_shift
 
     return spectrum_dict
 
 # define a function to amplify signal with nan as the default input for the baseline
 
 
-def amplify_concentrations(spectrum_dict: dict, spectrum_amplifying_factor: float, baseline_dict: dict, baseline_amplifying_factor: float) -> dict:
+def amplify(spectrum_dict: dict, spectrum_amplifying_factor: float) -> dict:
     
     """
     Amplify a spectrum.
@@ -431,7 +453,7 @@ def amplify_concentrations(spectrum_dict: dict, spectrum_amplifying_factor: floa
     """
     for name in spectrum_dict:
 
-        spectrum_dict[name]["intensity"] = spectrum_dict[name]["intensity"] * spectrum_amplifying_factor + baseline_dict[name]["intensity"]* baseline_amplifying_factor
+        spectrum_dict[name]["intensity"] = spectrum_dict[name]["intensity"] * spectrum_amplifying_factor
     
     return spectrum_dict
 
@@ -498,7 +520,7 @@ def pre_process(spectrum: dict, config: dict) -> np.array:
     return preprocessed_spectrum
 
 def plot_spectrum(
-    spectrum: dict, filename: str
+    spectrum_dict: dict, filename: str
 ):
     """
     Plot and save a spectrum to a file.
@@ -513,17 +535,19 @@ def plot_spectrum(
     """
     Creates a 2x2 grid of subplots with different types of plots.
     """
-    raman_shift = spectrum["raman_shift"]
-    intensity = spectrum["intensity"]
+    for name in spectrum_dict:
+        # raman shift
+        raman_shift = spectrum_dict[name]["raman_shift"]
+        intensity = spectrum_dict[name]["intensity"]
 
-    # line plot
-    sns.lineplot(x=raman_shift, y=intensity)
+        # line plot
+        sns.lineplot(x=raman_shift, y=intensity)
 
-    # show subplot number on top of each subplot
-    # ax.text(0, 1.15, "C", fontsize=16, transform=ax["C"].transAxes)
+        # show subplot number on top of each subplot
+        # ax.text(0, 1.15, "C", fontsize=16, transform=ax["C"].transAxes)
 
-    plt.savefig(filename, bbox_inches="tight", dpi=300)
-    plt.close()
+        plt.savefig(filename, bbox_inches="tight", dpi=300)
+        plt.close()
 
 def wavelengthToWavenumber(wl:np.array)->np.array:
     """
@@ -553,75 +577,66 @@ def main():
     with open("noodlespy/config/config_test.yml", "rb") as yaml_file:
         config = yaml.safe_load(yaml_file)
 
+
     # load metabolomics names and concentrations
     metabolite_name_list, metabolite_ratios = load_metabolites(sample_type = config["sample_type"], file_path = config["metabolomics_file_path"])
-
     # load metabolomic spectra from DFT database
     metabolite_spectrum_dict = load_spectra(DFT_file_name = config["DFT_file_path"], metabolite_name_list = metabolite_name_list, laser_wavelength = config["laser_wavelength"])
-    
     # crop all expectra to the same range
     metabolite_spectrum_dict = crop_spectra(metabolite_spectrum_dict, start_wavenumber=config["raman_shift_range_pars"]["start_wavenumber"], end_wavenumber = config["raman_shift_range_pars"]["end_wavenumber"])
-
     # normalize all spectra individually
     metabolite_spectrum_dict = normalize_spectra(metabolite_spectrum_dict, config["normalization_option_for_individual_spectrum"])
-
     # Create the spectrum of a mixture
     mixture_spectrum_dict = mix_spectra(
         metabolite_spectrum_dict,
         metabolite_ratios,
         mixture_name = config["sample_type"]
     )
-
     # Normalize the mixture spectrum
     mixture_spectrum_dict = normalize_spectra(mixture_spectrum_dict, normalization_option = config["normalization_option_for_mixture_spectrum"])
 
 
+    # light source-> photons:
+    # TODO: laser power, NA, n, wavelength, exposure time
+    # Amplify the mixture spectrum
+    mixture_spectrum_dict = amplify(mixture_spectrum_dict, spectrum_amplifying_factor = config["spectrum_amplifying_factor"])
     # create a baseline with different options:
     baseline_dict = create_baseline(mixture_spectrum_dict, baseline_pars = config["baseline_pars"])
-
-
-    # amplify signal depending on the sample concentration
-    mixture_spectrum_dict = amplify_concentrations(mixture_spectrum_dict, normalization_option = config["spectrum_amplifying_factor"], baseline_dict = baseline_dict)
-
-    # laser power, NA, n, wavelength, exposure time
-
-
-
+    # amplify baseline, not linearly with the spectrum signal
+    baseline_dict = amplify(baseline_dict, spectrum_amplifying_factor = config["baseline_amplifying_factor"])
+    # add baseline to the spectrum
+    mixture_spectrum_dict = add_baseline(mixture_spectrum_dict, baseline_dict = baseline_dict)
     # smear a guassian curve on the spectrum to simulate the optical abberration
-    mixture_spectrum_dict = convolute_kernel(mixture_spectrum_dict, kernel_std = config["abbreviation_kernel_std"])
-
+    mixture_spectrum_dict = convolute_kernel(mixture_spectrum_dict, kernel_std = config["abbrration_kernel_std"])
+    # add photon shot noise (Possion distribution)
+    mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["photon_shot_noise_pars"])
     # add spikes of cosmic rays:
     mixture_spectrum_dict = add_cosmic_rays(mixture_spectrum_dict, cosmic_ray_pars = config["cosmic_ray_pars"])
 
-    # add photon shot noise (Possion distribution)
-    mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["photon_shot_noise_pars"])
 
-    # Photons -> Electrons
+    # Photons -> Electrons:
     # quantumn efficiency of the detector
     mixture_spectrum_dict = quantumn_efficiency(mixture_spectrum_dict, quantumn_efficiency = config["quantumn_efficiency"])
 
-    # Electron -> Voltage
+
+    # Electron -> Voltage:
     # Dark current shot noise (Possion distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["dark_current_shot_noise_pars"])
-
     # add photo response non-uniformity (caused by the defects on the semiconductor materials, Gaussian distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["photo_response_non_uniformity_pars"])
-    
-    # EM gain
+    # TODO: noise from binning?
 
 
-    # Voltage -> Counts
+    # Voltage -> Counts:
     # add dark signal fixed-pattern noise (Log-nomral distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["dark_signal_FPN_noise_pars"])
 
-    # adding instrument shifts
+
+    # adding instrument shifts (shifting the whole spectrum)
     mixture_spectrum_dict = shift_spectrum(mixture_spectrum_dict, instrument_shift = config["instrument_shift"])
 
     with plt.style.context('seaborn-v0_8-colorblind'):
         plot_spectrum(mixture_spectrum_dict, "transformed_spectrum.png")
-
-    # Preprocess the spectra with the assembled pipeline
-    preprocessed_spectrum = pre_process(mixture_spectrum_dict, config)
 
 
 if __name__ == "__main__":

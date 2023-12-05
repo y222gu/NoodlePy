@@ -18,8 +18,8 @@ normalization_option_for_individual_spectrum: area # or max
 normalization_option_for_mixture_spectrum: area # or max
 
 # spectrum_amplifying_factor
-spectrum_amplifying_factor: 20  # Uniform, [low, high]
-baseline_amplifying_factor: 20  # Uniform, [low, high]
+spectrum_amplifying_factor: 40  # Uniform, [low, high]
+baseline_amplifying_factor: 1 # Uniform, [low, high]
 
 photon_shot_noise_pars: 
   noise_type: poisson
@@ -42,7 +42,7 @@ dark_signal_FPN_noise_pars:
 instrument_shift: 1
   # The unit is cm-1   
 
-abbreviation_kernel_std: 4
+abbrration_kernel_std: 4
 
 cosmic_ray_pars:
   spike_num: 0 
@@ -52,13 +52,14 @@ baseline_pars:
   baseline_type: poly # sine
   poly_orders: 2
   poly_coefficients:
-    - 0.01 # coef for zero order
-    - 0.00001 # coef for second order
-    - 0.000001 # coef for third order...
-    - 0.000003 # coef for fourth order...
+    - 0.00001 # coef for zero order
+    - 0.000001 # coef for second order
+    - 0.0000001 # coef for third order...
+    - 0.00000003 # coef for fourth order...
   poly_displacement:    # Normal distribution [mean standard_deviation][0, 300]
     - 0
-    - -680
+    - -12
+    - 0
     - 0
     
 sine:

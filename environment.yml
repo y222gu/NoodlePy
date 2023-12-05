@@ -1,6 +1,7 @@
 name: ygtest
 channels:
   - conda-forge
+  - pytorch
 dependencies:
   - python=3.11
   - numpy
@@ -11,5 +12,10 @@ dependencies:
   - pickle
   - seaborn
   - pip
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::torchaudio
   - pip:
     - ramanspy
+    - lightning
+    - lightly
