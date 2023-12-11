@@ -4,3 +4,7 @@
 .ipynb_checkpoints/
 .DS_Store
 scratch/
+*.png
+*.gif
+.vscode/
+*.pyc
