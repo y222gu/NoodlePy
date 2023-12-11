@@ -279,7 +279,7 @@ def mix_spectra(
             
     print(f'Mixing is done...')        
 
-    mixture_spectrum_dict[mixture_name] = {"raman_shift": raman_shift, "intensity": mixture_intensity}
+    mixture_spectrum_dict[mixture_name] = {"raman_shift": raman_shift, "intensity": mixture_intensity, "metabolite_ratios": metabolite_ratios}
 
     return mixture_spectrum_dict
 
