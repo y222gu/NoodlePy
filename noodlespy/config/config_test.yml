@@ -23,26 +23,26 @@ baseline_amplifying_factor: 1 # Uniform, [low, high]
 
 photon_shot_noise_pars: 
   noise_type: poisson
-  lam: 1 # lambda for poisson noise
+  lam: 10 # lambda for poisson noise
 
 dark_current_shot_noise_pars: 
   noise_type: poisson
-  lam: 1 # lambda for poisson noise
+  lam: 10 # lambda for poisson noise
 
 photo_response_non_uniformity_pars:
   noise_type: gaussian
-  mean: 0.5
-  std: 1
+  mean: 0.01
+  std: 0.001
 
 dark_signal_FPN_noise_pars:
   noise_type: lognormal
-  mean: 0.5
-  sigma: 1
+  mean: 0.05
+  sigma: 0.001
 
 instrument_shift: 1
   # The unit is cm-1   
 
-abbrration_kernel_std: 4
+abbrration_kernel_std: 0.5
 
 cosmic_ray_pars:
   spike_num: 0 
@@ -52,13 +52,13 @@ baseline_pars:
   baseline_type: poly # sine
   poly_orders: 2
   poly_coefficients:
-    - 0.00001 # coef for zero order
-    - 0.000001 # coef for second order
-    - 0.0000001 # coef for third order...
-    - 0.00000003 # coef for fourth order...
+    - 0.00005 # coef for zero order
+    - 0.0000005 # coef for second order
+    - 0.00000005 # coef for third order...
+    - 0.000000005 # coef for fourth order...
   poly_displacement:    # Normal distribution [mean standard_deviation][0, 300]
     - 0
-    - -12
+    - -680
     - 0
     - 0
     

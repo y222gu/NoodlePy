@@ -8,6 +8,7 @@ import yaml
 import pandas as pd
 import pickle
 import seaborn as sns
+import subprocess
 
 def create_spectrum(
     metabolite_spectrum_dict: list,
@@ -303,7 +304,7 @@ def add_noise(spectrum_dict: dict, noise_pars: dict) -> dict:
         noise_type = noise_pars["noise_type"]
 
         if noise_type == "poisson":
-            intensity += rng.poisson(noise_pars["lam"], len(intensity))
+            intensity += 0.001*rng.poisson(noise_pars["lam"], len(intensity))
 
         elif noise_type == "gaussian":
             intensity += rng.normal(noise_pars["mean"], noise_pars["std"], len(intensity))
@@ -532,9 +533,6 @@ def plot_spectrum(
     filename (str): The filename for the saved plot.
     """
 
-    """
-    Creates a 2x2 grid of subplots with different types of plots.
-    """
     for name in spectrum_dict:
         # raman shift
         raman_shift = spectrum_dict[name]["raman_shift"]
@@ -542,12 +540,26 @@ def plot_spectrum(
 
         # line plot
         sns.lineplot(x=raman_shift, y=intensity)
-
+        # define the size of the plot
+        plt.gcf().set_size_inches(15, 5)
         # show subplot number on top of each subplot
         # ax.text(0, 1.15, "C", fontsize=16, transform=ax["C"].transAxes)
-
+        # set the title
+        plt.title(filename)
+        plt.xlabel("Raman shift (cm$^{-1}$)")
+        plt.ylabel("Intensity (a.u.)")
+        # set y axis range
+        plt.ylim(0, 1)
         plt.savefig(filename, bbox_inches="tight", dpi=300)
         plt.close()
+    return
+
+def update(frame,figure_list):
+    plt.clf()
+    # This function will be called for each frame in the animation
+    current_figure = figure_list(frame)
+    plt.draw()
+
 
 def wavelengthToWavenumber(wl:np.array)->np.array:
     """
@@ -572,11 +584,12 @@ def wavelengthToWavenumber(wl:np.array)->np.array:
     return wn
 
 
+
+
 def main():
     # Initiate constant variables
     with open("noodlespy/config/config_test.yml", "rb") as yaml_file:
         config = yaml.safe_load(yaml_file)
-
 
     # load metabolomics names and concentrations
     metabolite_name_list, metabolite_ratios = load_metabolites(sample_type = config["sample_type"], file_path = config["metabolomics_file_path"])
@@ -592,54 +605,64 @@ def main():
         metabolite_ratios,
         mixture_name = config["sample_type"]
     )
+    plot_spectrum(mixture_spectrum_dict,'step_01_mix_spectra.png')
+
     # Normalize the mixture spectrum
     mixture_spectrum_dict = normalize_spectra(mixture_spectrum_dict, normalization_option = config["normalization_option_for_mixture_spectrum"])
-
+    plot_spectrum(mixture_spectrum_dict,'step_02_normalize_spectra.png')
 
     # light source-> photons:
     # TODO: laser power, NA, n, wavelength, exposure time
     # Amplify the mixture spectrum
     mixture_spectrum_dict = amplify(mixture_spectrum_dict, spectrum_amplifying_factor = config["spectrum_amplifying_factor"])
+    plot_spectrum(mixture_spectrum_dict,'step_03_amplified_spectra.png')
+   
     # create a baseline with different options:
     baseline_dict = create_baseline(mixture_spectrum_dict, baseline_pars = config["baseline_pars"])
     # amplify baseline, not linearly with the spectrum signal
-    baseline_dict = amplify(baseline_dict, spectrum_amplifying_factor = config["baseline_amplifying_factor"])
-    # add baseline to the spectrum
+    baseline_dict = amplify(baseline_dict, spectrum_amplifying_factor = config["baseline_amplifying_factor"]) 
+   
+   # add baseline to the spectrum
     mixture_spectrum_dict = add_baseline(mixture_spectrum_dict, baseline_dict = baseline_dict)
-    # smear a guassian curve on the spectrum to simulate the optical abberration
+    plot_spectrum(mixture_spectrum_dict,'step_04_add_baseline.png')
+   
+   # smear a guassian curve on the spectrum to simulate the optical abberration
     mixture_spectrum_dict = convolute_kernel(mixture_spectrum_dict, kernel_std = config["abbrration_kernel_std"])
+    plot_spectrum(mixture_spectrum_dict,'step_05_add_abbrration.png')
+   
     # add photon shot noise (Possion distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["photon_shot_noise_pars"])
+    plot_spectrum(mixture_spectrum_dict,'step_06_add_photon_shot_noise.png')
+    
     # add spikes of cosmic rays:
     mixture_spectrum_dict = add_cosmic_rays(mixture_spectrum_dict, cosmic_ray_pars = config["cosmic_ray_pars"])
-
-
+    plot_spectrum(mixture_spectrum_dict,'step_07_add_cosmic_ray.png')
+    
     # Photons -> Electrons:
     # quantumn efficiency of the detector
     mixture_spectrum_dict = quantumn_efficiency(mixture_spectrum_dict, quantumn_efficiency = config["quantumn_efficiency"])
-
-
+    plot_spectrum(mixture_spectrum_dict,'step_08_quantumn_eff.png')
+    
     # Electron -> Voltage:
     # Dark current shot noise (Possion distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["dark_current_shot_noise_pars"])
+    plot_spectrum(mixture_spectrum_dict,'step_09_add_dark_current_shot_noise.png')
+       
     # add photo response non-uniformity (caused by the defects on the semiconductor materials, Gaussian distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["photo_response_non_uniformity_pars"])
+    plot_spectrum(mixture_spectrum_dict,'step_10_add_photon_response_non_uniformity.png')
     # TODO: noise from binning?
-
 
     # Voltage -> Counts:
     # add dark signal fixed-pattern noise (Log-nomral distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["dark_signal_FPN_noise_pars"])
-
+    plot_spectrum(mixture_spectrum_dict,'step_11_dark_signal_FPN_noisea.png')
 
     # adding instrument shifts (shifting the whole spectrum)
     mixture_spectrum_dict = shift_spectrum(mixture_spectrum_dict, instrument_shift = config["instrument_shift"])
+    plot_spectrum(mixture_spectrum_dict,'step_12_instrument_shift.png')
 
-    with plt.style.context('seaborn-v0_8-colorblind'):
-        plot_spectrum(mixture_spectrum_dict, "transformed_spectrum.png")
-
+    subprocess.call(["python", "./make_movies.py"])
 
 if __name__ == "__main__":
     main()
-
-

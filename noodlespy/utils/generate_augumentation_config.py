@@ -15,12 +15,12 @@ import yaml
 # https://numpy.org/doc/stable/reference/random/generated/numpy.random.lognormal.html
 
 
-# TODO: Check if shot noise should be a strictly positive distribution.  Maybe Poisson
-# TODO: Make different sources of noise explicit
+# TODO: Check if shot noise should be a strictly positive distribution, DONE
+# TODO: Make different sources of noise explicit, DONE
+# TODO: Decide the structure of the configuration file, DONE
+# TODO: Read the pickle file and generate spectra database, DONE
 # TODO: Define the range of the parameters
 # TODO: Define the distribution of the parameters
-# TODO: Decide the structure of the configuration file
-# TODO: Read the pickle file and generate spectra database, DONE
 # TODO: Test the distribution of the parameters
 # TODO: Automate the experiment
 
