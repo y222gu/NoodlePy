@@ -8,7 +8,7 @@ import json
 # Import noodlespy modules
 import noodlepy.utils.raman_create_augment as create_augment
 
-# notes: python -m noodlepy.ml.generate_raman_spectra_from_uniform_distribution
+# notes: python -m noodlepy.ml.generate_patient
 
 def parse_args():
     # Commands
