@@ -583,9 +583,6 @@ def wavelengthToWavenumber(wl:np.array)->np.array:
 
     return wn
 
-
-
-
 def main():
     # Initiate constant variables
     with open("noodlespy/config/config_test.yml", "rb") as yaml_file:

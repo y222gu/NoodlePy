@@ -13,8 +13,8 @@
             "cwd":"${workspaceFolder}",
             "justMyCode": true,
             "args": [
-                "--config_path", "noodlespy/config/config_test.yml",
-                "--output_path", "output/",
+                "--config_path", "noodlepy/config/config_test.yml",
+                "--output_path", "noodlepy/data/simulated_patients/",
                 "--n_spectra", "10"
             ],
 
