@@ -1,8 +1,8 @@
 # This is a YAML file 
-metabolomics_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodleSpy/noodlespy/data/metabolomics.xlsx
+metabolomics_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/metabolomics.xlsx
 sample_type: Saliva # or Plasma, Serum
 
-DFT_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodleSpy/noodlespy/data/raman_rpbe_1106.pickle
+DFT_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/raman_rpbe_1106.pickle
 
 laser_wavelength: 785
 exposure_time: 30 # seconds
