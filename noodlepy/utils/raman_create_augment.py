@@ -585,7 +585,7 @@ def wavelengthToWavenumber(wl:np.array)->np.array:
 
 def main():
     # Initiate constant variables
-    with open("noodlespy/config/config_test.yml", "rb") as yaml_file:
+    with open("noodlepy/config/config_test.yml", "rb") as yaml_file:
         config = yaml.safe_load(yaml_file)
 
     # load metabolomics names and concentrations
