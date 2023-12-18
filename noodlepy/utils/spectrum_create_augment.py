@@ -88,7 +88,7 @@ def load_metabolites(file_path: str, sample_type: str) -> tuple[list, np.array]:
 
     return metabolite_name_list, metabolite_ratios
 
-def load_spectra(DFT_file_name: str, metabolite_name_list: list, laser_wavelength: str) -> dict:
+def load_DFT_spectra(DFT_file_name: str, metabolite_name_list: list, laser_wavelength: str) -> dict:
     """
     Load the spectra database from a pickle file.
 
@@ -596,7 +596,7 @@ def main():
     # load metabolomics names and concentrations
     metabolite_name_list, metabolite_ratios = load_metabolites(sample_type = config["sample_type"], file_path = config["metabolomics_file_path"])
     # load metabolomic spectra from DFT database
-    metabolite_spectrum_dict = load_spectra(DFT_file_name = config["DFT_file_path"], metabolite_name_list = metabolite_name_list, laser_wavelength = config["laser_wavelength"])
+    metabolite_spectrum_dict = load_DFT_spectra(DFT_file_name = config["DFT_file_path"], metabolite_name_list = metabolite_name_list, laser_wavelength = config["laser_wavelength"])
     # crop all expectra to the same range
     metabolite_spectrum_dict = crop_spectra(metabolite_spectrum_dict, start_wavenumber=config["raman_shift_range_pars"]["start_wavenumber"], end_wavenumber = config["raman_shift_range_pars"]["end_wavenumber"])
     # normalize all spectra individually
