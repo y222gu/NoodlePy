@@ -58,7 +58,7 @@ def main():
     # igonore the concentration and generate random ratios later
     metabolite_name_list, *_ = create_augment.load_metabolites(sample_type = config["sample_type"], file_path = config["metabolomics_file_path"])
     
-    metabolite_spectrum_dict = create_augment.load_spectra(DFT_file_name = config["DFT_file_path"], metabolite_name_list = metabolite_name_list, laser_wavelength = config["laser_wavelength"])
+    metabolite_spectrum_dict = create_augment.load_DFT_spectra(DFT_file_name = config["DFT_file_path"], metabolite_name_list = metabolite_name_list, laser_wavelength = config["laser_wavelength"])
     # crop all expectra to the same range
     metabolite_spectrum_dict = create_augment.crop_spectra(metabolite_spectrum_dict, start_wavenumber=config["raman_shift_range_pars"]["start_wavenumber"], end_wavenumber = config["raman_shift_range_pars"]["end_wavenumber"])
     # normalize all spectra individually
@@ -78,6 +78,7 @@ def main():
             mixture_name = config["sample_type"]
         )
 
+        create_augment.plot_spectrum(mixture_spectrum_dict, f"sim_patient_{n}_pristine_spectrum.png")
         # set output file
         # connect words to make a file name
         output_file = os.path.join(output_path, f"sim_patient_{n}_pristine_spectrum.pickle")
@@ -85,7 +86,6 @@ def main():
         # Save as a pickle file
         with open(output_file, "wb") as f:
             pickle.dump(mixture_spectrum_dict, f)
-
 
         print(f"Saved mixture spectrum to {output_file}")
 
