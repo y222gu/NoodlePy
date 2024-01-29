@@ -8,3 +8,6 @@ scratch/
 *.gif
 .vscode/
 *.pyc
+*.csv
+*.xlsx
+*.pickle
