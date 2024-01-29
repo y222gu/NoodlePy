@@ -9,16 +9,18 @@ class SyntheticRamanFileDataset(Dataset):
             Disadvantages:  You have to keep track of your training sets
         """
 
-        # TODO: List the spectrum files with glob.glob or os
-        # TODO: Save them in the structure i.e. self.files = blah
+        # TODO: open the csv file with panda and store it in self.spectra_df
+        # TODO: initialize the common wavelength range (ie. it could be the first wavelength in the file round up to three decimals)
+        # TODO: interpolate all spectra to the common wavelength range (scipy.interpolate.interp1d(method='bilinear'))""))
+        # potentially overwrite the original spectra with the interpolated ones
 
     def __len__(self):
-        return len(self.files)
+        return len(self.spectra_df.shape[0])
 
     def __getitem__(self, idx):
-        # TODO: Open the idx file i.e. open(self.files[idx])
+        # TODO: Get the idx-th row
         # TODO: Create two random augmentation dictionaries
-        # TODO: apply the augmentation to the idx spectrum
+        # TODO: apply the augmentation to the idx-th spectrum
         return augmentation1, augmentation2
     
 
