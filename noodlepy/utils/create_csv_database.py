@@ -13,7 +13,7 @@ csv_file_path = "/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Rama
 with open(csv_file_path, mode='w', newline='') as file:
     writer = csv.writer(file)
     # Write the header (optional)
-    writer.writerow(["patient_id","sample_type", "spectrum_id", "wavelength[nm]", "intensity"])
+    writer.writerow(["patient_id","sample_type", "spectrum_id", "wavelength_nm", "intensity"])
 
 # Get a list of file names in the folder and sort them
 files = sorted([f for f in os.listdir(data_folder) if f.endswith(('.txt'))])
@@ -23,7 +23,7 @@ pateint_table_file_name = "/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy
 patient_stage_table = pd.read_excel(pateint_table_file_name, names=['patient_id', 'patient_stage'])
 
 # Initialize the dataframe with id, sample_type, spectrum_id, spectra
-df = pd.DataFrame(columns=['patient_id','sample_type', 'spectrum_id', 'wavelength[nm]', 'intensity'])
+df = pd.DataFrame(columns=['patient_id','sample_type', 'spectrum_id', 'wavelength_nm', 'intensity'])
 
 # Split the files into groups
 for filename in files:
@@ -58,7 +58,7 @@ for filename in files:
 
         # Write the spectrum to the dataframe
         new_row = {'patient_id': patient_id, 'sample_type': sample_type,
-                                      'spectrum_id': spectrum_id, 'wavelength[nm]': wavelength, 'intensity': intensity}
+                                      'spectrum_id': spectrum_id, 'wavelength_nm': wavelength, 'intensity': intensity}
         df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
 
 df['laser_wavelength[nm]']= 785
