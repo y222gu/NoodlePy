@@ -93,10 +93,12 @@ def load_DFT_spectra(DFT_file_name: str, metabolite_name_list: list, laser_wavel
     Load the spectra database from a pickle file.
 
     Parameters:
-    file_name (str): The path to the pickle file.
+    DFT_file_name (str): The path to the pickle file.
+    metabolite_name_list (list): The list of metabolites to be loaded.
+    laser_wavelength (str): The wavelength of the laser.
 
     Returns:
-    dict: The spectra database.
+    spectrum_dict (dict): The dictionary of spectra.
     """
     print(f'Start to load spectra from the pickle file...')
 
@@ -143,15 +145,13 @@ def crop_spectra(
     """
     Crop a spectrum based on a specified wavelength range.
 
-    Args:
-        raman_shift_range (np.array): Array of wavenumber values starting with.
-        spectrum (np.array): Array of corresponding spectrum values.
-        start_wavenumber (np.array): The starting wavenumber for cropping.
-        end_wavenumber (np.array): The ending wavenumber for cropping.
+    Parameters:
+    spectrum_dict (dict): The input spectrum.
+    start_wavenumber (np.array): The starting wavenumber for cropping.
+    end_wavenumber (np.array): The ending wavenumber for cropping.
 
     Returns:
-        cropped_raman_shift_range (np.array): Cropped wavenumber values.
-        cropped_spectrum (np.array): Cropped spectrum values.
+    spectrum_dict (dict): The cropped spectrum.
     """
     print(f'Start to align all spectra to the specified range...')
     print(f'Checking if the raman shift range of molecules are matching')
@@ -191,12 +191,12 @@ def normalize_spectra(
     """
     Normalize a spectrum.
 
-    Args:
-        spectrum (np.array): Array of corresponding spectrum values.
-        normalization_option (str): The normalization method.
+    Parameters:
+    spectrum_dict (dict): The input spectrum.
+    normalization_option (str): The normalization method.
 
     Returns:
-        normalized_spectrum (np.array): Normalized spectrum values.
+    spectrum_dict (dict): The normalized spectrum.
     """
     print(f'Normalizing spectra by: ', normalization_option, '...')
 
@@ -223,11 +223,11 @@ def quantumn_efficiency(spectrum_dict: dict, quantumn_efficiency: float) -> dict
     Add quantumn efficiency to a spectrum.
 
     Parameters:
-    spectrum (np.array): The input spectrum.
+    spectrum_dict (dict): The input spectrum.
     quantumn_efficiency (float): The factor determining the amount of quantumn efficiency.
 
     Returns:
-    np.array: The spectrum with added quantumn efficiency.
+    spectrum_dict (dict): The spectrum with the added quantumn efficiency.
     """
     for name in spectrum_dict:
         # intensity
@@ -247,12 +247,12 @@ def mix_spectra(
     Create a mixture spectrum from a dictionary of spectra.
 
     Parameters:
-    component_spectrum_list (list of dict): List of component spectra.
-    concentrations: (np.array): Concentrations of the components.
-    config (dict): Experiment conditions.
+    spectrum_dict (dict): The input spectra.
+    metabolite_ratios (np.array): The ratios of the metabolites.
+    mixture_name (str): The name of the mixture.
 
     Returns:
-    tuple[np.array, np.array]: The generated spectrum and corresponding wavenumbers.
+    mixture_spectrum_dict (dict): The mixture spectrum.
     """
     print(f'Start to mix spectra...')
     mixture_spectrum_dict = {}
@@ -291,11 +291,11 @@ def add_noise(spectrum_dict: dict, noise_pars: dict) -> dict:
     Add shot noise to a spectrum.
 
     Parameters:
-    spectrum (np.array): The input spectrum.
-    shot_noise_factor (float): The factor determining the amount of shot noise.
+    spectrum_dict (dict): The input spectrum.
+    noise_pars (dict): Parameters for the noise.
 
     Returns:
-    np.array: The spectrum with added shot noise.
+    spectrum_dict (dict): The spectrum with the added noise.
     """
     rng = np.random.default_rng() # this is using the default PCG64 generator
 
@@ -332,11 +332,11 @@ def add_cosmic_rays(spectrum_dict: dict, cosmic_ray_pars: dict) -> dict:
     Add cosmic rays to a spectrum.
 
     Parameters:
-    spectrum (np.array): The input spectrum.
+    spectrum_dict (dict): The input spectrum.
     cosmic_ray_pars (dict): Parameters for cosmic rays.
 
     Returns:
-    np.array: The spectrum with added cosmic rays.
+    spectrum_dict (dict): The spectrum with the added cosmic rays.
     """
 
     for name in spectrum_dict:
@@ -362,12 +362,11 @@ def create_baseline(
     Add a baseline to a spectrum.
 
     Parameters:
-    spectrum_range (np.array): The array of wavenumbers.
-    spectrum (np.array): The input spectrum.
-    config (dict): Experiment conditions.
+    spectrum_dict (dict): The input spectrum.
+    baseline_pars (dict): The parameters for the baseline.
 
     Returns:
-    np.array: The spectrum with the added baseline.
+    spectrum_dict (dict): The spectrum with the added baseline.
     """
     baseline_dict = {}
     for name in spectrum_dict:
@@ -405,12 +404,11 @@ def add_baseline(spectrum_dict: dict, baseline_dict: dict) -> dict:
     Add a baseline to a spectrum.
 
     Parameters:
-    spectrum_range (np.array): The array of wavenumbers.
-    spectrum (np.array): The input spectrum.
-    baseline (np.array): The baseline.
+    spectrum_dict (dict): The input spectrum.
+    baseline_dict (dict): The baseline to be added.
 
     Returns:
-    np.array: The spectrum with the added baseline.
+    spectrum_dict (dict): The spectrum with the added baseline.
     """
     for name in spectrum_dict:
         # intensity
@@ -427,11 +425,11 @@ def shift_spectrum(spectrum_dict: dict, instrument_shift: float) -> dict:
     Shift the spectrum's wavenumbers.
 
     Parameters:
-    spectrum_range (np.array): The array of wavenumbers.
-    shift (float): The amount to shift the wavenumbers.
+    spectrum_dict (dict): The input spectrum.
+    instrument_shift (float): The shift in wavenumbers.
 
     Returns:
-    np.array: The shifted wavenumbers.
+    spectrum_dict (dict): The shifted spectrum.
     """
     for name in spectrum_dict:
             
@@ -448,11 +446,11 @@ def amplify(spectrum_dict: dict, spectrum_amplifying_factor: float) -> dict:
     Amplify a spectrum.
 
     Parameters:
-    spectrum (np.array): The input spectrum.
-    amplifying_factor (float): The factor to amplify the spectrum.
+    spectrum_dict (dict): The input spectrum.
+    spectrum_amplifying_factor (float): The amplifying factor.
 
     Returns:
-    np.array: The amplified spectrum.
+    spectrum_dict (dict): The amplified spectrum.
     """
     for name in spectrum_dict:
 
@@ -468,12 +466,11 @@ def convolute_kernel(
     Convolute the spectrum with a kernel.
 
     Parameters:
-    spectrum_range (np.array): The array of wavenumbers.
-    spectrum (np.array): The input spectrum.
+    spectrum_dict (dict): The input spectrum.
     kernel_std (float): The standard deviation of the kernel.
 
     Returns:
-    np.array: The convoluted spectrum.
+    spectrum_dict (dict): The convoluted spectrum.
     """
     for name in spectrum_dict:
         # raman shift
@@ -489,6 +486,46 @@ def convolute_kernel(
         spectrum_dict[name]["intensity"] = intensity
 
     return spectrum_dict
+
+# interpolate all spectra in the file to the common wavelength range (scipy.interpolate.interp1d(method='bilinear'))
+def interpolate_spectrum(spectrum_dict:dict , target_raman_shift: np.array) -> dict:
+    """
+    Interpolate a spectrum to a target wavenumber range.
+
+    Parameters:
+    spectrum_dict (dict): The input spectrum.
+    target_raman_shift (np.array): The target wavenumber range.
+
+    Returns:
+    spectrum_dict (dict): The interpolated spectrum.
+    """
+    for name in spectrum_dict:
+        # raman shift
+        raman_shift = spectrum_dict[name]["raman_shift"]
+        # intensity
+        intensity = spectrum_dict[name]["intensity"]
+
+        interpolated_intensity = np.interp(target_raman_shift, raman_shift, intensity)
+        spectrum_dict[name]["raman_shift"] = target_raman_shift
+        spectrum_dict[name]["intensity"] = interpolated_intensity
+
+    return spectrum_dict
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 def pre_process(spectrum: dict, config: dict) -> np.array:
@@ -653,7 +690,6 @@ def main():
     # add photo response non-uniformity (caused by the defects on the semiconductor materials, Gaussian distribution)
     mixture_spectrum_dict = add_noise(mixture_spectrum_dict, noise_pars = config["photo_response_non_uniformity_pars"])
     plot_spectrum(mixture_spectrum_dict,'step_10_add_photon_response_non_uniformity.png')
-    # TODO: noise from binning?
 
     # Voltage -> Counts:
     # add dark signal fixed-pattern noise (Log-nomral distribution)
