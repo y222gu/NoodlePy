@@ -18,35 +18,60 @@ normalization_option_for_individual_spectrum: area # or max
 normalization_option_for_mixture_spectrum: area # or max
 
 # spectrum_amplifying_factor
-spectrum_amplifying_factor: 40  # Uniform, [low, high]
-baseline_amplifying_factor: 1 # Uniform, [low, high]
+spectrum_amplifying_factor: 
+  low: 40
+  high: 60  # Uniform
+  
+baseline_amplifying_factor: 
+  low: 1
+  high: 5 # Uniform
 
 photon_shot_noise_pars: 
   noise_type: poisson
-  lam: 10 # lambda for poisson noise
+  lam: 
+    low: 5 # lambda for poisson noise
+    high: 15
 
 dark_current_shot_noise_pars: 
   noise_type: poisson
-  lam: 10 # lambda for poisson noise
+  lam: 
+    low: 5 # lambda for poisson noise
+    high: 15
 
 photo_response_non_uniformity_pars:
   noise_type: gaussian
-  mean: 0.01
-  std: 0.001
+  mean: 
+    low: 0.01
+    high: 0.05
+  std: 
+    low: 0.001
+    high: 0.005
 
 dark_signal_FPN_noise_pars:
   noise_type: lognormal
-  mean: 0.05
-  sigma: 0.001
+  mean: 
+    low: 0.05
+    high: 0.1
+  sigma: 
+    low: 0.001
+    high: 0.005
 
-instrument_shift: 1
+instrument_shift: 
+  low: 0.5
+  high: 1.5
   # The unit is cm-1   
 
-abbrration_kernel_std: 0.5
+abbrration_kernel_std: 
+  low: 0.3
+  high: 0.8
 
 cosmic_ray_pars:
-  spike_num: 0 
-  spike_amplitude: 1 
+  spike_num: 
+    low: 0
+    high: 5 
+  spike_amplitude: 
+    low: 30
+    high: 100
 
 baseline_pars: 
   baseline_type: poly # sine
