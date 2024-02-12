@@ -11,3 +11,4 @@ scratch/
 *.csv
 *.xlsx
 *.pickle
+*.pkl
