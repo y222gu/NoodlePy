@@ -21,10 +21,14 @@ class Spectrum:
         return len(self.wavenumber)
     
     def augment(self, augment_type:str = 'none',augment_pars:dict = {}):
+        
+        # TODO: This needs to be fixed
+        augmentation_par_dictionaries = create_augment.augmention_pars_generator(2)
+        
         if augment_type == 'none':
             pass
         elif augment_type == 'random_noise':
-            self.intensity = create_augment.random_noise(self.intensity)
+            self.intensity = create_augment.random_noise(self,)
         elif augment_type == 'random_shift':
             self.intensity = create_augment.random_shift(self.intensity)
         elif augment_type == 'random_scale':

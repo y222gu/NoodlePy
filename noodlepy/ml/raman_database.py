@@ -56,29 +56,17 @@ class SyntheticRamanFileDataset(Dataset):
 
     def __getitem__(self, idx):
         chosen_spectrum = self.db[idx]
-
-        # TODO: call noodlepy to create two random augmentation dictionaries on the fly
-        with open('/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/config/config_test.yml', "rb") as yaml_file:
-            config = yaml.safe_load(yaml_file)
-
-        augmentation_pipeline = create_augment.create_augmentation_pipeline(config)
-        augumentation_par_sets = create_augment.create_augumentation_par_sets(config,2)
-        
-        
-        # TODO: random augmentation
-        transform1, transform2 = create_augment.create_transform()
-
-        # REQ: no more than two augmentations for selfsupervised learning
-        augmented_spectrum1 = self.transform(original_spectrum)
-        augmented_spectrum2 = self.transform(original_spectrum)
+        augmentation_par_dictionaries = create_augment.augmention_pars_generator(2)
+        augmented_spectrum1, augmented_spectrum2 = create_augment.apply_augmentations(chosen_spectrum,augmentation_par_dictionaries)
 
         return augmented_spectrum1, augmented_spectrum2
     
 
 
 
-dataset = SyntheticRamanFileDataset(csv_file_path='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB.csv')
-
+dataset = SyntheticRamanFileDataset
+dataset.load_db(csv_file_path='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB.csv')
+augmented_spectrum1, augmented_spectrum2 = dataset.__getitem__(1)
 
 
 
