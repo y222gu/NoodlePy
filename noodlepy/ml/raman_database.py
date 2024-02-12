@@ -1,14 +1,8 @@
 # https://pytorch.org/get-started/locally/
-from re import S, split
-import scipy as sp
 from torch.utils.data import Dataset
 import pandas as pd
-import torch
-import re
-import numpy as np
 import noodlepy.utils.create_augment as create_augment
 import os
-import yaml
 from noodlepy.utils.spectrum_class import Spectrum
 
 class SyntheticRamanFileDataset(Dataset):
@@ -61,8 +55,6 @@ class SyntheticRamanFileDataset(Dataset):
 
         return augmented_spectrum1, augmented_spectrum2
     
-
-
 
 dataset = SyntheticRamanFileDataset
 dataset.load_db(csv_file_path='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB.csv')
