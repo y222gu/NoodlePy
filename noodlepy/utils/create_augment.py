@@ -5,9 +5,6 @@ import numpy as np
 import ramanspy
 from scipy import signal
 import yaml
-import pandas as pd
-import pickle
-import seaborn as sns
 from noodlepy.utils.spectrum_class import Spectrum
 
 def crop_spectra(
@@ -240,8 +237,7 @@ def wavelength_to_wavenumber(wl:np.array)->np.array:
     return wn
 
 def augmention_pars_generator(
-    config: dict,
-    n_sets: int,
+    n_dictionaries: int
 ) -> dict:
     """
     Create a set of augmentation parameters.
@@ -253,11 +249,16 @@ def augmention_pars_generator(
     Returns:
     dict: The set of augmentation parameters.
     """
+    config_path = '/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/config/config_test.yml'
+    # Load the configuration file
+    with open(config_path, "rb") as yaml_file:
+        config = yaml.safe_load(yaml_file)
+
     # Create a set of augmentation parameters
-    augmentation_par_sets = {}
-    for i in range(n_sets):
+    augmentation_par_dictionaries = {}
+    for i_dictionary in range(n_dictionaries):
         # Create a set of augmentation parameters
-        augmentation_par_sets[i] = {
+        augmentation_par_dictionaries[i_dictionary] = {
             "spectrum_amplifying_factor": np.random.uniform(
                 config["spectrum_amplifying_factor"]["low"],
                 config["spectrum_amplifying_factor"]["high"],
@@ -318,5 +319,44 @@ def augmention_pars_generator(
             "aberration_kernel_std": np.random.uniform(
                 config["aberration_kernel_std"]["low"], config["aberration_kernel_std"]["high"]
             ),
+
+            # TODO: ADD PARS FOR BASELINE
         }
-    return augmentation_par_sets
+    return augmentation_par_dictionaries
+
+def apply_augmentations(spectrum: Spectrum, augmentation_par_dictionaries: dict) -> Spectrum:
+    """
+    Apply augmentations to the spectrum.
+
+    Parameters:
+    spectrum (Spectrum): The spectrum.
+    augment_pars (dict): The augmentation parameters.
+
+    Returns:
+    Spectrum: The augmented spectrum.
+    """
+    # augmented_spectrum_list = []
+
+    for i_augmentation_dictionary in augmentation_par_dictionaries:
+        # Amplify the spectrum
+        augmented_spectrum = amplify(spectrum, i_augmentation_dictionary["spectrum_amplifying_factor"])
+        # Shift the spectrum
+        augmented_spectrum = shift_spectrum(augmented_spectrum, i_augmentation_dictionary["instrument_shift"])
+        # Apply the convolution kernel
+        augmented_spectrum = convolute_kernel(augmented_spectrum, i_augmentation_dictionary["abbrration_kernel_std"])
+        # Add photon shot noise
+        augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary["photon_shot_noise_pars"])
+        # Add dark current shot noise
+        augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary["dark_current_shot_noise_pars"])
+        # Add photo response non-uniformity noise
+        augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary["photo_response_non_uniformity_pars"])
+        # Add dark signal FPN noise
+        augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary["dark_signal_FPN_noise_pars"])
+        # Add cosmic rays
+        augmented_spectrum = add_cosmic_rays(augmented_spectrum, i_augmentation_dictionary["cosmic_ray_pars"])
+        # Apply the convolution kernel
+        augmented_spectrum = convolute_kernel(augmented_spectrum, i_augmentation_dictionary["aberration_kernel_std"])
+
+        #augmented_spectrum_list.append(augmented_spectrum)
+
+        yield augmented_spectrum
