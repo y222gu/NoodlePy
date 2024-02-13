@@ -5,14 +5,18 @@ from sympy import plot
 import noodlepy.utils.create_augment as create_augment
 
 class Spectrum:
-    def __init__(self, patient_id:str ='', 
+    def __init__(self, 
+                 patient_id:str ='', 
+                 sample_type:str ='',
                  spectrum_id:str ='', 
+                 laser_wavelength:float =785,
                  wavelength_nm:np.array =[],
-                 wavenumber:np.array =[], 
                  intensity:np.array =[]):
         
         self.patient_id:str = patient_id
+        self.sample_type:str = sample_type
         self.spectrum_id:str = spectrum_id
+        self.laser_wavelength:float = laser_wavelength
         self.wavelength_nm:np.array = wavelength_nm
         self.wavenumber:np.array = create_augment.wavelength_to_wavenumber(self.wavelength_nm)
         self.intensity:np.array = intensity
