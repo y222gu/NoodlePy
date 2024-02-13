@@ -1,4 +1,6 @@
 # https://pytorch.org/get-started/locally/
+import dis
+from numpy import number
 from torch.utils.data import Dataset
 import pandas as pd
 import noodlepy.utils.create_augment as create_augment
@@ -12,7 +14,9 @@ class SyntheticRamanFileDataset(Dataset):
             Advantages:  You can distribute your training data to others
             Disadvantages:  You have to keep track of your training sets
         """
-        pass
+        # FIXME
+        # self.augmentation_flag = str
+        # self.preprocess_flag(apply same preprocessing for every spectrum)
 
     def load_db(self, data_folder='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB'):
         # FIXME: This is a temporary function to create a list of spectrum objects on the fly from the csv file
@@ -48,62 +52,17 @@ class SyntheticRamanFileDataset(Dataset):
         self.db = list_of_spectrum_objects   
         return self.db
 
+    def __len__(self):
+        return len(self.db)
+    
     def __getitem__(self, idx):
         chosen_spectrum = self.db[idx]
-        augmentation_par_dictionaries = create_augment.augmention_pars_generator(2)
-        augmented_spectrum1, augmented_spectrum2 = create_augment.apply_augmentations(chosen_spectrum,augmentation_par_dictionaries)
-
+        augmented_spectrum1, augmented_spectrum2 = create_augment.apply_augmentations(chosen_spectrum,number_of_augmentation=2)
         return augmented_spectrum1, augmented_spectrum2
     
-
-dataset = SyntheticRamanFileDataset
-dataset.load_db(csv_file_path='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB.csv')
-augmented_spectrum1, augmented_spectrum2 = dataset.__getitem__(1)
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-'''
-class SyntheticRamanOnTheFlyDataset(Dataset):
-    def __init__(self, number_of_spectra):
-        """
-            Creates the spectra on call
-            Advantage:  No additional creation of files
-            Disadvantage:   You need to make sure that your random numpy and torch seeds are 
-                            properly intilizalized or you will get a different answer every time
-
-                            see https://numpy.org/doc/stable/reference/random/generator.html
-                            see https://pytorch.org/docs/stable/notes/randomness.html
-                            see https://lightning.ai/docs/pytorch/stable/common/trainer.html#reproducibility
-        """
-        # TODO: Initialize random spectra parameters e.g. valid ranges for each metabolite self.dictionary = {'metabolite 1':[low,high]}        
-        #                                            e.g. open a config file with ranges for each metabolite
-        self.number_of_spectra = number_of_spectra
-
-    def __len__(self):
-        return self.number_of_spectra
-
-    def __getitem__(self, idx):
-        # TODO: Draw a random set of metabolite compositions out of the ranges
-        # TODO: Turn them into a speectrum
-        # TODO: Create two random augmentation dictionaries
-        # TODO: apply the augmentation to the spectrum        
-        return augmentation1, augmentation2
-    
-    '''
+if __name__ == "__main__":
+    dataset = SyntheticRamanFileDataset()
+    dataset.load_db()
+    augmented_spectrum1, augmented_spectrum2 = dataset.__getitem__(1)
+    augmented_spectrum1.display()
+    augmented_spectrum2.display()
