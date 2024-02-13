@@ -61,7 +61,7 @@ instrument_shift:
   high: 1.5
   # The unit is cm-1   
 
-abbrration_kernel_std: 
+aberration_kernel_std: 
   low: 0.3
   high: 0.8
 
