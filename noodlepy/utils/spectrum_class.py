@@ -7,7 +7,7 @@ import matplotlib.pyplot as plt
 
 class Spectrum:
     def __init__(self, 
-                 patient_id:str ='', 
+                 patient_id:str ='',
                  sample_type:str ='',
                  spectrum_id:str ='', 
                  laser_wavelength:float =785,
@@ -25,11 +25,14 @@ class Spectrum:
     def __len__(self):
         return len(self.wavenumber)
     
-    def display(self):
-        plt.plot(self.wavenumber, self.intensity)
-        plt.xlabel('Wavenumber (cm^-1)')
-        plt.ylabel('Intensity (a.u.)]')
-        plt.title('Spectrum')
-        plt.show()
+    #
+    def display(self, path:str = './plot.png'):
+        f, ax = plt.subplots(1, 1, figsize=(4, 4))
+        ax.plot(self.wavenumber, self.intensity)
+        ax.set_xlabel('Wavenumber (cm^-1)')
+        ax.set_ylabel('Intensity (a.u.)]')
+        ax.set_title('Spectrum')
+        f.savefig(path, bbox_inches='tight', dpi=300)
+        plt.close()
 
         
