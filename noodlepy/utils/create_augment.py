@@ -11,12 +11,10 @@ from typing import Union
 import copy
 
 def crop_spectra(
-    spectrum: Union[Spectrum, list],
+    spectrum: Spectrum,
     start_wavenumber: int,
     end_wavenumber: int
-) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [crop_spectra(spec, start_wavenumber, end_wavenumber) for spec in spectrum]
+) -> Spectrum:
     
     print(f'Start to align all spectra to the specified range...')
     print(f'Checking if the wavenumber are matching')
@@ -35,12 +33,10 @@ def crop_spectra(
     return spectrum
 
 def normalize_spectra(
-    spectrum: Union[Spectrum, list],
+    spectrum: Spectrum,
     normalization_option: str,
 ) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [normalize_spectra(spec, normalization_option) for spec in spectrum]
-
+    
     print(f'Normalizing spectra by: ', normalization_option, '...')
     
     if normalization_option == 'area':
@@ -52,20 +48,16 @@ def normalize_spectra(
 
     return spectrum
 
-def apply_quantumn_efficiency(spectrum: Union[Spectrum, list], quantumn_efficiency: float) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [apply_quantumn_efficiency(spec, quantumn_efficiency) for spec in spectrum]
-
+def apply_quantumn_efficiency(spectrum: Spectrum, quantumn_efficiency: float) -> Spectrum:
+    
     spectrum.intensity = spectrum.intensity * quantumn_efficiency
     return spectrum
 
 def mix_spectra(
-    spectrum_list: Union[Spectrum, list],
+    spectrum_list: list[Spectrum],
     ratios: np.array,
-) -> Union[Spectrum, list]:
-    if isinstance(spectrum_list, list):
-        return [mix_spectra(spec, ratios) for spec in spectrum_list]
-
+) -> Spectrum:
+    
     print(f'Start to mix spectra...')
     mixture_spectrum = Spectrum()
 
@@ -82,10 +74,8 @@ def mix_spectra(
     print(f'Mixing is done...')
     return mixture_spectrum
 
-def add_noise(spectrum: Union[Spectrum, list], noise_pars: dict) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [add_noise(spec, noise_pars) for spec in spectrum]
-
+def add_noise(spectrum: Spectrum, noise_pars: dict) -> Spectrum:
+    
     rng = np.random.default_rng()
     noise_type = noise_pars["noise_type"]
 
@@ -104,10 +94,8 @@ def add_noise(spectrum: Union[Spectrum, list], noise_pars: dict) -> Union[Spectr
 
     return spectrum
 
-def add_cosmic_rays(spectrum: Union[Spectrum, list], cosmic_ray_pars: dict) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [add_cosmic_rays(spec, cosmic_ray_pars) for spec in spectrum]
-
+def add_cosmic_rays(spectrum: Spectrum, cosmic_ray_pars: dict) -> Spectrum:
+    
     number_spikes = cosmic_ray_pars["spike_num"]
     spike_amplitude = cosmic_ray_pars["spike_amplitude"]
     spike_locations = np.random.randint(0, len(spectrum.wavenumber), number_spikes)
@@ -117,12 +105,10 @@ def add_cosmic_rays(spectrum: Union[Spectrum, list], cosmic_ray_pars: dict) -> U
     return spectrum
 
 def create_baseline(
-    spectrum: Union[Spectrum, list],
+    spectrum: Spectrum,
     baseline_pars: dict
-) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [create_baseline(spec, baseline_pars) for spec in spectrum]
-
+) -> Spectrum:
+    
     baseline_type = baseline_pars["baseline_type"]
 
     if baseline_type == "poly":
@@ -147,40 +133,30 @@ def create_baseline(
         
     return spectrum
 
-def shift_spectrum(spectrum: Union[Spectrum, list], wavenumber_shift: float) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [shift_spectrum(spec, wavenumber_shift) for spec in spectrum]
+def shift_spectrum(spectrum: Spectrum, wavenumber_shift: float) -> Spectrum:
 
     spectrum.wavenumber = spectrum.wavenumber + wavenumber_shift
     return spectrum
 
-def amplify(spectrum: Union[Spectrum, list], spectrum_amplifying_factor: float) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [amplify(spec, spectrum_amplifying_factor) for spec in spectrum]
-    
+def amplify(spectrum: Spectrum, spectrum_amplifying_factor: float) -> Spectrum:
+ 
     spectrum.intensity = spectrum.intensity * spectrum_amplifying_factor
     return spectrum
 
-def convolute_kernel(spectrum: Union[Spectrum, list], kernel_std: float) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [convolute_kernel(spec, kernel_std) for spec in spectrum]
+def convolute_kernel(spectrum: Spectrum, kernel_std: float) -> Spectrum:
 
     kernel = signal.windows.gaussian(len(spectrum.wavenumber), kernel_std)
     spectrum.intensity = signal.convolve(kernel, spectrum.intensity, mode="same") * sum(kernel)
     return spectrum
 
-def interpolate_spectrum(spectrum: Union[Spectrum, list], target_raman_shift: np.array) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [interpolate_spectrum(spec, target_raman_shift) for spec in spectrum]
+def interpolate_spectrum(spectrum: Spectrum, target_raman_shift: np.array) -> Spectrum:
 
     interpolated_intensity = np.interp(target_raman_shift, spectrum.wavenumber, spectrum.intensity)
     spectrum.wavenumber= target_raman_shift
     spectrum.intensity = interpolated_intensity
     return spectrum
 
-def pre_process(spectrum: Union[Spectrum, list], config: dict) -> Union[Spectrum, list]:
-    if isinstance(spectrum, list):
-        return [pre_process(spec, config) for spec in spectrum]
+def pre_process(spectrum: Spectrum, config: dict) -> Spectrum:
 
     pipe = ramanspy.preprocessing.protocols.Pipeline(
         [
@@ -297,7 +273,7 @@ def augmentation_pars_generator(
         }
     return augmentation_par_dictionaries
 
-def apply_augmentations(spectrum: Spectrum, number_of_augmentation) -> list:
+def apply_augmentations(spectrum: Spectrum, number_of_augmentation) -> list[Spectrum]:
     """
     Apply a set of augmentations to a spectrum.
     
