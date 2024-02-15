@@ -19,8 +19,8 @@ normalization_option_for_mixture_spectrum: area # or max
 
 # spectrum_amplifying_factor
 spectrum_amplifying_factor: 
-  low: 40
-  high: 60  # Uniform
+  low: 20
+  high: 40  # Uniform
   
 baseline_amplifying_factor: 
   low: 1
@@ -70,8 +70,8 @@ cosmic_ray_pars:
     low: 0
     high: 5 
   spike_amplitude: 
-    low: 30
-    high: 100
+    low: 2
+    high: 5
 
 baseline_pars: 
   baseline_type: poly # sine

@@ -1,6 +1,8 @@
 # https://pytorch.org/get-started/locally/
+from calendar import c
 import dis
 from numpy import number
+from sympy import plot
 from torch.utils.data import Dataset
 import pandas as pd
 import noodlepy.utils.create_augment as create_augment
@@ -46,10 +48,9 @@ class SyntheticRamanFileDataset(Dataset):
                 else:
                     wavelength_nm = data.iloc[start_indexes[i]:start_indexes[i + 1], 0].values.round(3)
                     intensity = data.iloc[start_indexes[i]:start_indexes[i + 1], 1].values.round(3)
-
                 list_of_spectrum_objects.append(Spectrum(patient_id, sample_type, spectrum_id, laser_wavelength, wavelength_nm, intensity))
 
-        self.db = list_of_spectrum_objects   
+        self.db = list_of_spectrum_objects
         return self.db
 
     def __len__(self):
@@ -57,12 +58,17 @@ class SyntheticRamanFileDataset(Dataset):
     
     def __getitem__(self, idx):
         chosen_spectrum = self.db[idx]
-        augmented_spectrum1, augmented_spectrum2 = create_augment.apply_augmentations(chosen_spectrum,number_of_augmentation=2)
-        return augmented_spectrum1, augmented_spectrum2
+        
+        # REQ: 2 augmentations
+        augmented_spectrum_list = create_augment.apply_augmentations(chosen_spectrum,number_of_augmentation=2)
+
+        chosen_spectrum.display()
+        augmented_spectrum_list[0].display()
+        augmented_spectrum_list[1].display()
+        return augmented_spectrum_list[0],augmented_spectrum_list[1]
     
 if __name__ == "__main__":
     dataset = SyntheticRamanFileDataset()
     dataset.load_db()
-    augmented_spectrum1, augmented_spectrum2 = dataset.__getitem__(1)
-    augmented_spectrum1.display()
-    augmented_spectrum2.display()
+    augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(1)
+
