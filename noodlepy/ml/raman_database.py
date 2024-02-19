@@ -20,6 +20,7 @@ class SyntheticRamanFileDataset(Dataset):
         # self.augmentation_flag = str
         # self.preprocess_flag(apply same preprocessing for every spectrum)
         self.db: list[Spectrum]
+        self.augmentation_step_list = ['noise','baseline','cosmic_ray']
 
     def load_db(self, data_folder='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB'):
         # FIXME: This is a temporary function to create a list of spectrum objects on the fly from the csv file
@@ -60,8 +61,9 @@ class SyntheticRamanFileDataset(Dataset):
     def __getitem__(self, idx):
         chosen_spectrum:Spectrum = self.db[idx]
         
-        # REQ: 2 augmentations
-        augmented_spectrum_list = create_augment.apply_augmentations(chosen_spectrum,number_of_augmentation=2)
+        # REQ: Only need 2 children of the chosen_spectrum
+        augmentation_step_list = ['baseline','shot_noise','dark_current_noise','photo_response_non_uniformity','cosmic_ray']
+        augmented_spectrum_list = create_augment.apply_augmentations(chosen_spectrum, augmentation_step_list, number_of_augmentation=2)
 
         chosen_spectrum.display()
         augmented_spectrum_list[0].display()

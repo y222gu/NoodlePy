@@ -1,44 +1,27 @@
 # This is a YAML file 
-metabolomics_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/metabolomics.xlsx
-sample_type: Saliva # or Plasma, Serum
+normalization: # normalization options
+  normalization_type_options:
+    - by_area
+    - by_max
 
-DFT_file_path: /Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/raman_rpbe_1106.pickle
+amplification: # spectrum_amplifying_factor
+  multipliers: 
+    low: 20
+    high: 40  # Uniform
 
-laser_wavelength: 785
-exposure_time: 30 # seconds
-quantumn_efficiency: 0.95
-
-raman_shift_range_pars: 
-  start_wavenumber: 350 
-  end_wavenumber: 1800
-  step_wavenumber: 1 
-
-normalization_option_for_individual_spectrum: area # or max
-
-normalization_option_for_mixture_spectrum: area # or max
-
-# spectrum_amplifying_factor
-spectrum_amplifying_factor: 
-  low: 20
-  high: 40  # Uniform
-  
-baseline_amplifying_factor: 
-  low: 1
-  high: 5 # Uniform
-
-photon_shot_noise_pars: 
+shot_noise: # photon shot noise
   noise_type: poisson
   lam: 
     low: 5 # lambda for poisson noise
     high: 15
 
-dark_current_shot_noise_pars: 
+dark_current_noise: #dark_current_shot_noise
   noise_type: poisson
   lam: 
     low: 5 # lambda for poisson noise
     high: 15
 
-photo_response_non_uniformity_pars:
+photo_response_non_uniformity: #photo_response_non_uniformity
   noise_type: gaussian
   mean: 
     low: 0.01
@@ -47,7 +30,7 @@ photo_response_non_uniformity_pars:
     low: 0.001
     high: 0.005
 
-dark_signal_FPN_noise_pars:
+FPN_noise: #dark_signal_FPN_noise
   noise_type: lognormal
   mean: 
     low: 0.05
@@ -56,16 +39,17 @@ dark_signal_FPN_noise_pars:
     low: 0.001
     high: 0.005
 
-instrument_shift: 
+horizontal_shift: #instrumental_horizontal_shift
   low: 0.5
   high: 1.5
   # The unit is cm-1   
 
-aberration_kernel_std: 
-  low: 0.3
-  high: 0.8
+convoluting_gaussian:
+  guassian_std:
+    low: 0.3 # gussian std
+    high: 0.8
 
-cosmic_ray_pars:
+cosmic_ray:
   spike_num: 
     low: 0
     high: 5 
@@ -73,34 +57,26 @@ cosmic_ray_pars:
     low: 2
     high: 5
 
-baseline_pars: 
-  baseline_type: poly # sine
-  poly_orders: 2
+baseline: 
+  baseline_type_options: 
+    - poly
+    - sine
+  baseline_amplification_multiplier: 
+    low: 1
+    high: 5 # Uniform
+  poly_orders: 
+    low: 2
+    high: 4
   poly_coefficients:
-    - 0.00005 # coef for zero order
-    - 0.0000005 # coef for second order
-    - 0.00000005 # coef for third order...
-    - 0.000000005 # coef for fourth order...
-  poly_displacement:    # Normal distribution [mean standard_deviation][0, 300]
-    - 0
-    - -680
-    - 0
-    - 0
-    
-sine:
-  sine_amplitude: 1
-  sine_frequency: 5
-  sine_phase: 1
-
-gaussian_pars:
-  # Amplitude of the Gaussian peaks in a spectrum (signal intensity level)
-  w: 0.05 
-  mw: 0.1
-  m: 0.2
-  ms: 0.25
-  s: 0.5
-  vs: 1  
-  # Sigma of the Gaussian peaks in a spectrum (signal peak shape)
-  n: 5 
-  sh: 10
-  br: 15
+    low: 0.00005
+    high: 0.0005
+  sine:
+    sine_amplitude: 
+      low: 1
+      high: 5
+    sine_frequency: 
+      low: 2
+      high: 15
+    sine_phase:
+      low: 0
+      high: 2
