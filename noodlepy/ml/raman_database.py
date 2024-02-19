@@ -23,6 +23,16 @@ class SyntheticRamanFileDataset(Dataset):
 
 
     def load_db(self, data_folder='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB'):
+        """
+        Load the database of spectra from the txt file
+
+        Args:
+        data_folder (str): The folder where the spectra are stored
+
+        Returns:
+        list[Spectrum]: A list of Spectrum objects
+        """
+
         # FIXME: This is a temporary function to create a list of spectrum objects on the fly from the csv file
         # Once we have a database, we will need to change this to a database query
         list_of_spectrum_objects = []
@@ -60,20 +70,30 @@ class SyntheticRamanFileDataset(Dataset):
     
     def __getitem__(self, 
                     idx:int, 
-                    augmentation_step_options: list[str]):
+                    augmentation_step_option_list: list[str])-> tuple[Spectrum, Spectrum]:
+        """
+        Return 2 augmented spectra from the chosen spectrum
+
+        Args:
+        idx (int): The index of the spectrum to augment
+        augmentation_step_option_list (list[str]): The list of augmentation steps to choose and apply randomly
+
+        returns:
+        augmented_spectrum_list (list[Spectrum]): a tuple of 2 augmented Spectrum objects
+        """
         
         chosen_spectrum:Spectrum = self.db[idx]
         # REQ: Only need 2 children of the chosen_spectrum
-        augmented_spectrum_list = create_augment.apply_augmentations(chosen_spectrum, augmentation_step_options, number_of_augmentation=2)
+        augmented_spectrum_list = Spectrum.apply_augmentations(chosen_spectrum, augmentation_step_option_list, 2)
 
         chosen_spectrum.display()
         augmented_spectrum_list[0].display()
         augmented_spectrum_list[1].display()
         return augmented_spectrum_list[0],augmented_spectrum_list[1]
-    
+
 if __name__ == "__main__":
     dataset = SyntheticRamanFileDataset()
     dataset.load_db()
-    augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1, augmentation_step_options = ['baseline','shot_noise','dark_current_noise',
+    augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1, augmentation_step_option_list = ['baseline','shot_noise','dark_current_noise',
                                                                                                        'photo_response_non_uniformity','cosmic_ray'])
 

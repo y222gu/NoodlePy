@@ -1,43 +1,38 @@
 # https://w3.cs.jmu.edu/spragunr/CS240_F12/style_guide.shtml
 
 # Loading the required packages:
-import re
-from cvxopt import uniform
 import numpy as np
 import ramanspy
 from scipy import signal
 import yaml
 from noodlepy.utils.spectrum_class import Spectrum
-from typing import Any, Union
+from typing import Any
 import copy
 from collections import defaultdict
 
 def crop_spectra(
     spectrum: Spectrum,
-    start_raman_shift_cm: int,
-    end_raman_shift_cm: int
+    start_raman_shift_cm: float,
+    end_raman_shift_cm: float
 ) -> Spectrum:
     
-    print(f'Start to align all spectra to the specified range...')
-    print(f'Checking if the wavenumber are matching')
+    spectrum_raman_shift_cm = spectrum.raman_shift_cm
 
-    wavenumber = spectrum.raman_shift_cm
-
-    if start_raman_shift_cm in wavenumber and end_raman_shift_cm in wavenumber:
-        start_index = np.where(wavenumber == start_raman_shift_cm)[0][0]
-        end_index = np.where(wavenumber == end_raman_shift_cm)[0][0]
+    if start_raman_shift_cm in spectrum_raman_shift_cm and end_raman_shift_cm in spectrum_raman_shift_cm:
+        start_index = np.where(spectrum_raman_shift_cm == start_raman_shift_cm)[0][0]
+        end_index = np.where(spectrum_raman_shift_cm == end_raman_shift_cm)[0][0]
         spectrum.raman_shift_cm = spectrum.raman_shift_cm[start_index:end_index]
         spectrum.intensity = spectrum.intensity[start_index:end_index]
     else:
         raise ValueError('Wavenumber range could not be aligned to the specified range')
     
-    print(f'All spectra are aligned and cropped between Wavenumber {start_raman_shift_cm} cm^-1 to {end_raman_shift_cm} cm^-1')
+    print(f'Spectrum is aligned and cropped between Wavenumber {start_raman_shift_cm} cm^-1 to {end_raman_shift_cm} cm^-1')
     return spectrum
 
 def normalize_spectra(
     spectrum: Spectrum,
     normalization_type: str,
-) -> Union[Spectrum, list]:
+) -> Spectrum:
     
     print(f'Normalizing spectra by: ', normalization_type, '...')
     
@@ -48,11 +43,6 @@ def normalize_spectra(
     else:
         raise ValueError(f'Normalization method is not defined')
 
-    return spectrum
-
-def apply_quantumn_efficiency(spectrum: Spectrum, quantumn_efficiency: float) -> Spectrum:
-    
-    spectrum.intensity = spectrum.intensity * quantumn_efficiency
     return spectrum
 
 def mix_spectra(
@@ -93,7 +83,6 @@ def add_noise(spectrum: Spectrum, **noise_pars: Any) -> Spectrum:
         spectrum.intensity += rng.lognormal(noise_pars["mean"], noise_pars["sigma"], len(spectrum.intensity))
     else:
         raise ValueError("noise_type must be one among 'poisson', 'gaussian', 'uniform', 'expoenetial', and 'lognormal'")
-
     return spectrum
 
 def add_cosmic_rays(spectrum: Spectrum, **cosmic_ray_pars:Any) -> Spectrum:
@@ -128,7 +117,7 @@ def add_baseline(
     spectrum.intensity = spectrum.intensity + baseline_intensity * baseline_pars["baseline_amplifying_factor"]
     return spectrum
 
-def shift_spectrum(spectrum: Spectrum, wavenumber_shift: float) -> Spectrum:
+def horizontal_shift(spectrum: Spectrum, wavenumber_shift: float) -> Spectrum:
     spectrum.raman_shift_cm = spectrum.raman_shift_cm + wavenumber_shift
     return spectrum
 
@@ -359,7 +348,7 @@ def apply_augmentations(spectrum: Spectrum, augmentation_step_list, number_of_au
             augmented_spectrum = amplify_spectrum(augmented_spectrum, i_augmentation_dictionary["amplification"])
 
         if 'horizontal_shift' in i_augmentation_dictionary.keys():
-            augmented_spectrum = shift_spectrum(augmented_spectrum, i_augmentation_dictionary["horizontal_shift"])
+            augmented_spectrum = horizontal_shift(augmented_spectrum, i_augmentation_dictionary["horizontal_shift"])
 
         if 'baseline' in i_augmentation_dictionary.keys():
             augmented_spectrum = add_baseline(augmented_spectrum, **i_augmentation_dictionary["baseline"])
