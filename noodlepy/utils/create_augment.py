@@ -76,7 +76,7 @@ def mix_spectra(
     print(f'Mixing is done...')
     return mixture_spectrum
 
-def add_noise(spectrum: Spectrum, **noise_pars: dict) -> Spectrum:
+def add_noise(spectrum: Spectrum, noise_pars: dict) -> Spectrum:
     
     rng = np.random.default_rng()
     noise_type = noise_pars["noise_type"]
@@ -148,7 +148,7 @@ def convolute_gaussian_to_spectrum(spectrum: Spectrum, gaussian_std: float) -> S
 
 def interpolate_spectrum(spectrum: Spectrum, target_raman_shift: np.array) -> Spectrum:
     interpolated_intensity = np.interp(target_raman_shift, spectrum.raman_shift_cm, spectrum.intensity)
-    spectrum.raman_shift_cm = target_raman_shift
+    spectrum.raman_shift_cm= target_raman_shift
     spectrum.intensity = interpolated_intensity
     return spectrum
 
@@ -162,7 +162,7 @@ def pre_process(spectrum: Spectrum, config: dict) -> Spectrum:
         ]
     )
     preprocessed_spectrum = pipe.apply(
-        ramanspy.Spectrum(spectrum.intensity, spectrum.raman_shift_cm)
+        ramanspy.Spectrum(spectrum.intensity, spectrum.wavenumber_cm)
     )
     return preprocessed_spectrum
 
