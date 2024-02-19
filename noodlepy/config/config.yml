@@ -5,7 +5,7 @@ normalization: # normalization options
     - by_max
 
 amplification: # spectrum_amplifying_factor
-  multipliers: 
+  spectrum_amplifying_factor: 
     low: 20
     high: 40  # Uniform
 
@@ -50,7 +50,7 @@ convoluting_gaussian:
     high: 0.8
 
 cosmic_ray:
-  spike_num: 
+  spike_number: 
     low: 0
     high: 5 
   spike_amplitude: 
@@ -60,7 +60,6 @@ cosmic_ray:
 baseline: 
   baseline_type_options: 
     - poly
-    - sine
   baseline_amplification_multiplier: 
     low: 1
     high: 5 # Uniform

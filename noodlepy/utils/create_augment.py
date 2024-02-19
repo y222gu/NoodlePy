@@ -8,7 +8,7 @@ import ramanspy
 from scipy import signal
 import yaml
 from noodlepy.utils.spectrum_class import Spectrum
-from typing import Union
+from typing import Any, Union
 import copy
 from collections import defaultdict
 
@@ -76,7 +76,7 @@ def mix_spectra(
     print(f'Mixing is done...')
     return mixture_spectrum
 
-def add_noise(spectrum: Spectrum, noise_pars: dict) -> Spectrum:
+def add_noise(spectrum: Spectrum, **noise_pars: Any) -> Spectrum:
     
     rng = np.random.default_rng()
     noise_type = noise_pars["noise_type"]
@@ -96,23 +96,18 @@ def add_noise(spectrum: Spectrum, noise_pars: dict) -> Spectrum:
 
     return spectrum
 
-def add_cosmic_rays(spectrum: Spectrum, cosmic_ray_pars: dict) -> Spectrum:
-    
-    number_spikes = cosmic_ray_pars["spike_num"]
-    spike_amplitude = cosmic_ray_pars["spike_amplitude"]
-    spike_locations = np.random.randint(0, len(spectrum.raman_shift_cm), number_spikes)
+def add_cosmic_rays(spectrum: Spectrum, **cosmic_ray_pars:Any) -> Spectrum:
+    spike_locations = np.random.randint(0, len(spectrum.raman_shift_cm), cosmic_ray_pars["spike_number"])
 
     for spike_location in spike_locations:
-        spectrum.intensity[spike_location] = abs(spectrum.intensity[spike_location])* spike_amplitude
+        spectrum.intensity[spike_location] = abs(spectrum.intensity[spike_location])* cosmic_ray_pars["spike_amplitude"]
     return spectrum
 
 def add_baseline(
     spectrum: Spectrum,
-    baseline_pars: dict
-) -> Spectrum:
-    
+    **baseline_pars: Any) -> Spectrum:
     baseline_type = baseline_pars["baseline_type"]
-    baseline_amplifying_factor = baseline_pars["baseline_amplifying_factor"]
+
     if baseline_type == "poly":
         poly_orders = baseline_pars["poly_orders"]
         poly_coefficients = baseline_pars["poly_coefficients"]
@@ -130,7 +125,7 @@ def add_baseline(
     else:
         raise ValueError("Baseline type is not defined")
 
-    spectrum.intensity = spectrum.intensity + baseline_intensity * baseline_amplifying_factor
+    spectrum.intensity = spectrum.intensity + baseline_intensity * baseline_pars["baseline_amplifying_factor"]
     return spectrum
 
 def shift_spectrum(spectrum: Spectrum, wavenumber_shift: float) -> Spectrum:
@@ -162,7 +157,7 @@ def pre_process(spectrum: Spectrum, config: dict) -> Spectrum:
         ]
     )
     preprocessed_spectrum = pipe.apply(
-        ramanspy.Spectrum(spectrum.intensity, spectrum.wavenumber_cm)
+        ramanspy.Spectrum(spectrum.intensity, spectrum.raman_shift_cm)
     )
     return preprocessed_spectrum
 
@@ -196,7 +191,7 @@ def random_augmentation_steps_generator(augmentation_step_list: list) -> list:
     Returns:
     dict: The set of augmentation steps.
     """
-    number_of_augmentation_steps = np.random.randint(0,len(augmentation_step_list))
+    number_of_augmentation_steps = np.random.randint(1,len(augmentation_step_list))
     random_augmentation_steps = np.random.choice((augmentation_step_list),number_of_augmentation_steps,replace=False)
     return random_augmentation_steps
 
@@ -227,15 +222,17 @@ def augmentation_pars_generator(augmentation_step_list: list,
 
         # Create random parameters for each augment
         if "normalization" in augmentation_steps:
-            augmentation_par_dictionaries[i_dictionary]["normalization"]= np.random.choice(
+            augmentation_par_dictionaries[i_dictionary]["normalization"]= {
+                "normalization_type": np.random.choice(
                 config["normalization"]["normalization_type_options"]
                 )
+            }
 
         if "amplification" in augmentation_steps:
             augmentation_par_dictionaries[i_dictionary]["amplification"]= {
-                "multipliers": np.random.uniform(
-                config["amplification"]["multipliers"]["low"],
-                config["amplification"]["multipliers"]["high"]
+                "spectrum_amplifying_factor": np.random.uniform(
+                config["amplification"]["spectrum_amplifying_factor"]["low"],
+                config["amplification"]["spectrum_amplifying_factor"]["high"]
                 )
             }
 
@@ -300,20 +297,24 @@ def augmentation_pars_generator(augmentation_step_list: list,
 
         if "cosmic_ray" in augmentation_steps:
             augmentation_par_dictionaries[i_dictionary]["cosmic_ray"] = {  
-                "spike_num": np.random.randint(
-                    config["cosmic_ray"]["spike_num"]["low"],
-                    config["cosmic_ray"]["spike_num"]["high"]
+                "spike_number": np.random.randint(
+                    config["cosmic_ray"]["spike_number"]["low"],
+                    config["cosmic_ray"]["spike_number"]["high"]
                 ),
                 "spike_amplitude": np.random.uniform(
                     config["cosmic_ray"]["spike_amplitude"]["low"],
                     config["cosmic_ray"]["spike_amplitude"]["high"]
                 )
-            },
+            }
 
         if "baseline" in augmentation_steps:
+            baseline_type = np.random.choice(
+                config["baseline"]["baseline_type_options"]
+            )
+
             baseline_amplifying_factor = np.random.uniform(
-            config["baseline"]["baseline_amplifying_factor"]["low"],
-            config["baseline"]["baseline_amplifying_factor"]["high"]
+            config["baseline"]["baseline_amplification_multiplier"]["low"],
+            config["baseline"]["baseline_amplification_multiplier"]["high"]
             )
 
             poly_orders = np.random.randint(
@@ -329,7 +330,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
                         )
 
             augmentation_par_dictionaries[i_dictionary]["baseline"] = {
-            "baseline_type": "poly",
+            "baseline_type": baseline_type,
             "baseline_amplifying_factor": baseline_amplifying_factor,
             "poly_orders": poly_orders,
             "poly_coefficients": poly_coefficients
@@ -361,25 +362,25 @@ def apply_augmentations(spectrum: Spectrum, augmentation_step_list, number_of_au
             augmented_spectrum = shift_spectrum(augmented_spectrum, i_augmentation_dictionary["horizontal_shift"])
 
         if 'baseline' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_baseline(augmented_spectrum, i_augmentation_dictionary["baseline"])
+            augmented_spectrum = add_baseline(augmented_spectrum, **i_augmentation_dictionary["baseline"])
 
         if 'convoluting_gaussian' in i_augmentation_dictionary.keys():
             augmented_spectrum = convolute_gaussian_to_spectrum(augmented_spectrum, i_augmentation_dictionary["convoluting_gaussian"])
 
         if 'shot_noise' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary['shot_noise'])
+            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['shot_noise'])
 
         if 'dark_current_noise' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary['dark_current_noise'])
+            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['dark_current_noise'])
 
         if 'photo_response_non_uniformity' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary['photo_response_non_uniformity'])
+            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['photo_response_non_uniformity'])
 
         if 'FPN_noise' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, i_augmentation_dictionary['FPN_noise'])
+            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['FPN_noise'])
 
         if 'cosmic_ray' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_cosmic_rays(augmented_spectrum, i_augmentation_dictionary['cosmic_ray'])
+            augmented_spectrum = add_cosmic_rays(augmented_spectrum, **i_augmentation_dictionary['cosmic_ray'])
 
         augmented_spectrum_list.append(augmented_spectrum)
 
