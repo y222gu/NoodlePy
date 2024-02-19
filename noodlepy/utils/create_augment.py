@@ -14,24 +14,24 @@ from collections import defaultdict
 
 def crop_spectra(
     spectrum: Spectrum,
-    start_wavenumber: int,
-    end_wavenumber: int
+    start_raman_shift_cm: int,
+    end_raman_shift_cm: int
 ) -> Spectrum:
     
     print(f'Start to align all spectra to the specified range...')
     print(f'Checking if the wavenumber are matching')
 
-    wavenumber = spectrum.wavenumber_cm
+    wavenumber = spectrum.raman_shift_cm
 
-    if start_wavenumber in wavenumber and end_wavenumber in wavenumber:
-        start_index = np.where(wavenumber == start_wavenumber)[0][0]
-        end_index = np.where(wavenumber == end_wavenumber)[0][0]
-        spectrum.wavenumber_cm = spectrum.wavenumber_cm[start_index:end_index]
+    if start_raman_shift_cm in wavenumber and end_raman_shift_cm in wavenumber:
+        start_index = np.where(wavenumber == start_raman_shift_cm)[0][0]
+        end_index = np.where(wavenumber == end_raman_shift_cm)[0][0]
+        spectrum.raman_shift_cm = spectrum.raman_shift_cm[start_index:end_index]
         spectrum.intensity = spectrum.intensity[start_index:end_index]
     else:
         raise ValueError('Wavenumber range could not be aligned to the specified range')
     
-    print(f'All spectra are aligned and cropped between Wavenumber {start_wavenumber} to {end_wavenumber}')
+    print(f'All spectra are aligned and cropped between Wavenumber {start_raman_shift_cm} cm^-1 to {end_raman_shift_cm} cm^-1')
     return spectrum
 
 def normalize_spectra(
@@ -42,7 +42,7 @@ def normalize_spectra(
     print(f'Normalizing spectra by: ', normalization_type, '...')
     
     if normalization_type == 'by_area':
-        spectrum.intensity /= np.trapz(spectrum.intensity, spectrum.wavelength_nm)
+        spectrum.intensity /= np.trapz(spectrum.intensity, spectrum.raman_shift_cm)
     elif normalization_type == 'by_max':
         spectrum.intensity /= np.max(spectrum.intensity)
     else:
@@ -66,9 +66,9 @@ def mix_spectra(
     for i, spectrum in enumerate(spectrum_list):
         if i == 0:
             mixture_spectrum.intensity = (ratios[i] * spectrum.intensity)
-            mixture_spectrum.wavenumber_cm = spectrum.wavenumber_cm
+            mixture_spectrum.raman_shift_cm = spectrum.raman_shift_cm
         else:
-            if np.array_equal(spectrum.wavenumber_cm, mixture_spectrum.wavenumber_cm):
+            if np.array_equal(spectrum.raman_shift_cm, mixture_spectrum.raman_shift_cm):
                 mixture_spectrum.intensity += (ratios[i] * spectrum.intensity)
             else:
                 raise ValueError(f'Raman shift range of "{i}" spectrum in the list does not match with the other spectra')
@@ -76,7 +76,7 @@ def mix_spectra(
     print(f'Mixing is done...')
     return mixture_spectrum
 
-def add_noise(spectrum: Spectrum, noise_pars: dict) -> Spectrum:
+def add_noise(spectrum: Spectrum, **noise_pars: dict) -> Spectrum:
     
     rng = np.random.default_rng()
     noise_type = noise_pars["noise_type"]
@@ -100,7 +100,7 @@ def add_cosmic_rays(spectrum: Spectrum, cosmic_ray_pars: dict) -> Spectrum:
     
     number_spikes = cosmic_ray_pars["spike_num"]
     spike_amplitude = cosmic_ray_pars["spike_amplitude"]
-    spike_locations = np.random.randint(0, len(spectrum.wavenumber_cm), number_spikes)
+    spike_locations = np.random.randint(0, len(spectrum.raman_shift_cm), number_spikes)
 
     for spike_location in spike_locations:
         spectrum.intensity[spike_location] = abs(spectrum.intensity[spike_location])* spike_amplitude
@@ -119,14 +119,14 @@ def add_baseline(
 
         baseline_intensity = 0
         for order in range(poly_orders + 1):
-            baseline_intensity += poly_coefficients[order] * (spectrum.wavenumber_cm ** order)
+            baseline_intensity += poly_coefficients[order] * (spectrum.raman_shift_cm ** order)
 
     elif baseline_type == "sine":  # Sine wave baseline
         sine_amplitude = baseline_pars["sine_amplitude"]
         sine_frequency = baseline_pars["sine_frequency"]
         sine_phase = baseline_pars["sine_phase"]
         
-        baseline_intensity = sine_amplitude * np.sin(sine_frequency * spectrum.wavenumber_cm + sine_phase)
+        baseline_intensity = sine_amplitude * np.sin(sine_frequency * spectrum.raman_shift_cm + sine_phase)
     else:
         raise ValueError("Baseline type is not defined")
 
@@ -134,7 +134,7 @@ def add_baseline(
     return spectrum
 
 def shift_spectrum(spectrum: Spectrum, wavenumber_shift: float) -> Spectrum:
-    spectrum.wavenumber_cm = spectrum.wavenumber_cm + wavenumber_shift
+    spectrum.raman_shift_cm = spectrum.raman_shift_cm + wavenumber_shift
     return spectrum
 
 def amplify_spectrum(spectrum: Spectrum, spectrum_amplifying_factor: float) -> Spectrum:
@@ -142,13 +142,13 @@ def amplify_spectrum(spectrum: Spectrum, spectrum_amplifying_factor: float) -> S
     return spectrum
 
 def convolute_gaussian_to_spectrum(spectrum: Spectrum, gaussian_std: float) -> Spectrum:
-    kernel = signal.windows.gaussian(len(spectrum.wavenumber_cm), gaussian_std)
+    kernel = signal.windows.gaussian(len(spectrum.raman_shift_cm), gaussian_std)
     spectrum.intensity = signal.convolve(kernel, spectrum.intensity, mode="same") * sum(kernel)
     return spectrum
 
 def interpolate_spectrum(spectrum: Spectrum, target_raman_shift: np.array) -> Spectrum:
-    interpolated_intensity = np.interp(target_raman_shift, spectrum.wavenumber_cm, spectrum.intensity)
-    spectrum.wavenumber_cm= target_raman_shift
+    interpolated_intensity = np.interp(target_raman_shift, spectrum.raman_shift_cm, spectrum.intensity)
+    spectrum.raman_shift_cm = target_raman_shift
     spectrum.intensity = interpolated_intensity
     return spectrum
 
@@ -162,7 +162,7 @@ def pre_process(spectrum: Spectrum, config: dict) -> Spectrum:
         ]
     )
     preprocessed_spectrum = pipe.apply(
-        ramanspy.Spectrum(spectrum.intensity, spectrum.wavenumber_cm)
+        ramanspy.Spectrum(spectrum.intensity, spectrum.raman_shift_cm)
     )
     return preprocessed_spectrum
 
