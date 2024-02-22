@@ -1,4 +1,21 @@
 # This is a YAML file 
+preprocessing: # preprocessing options
+  baseline_correction:
+    method: airPLS
+    lam: 0.001 
+    diff_order: 1
+    max_iter: 15
+    tol: 0.001
+    weights: None
+  cosmic_ray_removal:
+    method: WHzscores
+    kernel_size: 3
+    threshold: 3.5
+  smoothing:
+    method: SavitzkyGolay
+    window_length: 9
+    polyorder: 2
+
 normalization: # normalization options
   normalization_type_options:
     - by_area
@@ -61,14 +78,14 @@ baseline:
   baseline_type_options: 
     - poly
   baseline_amplification_multiplier: 
-    low: 1
-    high: 5 # Uniform
+    low: 0.1
+    high: 0.5 # Uniform
   poly_orders: 
     low: 2
     high: 4
   poly_coefficients:
-    low: 0.00005
-    high: 0.0005
+    low: 0.0000005
+    high: 0.000005
   sine:
     sine_amplitude: 
       low: 1
