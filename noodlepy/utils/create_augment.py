@@ -2,222 +2,74 @@
 
 # Loading the required packages:
 import numpy as np
-import ramanspy
-from scipy import signal
+from sklearn import base
 import yaml
 from noodlepy.utils.spectrum_class import Spectrum
 from typing import Any
 import copy
 from collections import defaultdict
 
-def crop_spectra(
-    spectrum: Spectrum,
-    start_raman_shift_cm: float,
-    end_raman_shift_cm: float
-) -> Spectrum:
-    
-    spectrum_raman_shift_cm = spectrum.raman_shift_cm
+def pre_process(spectrum: Spectrum) -> Spectrum:
 
-    if start_raman_shift_cm in spectrum_raman_shift_cm and end_raman_shift_cm in spectrum_raman_shift_cm:
-        start_index = np.where(spectrum_raman_shift_cm == start_raman_shift_cm)[0][0]
-        end_index = np.where(spectrum_raman_shift_cm == end_raman_shift_cm)[0][0]
-        spectrum.raman_shift_cm = spectrum.raman_shift_cm[start_index:end_index]
-        spectrum.intensity = spectrum.intensity[start_index:end_index]
-    else:
-        raise ValueError('Wavenumber range could not be aligned to the specified range')
-    
-    print(f'Spectrum is aligned and cropped between Wavenumber {start_raman_shift_cm} cm^-1 to {end_raman_shift_cm} cm^-1')
+    spectrum.display('chosen spectrum')
+
+    spectrum.crop_spectrum(624.573, 1784.104) # Range temporary chosen by Victor
+    spectrum.airPLS(lam= 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None) #baseline correction
+    spectrum.despike(kernel_size= 2, threshold= 3.5) # cosmic ray removal
+    spectrum.normalize_spectrum(normalization_type= 'by_max') # normalization
+    spectrum.savgol_filter(window_length=9, polyorder=2) # smoothing
+
+    spectrum.display('prepocessed spectrum')
     return spectrum
 
-def normalize_spectra(
-    spectrum: Spectrum,
-    normalization_type: str,
-) -> Spectrum:
-    
-    print(f'Normalizing spectra by: ', normalization_type, '...')
-    
-    if normalization_type == 'by_area':
-        spectrum.intensity /= np.trapz(spectrum.intensity, spectrum.raman_shift_cm)
-    elif normalization_type == 'by_max':
-        spectrum.intensity /= np.max(spectrum.intensity)
-    else:
-        raise ValueError(f'Normalization method is not defined')
 
-    return spectrum
+def random_augmentation_steps_generator(augmentation_step_option_list: list) -> list:
+        """
+        Choose random number of random step from augmentation_step_option_list
 
-def mix_spectra(
-    spectrum_list: list[Spectrum],
-    ratios: np.array,
-) -> Spectrum:
-    
-    print(f'Start to mix spectra...')
-    mixture_spectrum = Spectrum()
-
-    for i, spectrum in enumerate(spectrum_list):
-        if i == 0:
-            mixture_spectrum.intensity = (ratios[i] * spectrum.intensity)
-            mixture_spectrum.raman_shift_cm = spectrum.raman_shift_cm
-        else:
-            if np.array_equal(spectrum.raman_shift_cm, mixture_spectrum.raman_shift_cm):
-                mixture_spectrum.intensity += (ratios[i] * spectrum.intensity)
-            else:
-                raise ValueError(f'Raman shift range of "{i}" spectrum in the list does not match with the other spectra')
-    
-    print(f'Mixing is done...')
-    return mixture_spectrum
-
-def add_noise(spectrum: Spectrum, **noise_pars: Any) -> Spectrum:
-    
-    rng = np.random.default_rng()
-    noise_type = noise_pars["noise_type"]
-
-    if noise_type == "poisson":
-        spectrum.intensity += 0.001 * rng.poisson(noise_pars["lam"], len(spectrum.intensity))
-    elif noise_type == "gaussian":
-        spectrum.intensity += rng.normal(noise_pars["mean"], noise_pars["std"], len(spectrum.intensity))
-    elif noise_type == "uniform":
-        spectrum.intensity += rng.uniform(noise_pars["low"], noise_pars["high"], len(spectrum.intensity))
-    elif noise_type == "exponential":
-        spectrum.intensity += rng.exponential(noise_pars["mean"], len(spectrum.intensity))
-    elif noise_type == "lognormal":
-        spectrum.intensity += rng.lognormal(noise_pars["mean"], noise_pars["sigma"], len(spectrum.intensity))
-    else:
-        raise ValueError("noise_type must be one among 'poisson', 'gaussian', 'uniform', 'expoenetial', and 'lognormal'")
-    return spectrum
-
-def add_cosmic_rays(spectrum: Spectrum, **cosmic_ray_pars:Any) -> Spectrum:
-    spike_locations = np.random.randint(0, len(spectrum.raman_shift_cm), cosmic_ray_pars["spike_number"])
-
-    for spike_location in spike_locations:
-        spectrum.intensity[spike_location] = abs(spectrum.intensity[spike_location])* cosmic_ray_pars["spike_amplitude"]
-    return spectrum
-
-def add_baseline(
-    spectrum: Spectrum,
-    **baseline_pars: Any) -> Spectrum:
-    baseline_type = baseline_pars["baseline_type"]
-
-    if baseline_type == "poly":
-        poly_orders = baseline_pars["poly_orders"]
-        poly_coefficients = baseline_pars["poly_coefficients"]
-
-        baseline_intensity = 0
-        for order in range(poly_orders + 1):
-            baseline_intensity += poly_coefficients[order] * (spectrum.raman_shift_cm ** order)
-
-    elif baseline_type == "sine":  # Sine wave baseline
-        sine_amplitude = baseline_pars["sine_amplitude"]
-        sine_frequency = baseline_pars["sine_frequency"]
-        sine_phase = baseline_pars["sine_phase"]
-        
-        baseline_intensity = sine_amplitude * np.sin(sine_frequency * spectrum.raman_shift_cm + sine_phase)
-    else:
-        raise ValueError("Baseline type is not defined")
-
-    spectrum.intensity = spectrum.intensity + baseline_intensity * baseline_pars["baseline_amplifying_factor"]
-    return spectrum
-
-def horizontal_shift(spectrum: Spectrum, wavenumber_shift: float) -> Spectrum:
-    spectrum.raman_shift_cm = spectrum.raman_shift_cm + wavenumber_shift
-    return spectrum
-
-def amplify_spectrum(spectrum: Spectrum, spectrum_amplifying_factor: float) -> Spectrum:
-    spectrum.intensity = spectrum.intensity * spectrum_amplifying_factor
-    return spectrum
-
-def convolute_gaussian_to_spectrum(spectrum: Spectrum, gaussian_std: float) -> Spectrum:
-    kernel = signal.windows.gaussian(len(spectrum.raman_shift_cm), gaussian_std)
-    spectrum.intensity = signal.convolve(kernel, spectrum.intensity, mode="same") * sum(kernel)
-    return spectrum
-
-def interpolate_spectrum(spectrum: Spectrum, target_raman_shift: np.array) -> Spectrum:
-    interpolated_intensity = np.interp(target_raman_shift, spectrum.raman_shift_cm, spectrum.intensity)
-    spectrum.raman_shift_cm= target_raman_shift
-    spectrum.intensity = interpolated_intensity
-    return spectrum
-
-def pre_process(spectrum: Spectrum, config: dict) -> Spectrum:
-    pipe = ramanspy.preprocessing.protocols.Pipeline(
-        [
-            ramanspy.preprocessing.despike.WhitakerHayes(),
-            ramanspy.preprocessing.denoise.SavGol(window_length=12, polyorder=3),
-            ramanspy.preprocessing.baseline.ASPLS(),
-            ramanspy.preprocessing.normalise.MinMax(pixelwise=True),
-        ]
-    )
-    preprocessed_spectrum = pipe.apply(
-        ramanspy.Spectrum(spectrum.intensity, spectrum.raman_shift_cm)
-    )
-    return preprocessed_spectrum
-
-def wavelength_to_wavenumber(wavelength_nm:np.array) -> np.array:
-    """
-    Convert wavelength to wavenumber.
-    Parameters:
-    wavelength_nm (np.array): The wavelength in nm.
-    Returns:
-    np.array: The wavenumber in cm^-1.
-    """
-    wavenumber_cm = np.power(wavelength_nm * (1e-7), -1)
-    wavenumber_cm = wavenumber_cm.round(3)
-    return wavenumber_cm
-
-def wavelength_to_raman_shift(wavelength_nm:np.array,laser_wavelength_nm) -> np.array:
-    """
-    Convert spectrum from wavelength to Raman shift.
-    """
-    # first convent from nm to cm
-    wavenumber_cm = wavelength_to_wavenumber(wavelength_nm)
-    laser_wavenumber_cm = wavelength_to_wavenumber(laser_wavelength_nm)
-    raman_shift_cm = laser_wavenumber_cm - wavenumber_cm
-    raman_shift_cm = raman_shift_cm.round(3)
-    return raman_shift_cm
-
-def random_augmentation_steps_generator(augmentation_step_list: list) -> list:
-    """
-    Create a set of augmentation steps.
-
-    Returns:
-    dict: The set of augmentation steps.
-    """
-    number_of_augmentation_steps = np.random.randint(1,len(augmentation_step_list))
-    random_augmentation_steps = np.random.choice((augmentation_step_list),number_of_augmentation_steps,replace=False)
-    return random_augmentation_steps
+        Returns:
+        list: The list of random augmentation steps.
+        """
+        number_of_augmentation_steps = np.random.randint(1,len(augmentation_step_option_list))
+        random_augmentation_steps = np.random.choice((augmentation_step_option_list),number_of_augmentation_steps,replace=False)
+        return random_augmentation_steps
 
 
-def augmentation_pars_generator(augmentation_step_list: list,
-    number_dictionaries: int
+def augmentation_par_dictionary_generator(augmentation_step_option_list: list[str],
+    number_dictionary: int
 ) -> dict:
     """
-    Create a set of augmentation parameters.
+    Generate dictionaries with random parameters for random augmentation step chosen from augmentation_step_option_list.
 
     Parameters:
-    config (dict): The configuration file.
-    n_sets (int): The number of sets to be created.
+    augmentation_step_option_list (list): The list of augmentation steps to choose from.
+    number_dictionary (int): The number of dictionaries to create.
 
     Returns:
-    dict: The set of augmentation parameters.
+    dict: Dictionary of augmentation parameters dictionaries.
     """
+    # TODO: This should not be hard coded for future use 
     # Load the configuration file
     config_path = '/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/config/config.yml'
     with open(config_path, "rb") as yaml_file:
         config = yaml.safe_load(yaml_file)
 
     augmentation_par_dictionaries = defaultdict(dict)
-    for i_dictionary in range(number_dictionaries):
+    for i_dictionary in range(number_dictionary):
         
         # pick a random augmentation steps
-        augmentation_steps = random_augmentation_steps_generator(augmentation_step_list)
+        augmentation_step_list = random_augmentation_steps_generator(augmentation_step_option_list)
+        # augmentation_step_list = augmentation_step_option_list # use all the augmentation steps
 
         # Create random parameters for each augment
-        if "normalization" in augmentation_steps:
+        if "normalization" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["normalization"]= {
                 "normalization_type": np.random.choice(
                 config["normalization"]["normalization_type_options"]
                 )
             }
 
-        if "amplification" in augmentation_steps:
+        if "amplification" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["amplification"]= {
                 "spectrum_amplifying_factor": np.random.uniform(
                 config["amplification"]["spectrum_amplifying_factor"]["low"],
@@ -225,13 +77,13 @@ def augmentation_pars_generator(augmentation_step_list: list,
                 )
             }
 
-        if "horizontal_shift" in augmentation_steps:
+        if "horizontal_shift" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["horizontal_shift"]= np.random.uniform(
                 config["horizontal_shift"]["low"],
                 config["horizontal_shift"]["high"]
             )
 
-        if "convoluting_gaussian" in augmentation_steps:
+        if "convoluting_gaussian" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["convoluting_gaussian"]= {
                 "gaussian_std":np.random.uniform(
                 config["convoluting_gaussian"]["gaussian_std"]["low"],
@@ -239,7 +91,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
                 )
             }
 
-        if "shot_noise" in augmentation_steps:
+        if "shot_noise" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["shot_noise"]= {
                 "noise_type": "poisson",
                 "lam": np.random.uniform(
@@ -248,7 +100,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
                 )
             }
 
-        if "dark_current_noise" in augmentation_steps:
+        if "dark_current_noise" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["dark_current_noise"]= {
                 "noise_type": "poisson",
                 "lam": np.random.uniform(
@@ -257,7 +109,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
                 )
             }
 
-        if "photo_response_non_uniformity" in augmentation_steps:
+        if "photo_response_non_uniformity" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["photo_response_non_uniformity"]= {
                 "noise_type": "gaussian",
                 "mean": np.random.uniform(
@@ -271,7 +123,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
             }
             
             # TODO: This should be measured or generated once and used for all spectra
-        if "FPN_noise" in augmentation_steps:
+        if "FPN_noise" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["FPN_noise"]= {
                 "noise_type": "lognormal",
                 "mean": np.random.uniform(
@@ -284,7 +136,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
                 )
             }
 
-        if "cosmic_ray" in augmentation_steps:
+        if "cosmic_ray" in augmentation_step_list:
             augmentation_par_dictionaries[i_dictionary]["cosmic_ray"] = {  
                 "spike_number": np.random.randint(
                     config["cosmic_ray"]["spike_number"]["low"],
@@ -296,7 +148,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
                 )
             }
 
-        if "baseline" in augmentation_steps:
+        if "baseline" in augmentation_step_list:
             baseline_type = np.random.choice(
                 config["baseline"]["baseline_type_options"]
             )
@@ -326,6 +178,7 @@ def augmentation_pars_generator(augmentation_step_list: list,
             }
     return augmentation_par_dictionaries
 
+
 def apply_augmentations(spectrum: Spectrum, augmentation_step_list, number_of_augmentation) -> list[Spectrum]:
     """
     Apply a set of augmentations to a spectrum.
@@ -338,39 +191,43 @@ def apply_augmentations(spectrum: Spectrum, augmentation_step_list, number_of_au
     Spectrum: The augmented spectra.
     """
     augmented_spectrum_list = []
-    for i, i_augmentation_dictionary in augmentation_pars_generator(augmentation_step_list, number_of_augmentation).items():
+    for i, i_augmentation_dictionary in augmentation_par_dictionary_generator(augmentation_step_list, number_of_augmentation).items():
         augmented_spectrum = copy.deepcopy(spectrum)
 
         if 'normalization' in i_augmentation_dictionary.keys():
-            augmented_spectrum = normalize_spectra(augmented_spectrum, i_augmentation_dictionary["normalization"])
+            augmented_spectrum.normalize_spectrum(i_augmentation_dictionary["normalization"])
 
         if 'spectrum_amplifying_factor' in i_augmentation_dictionary.keys():
-            augmented_spectrum = amplify_spectrum(augmented_spectrum, i_augmentation_dictionary["amplification"])
+            augmented_spectrum.amplify_spectrum(i_augmentation_dictionary["amplification"])
 
         if 'horizontal_shift' in i_augmentation_dictionary.keys():
-            augmented_spectrum = horizontal_shift(augmented_spectrum, i_augmentation_dictionary["horizontal_shift"])
+            augmented_spectrum.horizontal_shift(i_augmentation_dictionary["horizontal_shift"])
 
         if 'baseline' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_baseline(augmented_spectrum, **i_augmentation_dictionary["baseline"])
+            augmented_spectrum.add_baseline(**i_augmentation_dictionary["baseline"])
 
         if 'convoluting_gaussian' in i_augmentation_dictionary.keys():
-            augmented_spectrum = convolute_gaussian_to_spectrum(augmented_spectrum, i_augmentation_dictionary["convoluting_gaussian"])
+            augmented_spectrum.convolve_with_gaussian(i_augmentation_dictionary["convoluting_gaussian"])
 
         if 'shot_noise' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['shot_noise'])
+            augmented_spectrum.add_noise(**i_augmentation_dictionary['shot_noise'])
 
         if 'dark_current_noise' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['dark_current_noise'])
+            augmented_spectrum.add_noise(**i_augmentation_dictionary['dark_current_noise'])
 
         if 'photo_response_non_uniformity' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['photo_response_non_uniformity'])
+            augmented_spectrum.add_noise(**i_augmentation_dictionary['photo_response_non_uniformity'])
 
         if 'FPN_noise' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_noise(augmented_spectrum, **i_augmentation_dictionary['FPN_noise'])
+            augmented_spectrum.add_noise(**i_augmentation_dictionary['FPN_noise'])
 
         if 'cosmic_ray' in i_augmentation_dictionary.keys():
-            augmented_spectrum = add_cosmic_rays(augmented_spectrum, **i_augmentation_dictionary['cosmic_ray'])
+            augmented_spectrum.add_cosmic_rays(**i_augmentation_dictionary['cosmic_ray'])
 
         augmented_spectrum_list.append(augmented_spectrum)
+    
+        # plot the augmented spectrum
+        augmented_spectrum.display('augmented spectrum' + str(i+1))
+
 
     return augmented_spectrum_list
