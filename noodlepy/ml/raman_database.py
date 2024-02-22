@@ -2,6 +2,7 @@
 from calendar import c
 import dis
 from numpy import number
+from sklearn import preprocessing
 from sympy import plot
 from torch.utils.data import Dataset
 import pandas as pd
@@ -69,13 +70,16 @@ class SyntheticRamanFileDataset(Dataset):
         return len(self.db)
     
     def __getitem__(self, 
-                    idx:int, 
-                    augmentation_step_option_list: list[str])-> tuple[Spectrum, Spectrum]:
+                    idx:int,
+                    preprocessing_flag:bool,
+                    augmentation_step_option_list: list[str]
+                    )-> tuple[Spectrum, Spectrum]:
         """
         Return 2 augmented spectra from the chosen spectrum
 
         Args:
         idx (int): The index of the spectrum to augment
+        preprocessing_flag (bool): Whether to apply preprocessing to the chosen_spectrum
         augmentation_step_option_list (list[str]): The list of augmentation steps to choose and apply randomly
 
         returns:
@@ -83,17 +87,17 @@ class SyntheticRamanFileDataset(Dataset):
         """
         
         chosen_spectrum:Spectrum = self.db[idx]
-        # REQ: Only need 2 children of the chosen_spectrum
-        augmented_spectrum_list = Spectrum.apply_augmentations(chosen_spectrum, augmentation_step_option_list, 2)
 
-        chosen_spectrum.display()
-        augmented_spectrum_list[0].display()
-        augmented_spectrum_list[1].display()
+        if preprocessing_flag == True:
+            preorocessed_spectrum = create_augment.pre_process(chosen_spectrum)
+
+        augmented_spectrum_list = create_augment.apply_augmentations(preorocessed_spectrum, augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
+
         return augmented_spectrum_list[0],augmented_spectrum_list[1]
 
 if __name__ == "__main__":
     dataset = SyntheticRamanFileDataset()
     dataset.load_db()
-    augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1, augmentation_step_option_list = ['baseline','shot_noise','dark_current_noise',
+    augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1, preprocessing_flag = True, augmentation_step_option_list = ['baseline','shot_noise','dark_current_noise',
                                                                                                        'photo_response_non_uniformity','cosmic_ray'])
 
