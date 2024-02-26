@@ -1,13 +1,13 @@
 # define spectrum class
+from hmac import new
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Any
 from scipy import signal
-import copy
-import yaml
 from collections import defaultdict
 import scipy.signal
 import pybaselines
+import os
 
 class Spectrum:
     def __init__(self, 
@@ -52,7 +52,7 @@ class Spectrum:
         else:
             raise ValueError('Wavenumber range could not be aligned to the specified range')
         
-        print(f'Spectrum is aligned and cropped between Wavenumber {start_raman_shift_cm} cm^-1 to {end_raman_shift_cm} cm^-1')
+        print(f'Spectrum is cropped between Wavenumber {start_raman_shift_cm} to {end_raman_shift_cm} cm^-1')
         return self
     
     def normalize_spectrum(self,
@@ -96,7 +96,7 @@ class Spectrum:
         
         https://towardsdatascience.com/removing-spikes-from-raman-spectra-8a9fdda0ac22
         """
-        print('Despiking spectrum...')
+        print('Despiking spectrum with kernal size:' , kernel_size, 'and threshold:', threshold, '...')
 
         def modified_z_score(delta_intensity: np.array):
             median_int = np.median(delta_intensity)
@@ -124,12 +124,16 @@ class Spectrum:
         Documentation:
         https://pybaselines.readthedocs.io/en/latest/algorithms/whittaker.html#airpls-adaptive-iteratively-reweighted-penalized-least-squares
         '''
+        print(f'Removing baseline using airPLS method with parameters: lam: {lam}, diff_order:{diff_order}, max_iter:{max_iter}, tol:{tol}, weights:{weights}...')
         baseline_fitter = pybaselines.Baseline(x_data=self.raman_shift_cm)
         baseline, _ = baseline_fitter.airpls(self.intensity,lam, diff_order, max_iter, tol, weights) 
-        self.intensity = self.intensity - baseline 
+        self.intensity = self.intensity - baseline
+
     
     def savgol_filter(self, window_length=9, polyorder=2):
+        print('Smoothing spectrum using Savitzky-Golay filter with window length:', window_length, 'and polynomial order:', polyorder, '...')
         self.intensity = scipy.signal.savgol_filter(self.intensity, window_length, polyorder)
+        
 
     def add_noise(self, **noise_pars: Any):
         """
@@ -137,7 +141,7 @@ class Spectrum:
 
         Parameters:
         **noise_pars: The parameters of the noise to add (arbitrary number of parameters).
-
+        
         Returns:
         Spectrum: The spectrum object with added noise."""
         rng = np.random.default_rng()
@@ -155,6 +159,8 @@ class Spectrum:
             self.intensity += rng.lognormal(noise_pars["mean"], noise_pars["sigma"], len(self.intensity))
         else:
             raise ValueError("noise_type must be one among 'poisson', 'gaussian', 'uniform', 'expoenetial', and 'lognormal'")
+        
+        print(f'Noise type: {noise_type} is added to the spectrum with parameters: {noise_pars}...')
         return self
 
     def add_cosmic_rays(self, **cosmic_ray_pars: float):
@@ -171,6 +177,8 @@ class Spectrum:
 
         for spike_location in spike_locations:
             self.intensity[spike_location] = abs(self.intensity[spike_location])* cosmic_ray_pars["spike_amplitude"]
+
+        print(f'{cosmic_ray_pars["spike_number"]} number of cosmic rays are added to the spectrum...')
         return self
 
     def add_baseline(
@@ -207,6 +215,9 @@ class Spectrum:
             raise ValueError("Baseline type is not defined")
 
         self.intensity = self.intensity + baseline_intensity * baseline_pars["baseline_amplifying_factor"]
+
+        print(f'A random baseline is added to the spectrum...')
+        
         return self
 
     def horizontal_shift(self, wavenumber_shift: float):
@@ -271,13 +282,24 @@ class Spectrum:
         Parameters:
         path (str): The path to save the plot.
         """
-        path = './' + filename + '.png'
+        # path = './' + filename + '.png'
+        folder = '/Users/yifeigu/Documents/Carney_Lab/NoodlePy/output_plots/'
+
+        # increment the filename if it already exists
+        new_filename = filename
+
+        i = 0
+        while os.path.exists(os.path.join(folder, new_filename + '.png')):
+            i += 1
+            new_filename = filename + f'_{i}'
+
+        path = os.path.join(folder, new_filename + '.png')
 
         f, ax = plt.subplots(1, 1, figsize=(4, 4))
         ax.plot(self.raman_shift_cm, self.intensity)
         ax.set_xlabel('Wavenumber (cm^-1)')
         ax.set_ylabel('Intensity (a.u.)]')
-        ax.set_title(filename)
+        ax.set_title(new_filename)
         f.savefig(path, bbox_inches='tight', dpi=300)
         plt.close()
 

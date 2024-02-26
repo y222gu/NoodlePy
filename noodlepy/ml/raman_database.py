@@ -1,9 +1,4 @@
 # https://pytorch.org/get-started/locally/
-from calendar import c
-import dis
-from numpy import number
-from sklearn import preprocessing
-from sympy import plot
 from torch.utils.data import Dataset
 import pandas as pd
 import noodlepy.utils.create_augment as create_augment
@@ -13,13 +8,8 @@ from noodlepy.utils.spectrum_class import Spectrum
 class SyntheticRamanFileDataset(Dataset):
     def __init__(self):
         """
-            Assumes that your spectra are saved as files
-            Advantages:  You can distribute your training data to others
-            Disadvantages:  You have to keep track of your training sets
+            Assumes that your spectra are saved as files in a folder
         """
-        # FIXME
-        # self.augmentation_flag = str
-        # self.preprocess_flag(apply same preprocessing for every spectrum)
         self.db: list[Spectrum]
 
 
@@ -34,7 +24,7 @@ class SyntheticRamanFileDataset(Dataset):
         list[Spectrum]: A list of Spectrum objects
         """
 
-        # FIXME: This is a temporary function to create a list of spectrum objects on the fly from the csv file
+        # FIXME: This is a temporary function to create a list of spectrum objects on the fly from the text files
         # Once we have a database, we will need to change this to a database query
         list_of_spectrum_objects = []
         laser_wavelength= 785
@@ -98,6 +88,8 @@ class SyntheticRamanFileDataset(Dataset):
 if __name__ == "__main__":
     dataset = SyntheticRamanFileDataset()
     dataset.load_db()
-    augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1, preprocessing_flag = True, augmentation_step_option_list = ['baseline','shot_noise','dark_current_noise',
+    
+    # call __getitem__ 50 times to get 50 pairs of augmented spectra
+    for i in range(50):
+        augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1, preprocessing_flag = True, augmentation_step_option_list = ['baseline','shot_noise','dark_current_noise',
                                                                                                        'photo_response_non_uniformity','cosmic_ray'])
-
