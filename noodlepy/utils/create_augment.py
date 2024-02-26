@@ -11,16 +11,29 @@ from collections import defaultdict
 
 def pre_process(spectrum: Spectrum) -> Spectrum:
 
-    spectrum.display('chosen spectrum')
+    # Load the configuration file
+    config_path = '/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/config/config.yml'
+    with open(config_path, "rb") as yaml_file:
+        config = yaml.safe_load(yaml_file)
 
-    spectrum.crop_spectrum(624.573, 1784.104) # Range temporary chosen by Victor
-    spectrum.airPLS(lam= 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None) #baseline correction
-    spectrum.despike(kernel_size= 2, threshold= 3.5) # cosmic ray removal
-    spectrum.normalize_spectrum(normalization_type= 'by_max') # normalization
-    spectrum.savgol_filter(window_length=9, polyorder=2) # smoothing
+    #spectrum.display('chosen spectrum')
 
-    spectrum.display('prepocessed spectrum')
-    return spectrum
+    #pre_processed_spectrum = copy.deepcopy(spectrum)
+    #pre_processed_spectrum.crop_spectrum(config['cropping']['start'], config['cropping']['end']) # Range temporary chosen by Victor
+    #pre_processed_spectrum.airPLS(lam= 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None) #baseline correction
+    #pre_processed_spectrum.despike(kernel_size= 2, threshold= 3.5) # cosmic ray removal
+    #pre_processed_spectrum.normalize_spectrum(normalization_type= 'by_max') # normalization
+    #pre_processed_spectrum.savgol_filter(window_length=9, polyorder=2) # smoothing
+
+    pre_processed_spectrum = copy.deepcopy(spectrum)
+    pre_processed_spectrum.crop_spectrum(624.573, 1784.104) # Range temporary chosen by Victor
+    pre_processed_spectrum.airPLS(lam= 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None) #baseline correction
+    pre_processed_spectrum.despike(kernel_size= 2, threshold= 3.5) # cosmic ray removal
+    pre_processed_spectrum.normalize_spectrum(normalization_type= 'by_max') # normalization
+    pre_processed_spectrum.savgol_filter(window_length=9, polyorder=2) # smoothing
+
+    #pre_processed_spectrum.display('prepocessed spectrum')
+    return pre_processed_spectrum
 
 
 def random_augmentation_steps_generator(augmentation_step_option_list: list) -> list:
@@ -154,8 +167,8 @@ def augmentation_par_dictionary_generator(augmentation_step_option_list: list[st
             )
 
             baseline_amplifying_factor = np.random.uniform(
-            config["baseline"]["baseline_amplification_multiplier"]["low"],
-            config["baseline"]["baseline_amplification_multiplier"]["high"]
+            config["baseline"]["baseline_amplifying_factor"]["low"],
+            config["baseline"]["baseline_amplifying_factor"]["high"]
             )
 
             poly_orders = np.random.randint(

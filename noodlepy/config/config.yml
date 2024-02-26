@@ -1,18 +1,21 @@
 # This is a YAML file 
-preprocessing: # preprocessing options
-  baseline_correction:
-    method: airPLS
-    lam: 0.001 
+# preprocessing options
+cropping: # cropping options
+  start: 624.573
+  end: 1784.104
+baseline_correction:
+  method: airPLS
+    lam: 1000 
     diff_order: 1
     max_iter: 15
     tol: 0.001
     weights: None
-  cosmic_ray_removal:
-    method: WHzscores
-    kernel_size: 3
+cosmic_ray_removal:
+  method: WHzscores
+    kernel_size: 2
     threshold: 3.5
-  smoothing:
-    method: SavitzkyGolay
+smoothing:
+  method: SavitzkyGolay
     window_length: 9
     polyorder: 2
 
@@ -44,17 +47,17 @@ photo_response_non_uniformity: #photo_response_non_uniformity
     low: 0.01
     high: 0.05
   std: 
-    low: 0.001
-    high: 0.005
+    low: 0.01
+    high: 0.05
 
 FPN_noise: #dark_signal_FPN_noise
   noise_type: lognormal
   mean: 
-    low: 0.05
-    high: 0.1
+    low: 0.1
+    high: 0.5
   sigma: 
-    low: 0.001
-    high: 0.005
+    low: 0.01
+    high: 0.05
 
 horizontal_shift: #instrumental_horizontal_shift
   low: 0.5
@@ -77,15 +80,15 @@ cosmic_ray:
 baseline: 
   baseline_type_options: 
     - poly
-  baseline_amplification_multiplier: 
-    low: 0.1
-    high: 0.5 # Uniform
+  baseline_amplifying_factor: 
+    low: 1
+    high: 3 # Uniform
   poly_orders: 
-    low: 2
-    high: 4
+    low: 1
+    high: 3
   poly_coefficients:
-    low: 0.0000005
-    high: 0.000005
+    low: 0.00000001
+    high: 0.0000001
   sine:
     sine_amplitude: 
       low: 1
