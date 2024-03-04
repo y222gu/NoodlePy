@@ -12,9 +12,6 @@ from collections import defaultdict
 def pre_process(spectrum: Spectrum) -> Spectrum:
 
     # Load the configuration file
-    config_path = '/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/config/config.yml'
-    with open(config_path, "rb") as yaml_file:
-        config = yaml.safe_load(yaml_file)
 
     #spectrum.display('chosen spectrum')
 
@@ -27,6 +24,7 @@ def pre_process(spectrum: Spectrum) -> Spectrum:
 
     pre_processed_spectrum = copy.deepcopy(spectrum)
     pre_processed_spectrum.crop_spectrum(624.573, 1784.104) # Range temporary chosen by Victor
+    pre_processed_spectrum.display('cropped spectrum')
     pre_processed_spectrum.airPLS(lam= 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None) #baseline correction
     pre_processed_spectrum.despike(kernel_size= 2, threshold= 3.5) # cosmic ray removal
     pre_processed_spectrum.normalize_spectrum(normalization_type= 'by_max') # normalization

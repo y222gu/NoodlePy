@@ -6,14 +6,10 @@ import os
 from noodlepy.utils.spectrum_class import Spectrum
 
 class SyntheticRamanFileDataset(Dataset):
-    def __init__(self):
-        """
-            Assumes that your spectra are saved as files in a folder
-        """
-        self.db: list[Spectrum]
-
-
-    def load_db(self, data_folder='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB'):
+    def __init__(self, data_folder='/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/data/Raman_DB',
+                 preprocessing_flag: bool = True,
+                 augmentation_step_option_list: list[str]= ['baseline','shot_noise','dark_current_noise','photo_response_non_uniformity','cosmic_ray']
+                 ):
         """
         Load the database of spectra from the txt file
 
@@ -23,6 +19,8 @@ class SyntheticRamanFileDataset(Dataset):
         Returns:
         list[Spectrum]: A list of Spectrum objects
         """
+        self.preprocessing_flag = preprocessing_flag
+        self.augmentation_step_option_list = augmentation_step_option_list
 
         # FIXME: This is a temporary function to create a list of spectrum objects on the fly from the text files
         # Once we have a database, we will need to change this to a database query
@@ -54,15 +52,12 @@ class SyntheticRamanFileDataset(Dataset):
                 list_of_spectrum_objects.append(Spectrum(patient_id, sample_type, spectrum_id, laser_wavelength, wavelength_nm, intensity))
 
         self.db = list_of_spectrum_objects
-        return self.db
 
     def __len__(self):
         return len(self.db)
     
     def __getitem__(self, 
-                    idx:int,
-                    preprocessing_flag:bool,
-                    augmentation_step_option_list: list[str]
+                    idx:int
                     )-> tuple[Spectrum, Spectrum]:
         """
         Return 2 augmented spectra from the chosen spectrum
@@ -78,18 +73,16 @@ class SyntheticRamanFileDataset(Dataset):
         
         chosen_spectrum:Spectrum = self.db[idx]
 
-        if preprocessing_flag == True:
+        if self.preprocessing_flag == True:
             preorocessed_spectrum = create_augment.pre_process(chosen_spectrum)
 
-        augmented_spectrum_list = create_augment.apply_augmentations(preorocessed_spectrum, augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
+        augmented_spectrum_list = create_augment.apply_augmentations(preorocessed_spectrum, self.augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
 
         return augmented_spectrum_list[0],augmented_spectrum_list[1]
 
 if __name__ == "__main__":
     dataset = SyntheticRamanFileDataset()
-    dataset.load_db()
-    
+
     # call __getitem__ 50 times to get 50 pairs of augmented spectra
     for i in range(50):
-        augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1, preprocessing_flag = True, augmentation_step_option_list = ['baseline','shot_noise','dark_current_noise',
-                                                                                                       'photo_response_non_uniformity','cosmic_ray'])
+        augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1)
