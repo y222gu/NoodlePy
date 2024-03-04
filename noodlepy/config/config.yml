@@ -1,23 +1,23 @@
 # This is a YAML file 
 # preprocessing options
-cropping: # cropping options
-  start: 624.573
-  end: 1784.104
-baseline_correction:
-  method: airPLS
-    lam: 1000 
-    diff_order: 1
-    max_iter: 15
-    tol: 0.001
-    weights: None
-cosmic_ray_removal:
-  method: WHzscores
-    kernel_size: 2
-    threshold: 3.5
-smoothing:
-  method: SavitzkyGolay
-    window_length: 9
-    polyorder: 2
+#cropping: # cropping options
+#  start: 624.573
+#  end: 1784.104
+#baseline_correction:
+#  method: airPLS
+#    lam: 1000
+#    diff_order: 1
+#    max_iter: 15
+#    tol: 0.001
+#    weights: None
+#cosmic_ray_removal:
+#  method: WHzscores
+#    kernel_size: 2
+#    threshold: 3.5
+#smoothing:
+#  method: SavitzkyGolay
+#    window_length: 9
+#    polyorder: 2
 
 normalization: # normalization options
   normalization_type_options:
