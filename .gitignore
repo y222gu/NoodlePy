@@ -12,3 +12,4 @@ scratch/
 *.xlsx
 *.pickle
 *.pkl
+.noodlepyvenv/
