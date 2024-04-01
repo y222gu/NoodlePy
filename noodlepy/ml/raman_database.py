@@ -84,5 +84,5 @@ if __name__ == "__main__":
     dataset = SyntheticRamanFileDataset()
 
     # call __getitem__ 50 times to get 50 pairs of augmented spectra
-    for i in range(50):
+    for i in range(5):
         augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1)
