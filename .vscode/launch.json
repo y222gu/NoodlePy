@@ -5,7 +5,7 @@
     "version": "0.2.0",
     "configurations": [
         {
-            "name": "Python As Module",
+            "name": "Python As A Module",
             "type": "python",
             "request": "launch",
             "module": "${command:extension.commandvariable.file.relativeFileDotsNoExtension}",

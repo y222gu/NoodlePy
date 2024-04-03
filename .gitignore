@@ -1,6 +1,5 @@
 *.pdf
 *.asc
-*.txt
 .ipynb_checkpoints/
 .DS_Store
 scratch/
