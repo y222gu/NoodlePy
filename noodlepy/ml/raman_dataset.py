@@ -4,6 +4,7 @@ import pandas as pd
 import noodlepy.utils.create_augment as create_augment
 import os
 from noodlepy.utils.spectrum_class import Spectrum
+import torch
 
 class RamanDataset(Dataset):
     def __init__(self, data_folder='/mnt/c/Users/Yifei/Documents/NoodlePy/noodlepy/data/Raman_DB',
@@ -76,9 +77,11 @@ class RamanDataset(Dataset):
         if self.preprocessing_flag == True:
             preorocessed_spectrum = create_augment.pre_process(chosen_spectrum)
 
-        augmented_spectrum_list = create_augment.apply_augmentations(preorocessed_spectrum, self.augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
+        augmented_spectrum_1,augmented_spectrum_2 = create_augment.apply_augmentations(preorocessed_spectrum, self.augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
+        augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float64).unsqueeze(0).unsqueeze(-1)
+        augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float64).unsqueeze(0).unsqueeze(-1)
 
-        return augmented_spectrum_list[0],augmented_spectrum_list[1]
+        return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2
 
 if __name__ == "__main__":
     dataset = RamanDataset()
