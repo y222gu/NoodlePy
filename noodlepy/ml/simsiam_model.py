@@ -20,7 +20,7 @@ class cnn_backbone(nn.Module):
         layers = []
         in_channels = layer_channel_sizes[0] #intialize the input channel size with the first element of the list
 
-        for out_channels in layer_channel_sizes[1:-1]:
+        for out_channels in layer_channel_sizes[1:]:
             conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1)
             torch.nn.init.kaiming_uniform_(conv_layer.weight, nonlinearity='relu') # weights initialization using kaiming uniform
             layers.append(conv_layer)
@@ -73,7 +73,7 @@ if __name__ == "__main__":
     dataset = RamanDataset()
     dataloader = DataLoader(
         dataset,
-        batch_size=4,
+        batch_size=32,
         shuffle=True,
         drop_last=True,
         num_workers=8,
