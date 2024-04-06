@@ -27,7 +27,7 @@ class Spectrum:
         self.intensity:np.array = intensity
         
     def __len__(self):
-        return len(self.raman_shift_cm)
+        return len(self.intensity)
     
     def crop_spectrum(self, start_raman_shift_cm: float,
                       end_raman_shift_cm: float
@@ -283,8 +283,12 @@ class Spectrum:
         path (str): The path to save the plot.
         """
         # path = './' + filename + '.png'
-        folder = '/Users/yifeigu/Documents/Carney_Lab/NoodlePy/output_plots/'
+        current_directory = os.getcwd()
+        folder = os.path.join(current_directory, "output_plots")
 
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        
         # increment the filename if it already exists
         new_filename = filename
 
