@@ -25,13 +25,13 @@ def pre_process(spectrum: Spectrum) -> Spectrum:
 
     pre_processed_spectrum = copy.deepcopy(spectrum)
     pre_processed_spectrum.crop_spectrum(624.573, 1784.104) # Range temporary chosen by Victor
-    pre_processed_spectrum.display('cropped_spectrum')
+    #pre_processed_spectrum.display('cropped_spectrum')
     pre_processed_spectrum.airPLS(lam= 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None) #baseline correction
     pre_processed_spectrum.despike(kernel_size= 2, threshold= 3.5) # cosmic ray removal
     pre_processed_spectrum.normalize_spectrum(normalization_type= 'by_max') # normalization
     pre_processed_spectrum.savgol_filter(window_length=9, polyorder=2) # smoothing
 
-    #pre_processed_spectrum.display('prepocessed spectrum')
+    # pre_processed_spectrum.display('prepocessed spectrum')
     return pre_processed_spectrum
 
 
@@ -241,7 +241,7 @@ def apply_augmentations(spectrum: Spectrum, augmentation_step_list, number_of_au
         augmented_spectrum_list.append(augmented_spectrum)
     
         # plot the augmented spectrum
-        augmented_spectrum.display('augmented spectrum' + str(i+1))
+        # augmented_spectrum.display('augmented spectrum' + str(i+1))
 
 
     return augmented_spectrum_list
