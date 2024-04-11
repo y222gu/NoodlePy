@@ -21,23 +21,28 @@ class cnn_backbone(nn.Module):
         in_channels = layer_channel_sizes[0] #intialize the input channel size with the first element of the list
 
         for out_channels in layer_channel_sizes[1:]:
-            conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=3, padding=1)
+            conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=4)
             torch.nn.init.kaiming_uniform_(conv_layer.weight, nonlinearity='relu') # weights initialization using kaiming uniform
             layers.append(conv_layer)
             layers.append(nn.ReLU())
-            layers.append(nn.AvgPool1d(kernel_size=2)) # layers.append(nn.MaxPool1d(kernel_size=2))
+            layers.append(nn.AvgPool1d(kernel_size=3)) # layers.append(nn.MaxPool1d(kernel_size=2))
             in_channels = out_channels
-
+        #layers.append(nn.Linear(512 * block.expansion, num_classes))
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
         x = self.layers(x)
         return x
 
-class resnet_backbone():
-    resnet = torchvision.models.resnet18()
-    backbone = nn.Sequential(*list(resnet.children())[:-1])
+class resnet_backbone(nn.Module):
+    def __init__(self):
+        super(resnet_backbone, self).__init__()
+        resnet = torchvision.models.resnet18()
+        self.layers = nn.Sequential(*list(resnet.children())[:-1])
 
+    def forward(self, x):
+        x = self.layers(x)
+        return x
 
 class SimSiam(pl.LightningModule):
     def __init__(self, backbone):
@@ -49,14 +54,13 @@ class SimSiam(pl.LightningModule):
 
     def forward(self, x):
         f = self.backbone(x).flatten(start_dim=1)
-        print(f.shape)
         z = self.projection_head(f)
         p = self.prediction_head(z)
         z = z.detach()
         return z, p
 
     def training_step(self, batch, batch_idx):
-        (x0, x1) = batch[0]
+        (x0, x1) = batch
         z0, p0 = self.forward(x0)
         z1, p1 = self.forward(x1)
         loss = 0.5 * (self.criterion(z0, p1) + self.criterion(z1, p0))
@@ -66,6 +70,7 @@ class SimSiam(pl.LightningModule):
         optim = torch.optim.SGD(self.parameters(), lr=0.06)
         return optim
 
+
 if __name__ == "__main__":
     cnn_backbone_1d = cnn_backbone([1, 8, 16, 32, 64, 128]) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
@@ -73,12 +78,38 @@ if __name__ == "__main__":
     dataset = RamanDataset()
     dataloader = DataLoader(
         dataset,
-        batch_size=32,
+        batch_size=10,
         shuffle=True,
         drop_last=True,
         num_workers=8,
     )
-    accelerator = "gpu" if torch.cuda.is_available() else "cpu"
 
+    torch.set_float32_matmul_precision("medium")
+    accelerator = "gpu" if torch.cuda.is_available() else "cpu"
     trainer = pl.Trainer(max_epochs=1, devices=1, accelerator=accelerator)
     trainer.fit(model=model, train_dataloaders=dataloader)
+
+
+    '''
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    model.to(device)
+    criterion = NegativeCosineSimilarity()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.06
+
+    print("Starting Training")
+    for epoch in range(2):
+        total_loss = 0
+        for batch in dataloader:
+            x0, x1 = batch
+            x0 = x0.to(device)
+            x1 = x1.to(device)
+            z0, p0 = model(x0)
+            z1, p1 = model(x1)
+            loss = 0.5 * (criterion(z0, p1) + criterion(z1, p0))
+            total_loss += loss.detach()
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+        avg_loss = total_loss / len(dataloader)
+        print(f"epoch: {epoch:>02}, loss: {avg_loss:.5f}")
+'''
