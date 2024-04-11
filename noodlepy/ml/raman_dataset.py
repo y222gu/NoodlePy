@@ -78,8 +78,8 @@ class RamanDataset(Dataset):
             preorocessed_spectrum = create_augment.pre_process(chosen_spectrum)
 
         augmented_spectrum_1,augmented_spectrum_2 = create_augment.apply_augmentations(preorocessed_spectrum, self.augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
-        augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float64).unsqueeze(0).unsqueeze(-1)
-        augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float64).unsqueeze(0).unsqueeze(-1)
+        augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
+        augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
 
         return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2
 
@@ -87,5 +87,5 @@ if __name__ == "__main__":
     dataset = RamanDataset()
 
     # call __getitem__ 50 times to get 50 pairs of augmented spectra
-    for i in range(5):
-        augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= 1)
+    for i in range(50):
+        augmented_spectrum1,augmented_spectrum2 = dataset.__getitem__(idx= i)
