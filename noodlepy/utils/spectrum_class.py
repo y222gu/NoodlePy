@@ -52,7 +52,7 @@ class Spectrum:
         else:
             raise ValueError('Wavenumber range could not be aligned to the specified range')
         
-        print(f'Spectrum is cropped between Wavenumber {start_raman_shift_cm} to {end_raman_shift_cm} cm^-1')
+        # print(f'Spectrum is cropped between Wavenumber {start_raman_shift_cm} to {end_raman_shift_cm} cm^-1')
         return self
     
     def normalize_spectrum(self,
@@ -68,7 +68,7 @@ class Spectrum:
         Spectrum: The normalized spectrum object.
         """
 
-        print(f'Normalizing spectra by: ', normalization_type, '...')
+        # print(f'Normalizing spectra by: ', normalization_type, '...')
         if normalization_type == 'by_area':
             self.intensity /= np.trapz(self.intensity, self.raman_shift_cm)
         elif normalization_type == 'by_max':
@@ -96,7 +96,7 @@ class Spectrum:
         
         https://towardsdatascience.com/removing-spikes-from-raman-spectra-8a9fdda0ac22
         """
-        print('Despiking spectrum with kernal size:' , kernel_size, 'and threshold:', threshold, '...')
+        # print('Despiking spectrum with kernal size:' , kernel_size, 'and threshold:', threshold, '...')
 
         def modified_z_score(delta_intensity: np.array):
             median_int = np.median(delta_intensity)
@@ -104,16 +104,27 @@ class Spectrum:
             modified_z_scores = 0.6745 * (delta_intensity - median_int) / mad_int
             return np.array(modified_z_scores)
         
-
         delta_intensity = np.diff(self.intensity)
         spikes = abs(modified_z_score(delta_intensity)) > threshold
 
-        for i in np.arange(len(spikes)):
-            if spikes[i] != 0: # If we have an spike in position i
-                neighbours = np.arange(i-kernel_size,i+1+kernel_size) # we select 2 m + 1 points around our spike
-                window = neighbours[spikes[neighbours] == 0] # From such interval, we choose the ones which are not spikes
-                self.intensity[i] = np.mean(self.intensity[window]) # and we average the value
+        while any(spike for spike in spikes if spike):
+            changes = False
 
+            for i in range(len(spikes)):
+                if spikes[i]:
+                    neighbours = np.arange(max(0, i - kernel_size),
+                                        min(len(self.intensity) - 1, i + 1 + kernel_size))
+                    fixed_value = np.mean(self.intensity[neighbours[spikes[neighbours] == 0]])
+
+                    if np.isnan(fixed_value):
+                        continue
+
+                    self.intensity[i] = fixed_value
+                    spikes[i] = 0
+                    changes = True
+
+            if not changes:
+                break
 
     def airPLS(self, lam = 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None):
         '''
@@ -124,14 +135,14 @@ class Spectrum:
         Documentation:
         https://pybaselines.readthedocs.io/en/latest/algorithms/whittaker.html#airpls-adaptive-iteratively-reweighted-penalized-least-squares
         '''
-        print(f'Removing baseline using airPLS method with parameters: lam: {lam}, diff_order:{diff_order}, max_iter:{max_iter}, tol:{tol}, weights:{weights}...')
+        # print(f'Removing baseline using airPLS method with parameters: lam: {lam}, diff_order:{diff_order}, max_iter:{max_iter}, tol:{tol}, weights:{weights}...')
         baseline_fitter = pybaselines.Baseline(x_data=self.raman_shift_cm)
         baseline, _ = baseline_fitter.airpls(self.intensity,lam, diff_order, max_iter, tol, weights) 
         self.intensity = self.intensity - baseline
 
     
     def savgol_filter(self, window_length=9, polyorder=2):
-        print('Smoothing spectrum using Savitzky-Golay filter with window length:', window_length, 'and polynomial order:', polyorder, '...')
+        # print('Smoothing spectrum using Savitzky-Golay filter with window length:', window_length, 'and polynomial order:', polyorder, '...')
         self.intensity = scipy.signal.savgol_filter(self.intensity, window_length, polyorder)
         
 
@@ -160,7 +171,7 @@ class Spectrum:
         else:
             raise ValueError("noise_type must be one among 'poisson', 'gaussian', 'uniform', 'expoenetial', and 'lognormal'")
         
-        print(f'Noise type: {noise_type} is added to the spectrum with parameters: {noise_pars}...')
+        # print(f'Noise type: {noise_type} is added to the spectrum with parameters: {noise_pars}...')
         return self
 
     def add_cosmic_rays(self, **cosmic_ray_pars: float):
@@ -178,7 +189,7 @@ class Spectrum:
         for spike_location in spike_locations:
             self.intensity[spike_location] = abs(self.intensity[spike_location])* cosmic_ray_pars["spike_amplitude"]
 
-        print(f'{cosmic_ray_pars["spike_number"]} number of cosmic rays are added to the spectrum...')
+        # print(f'{cosmic_ray_pars["spike_number"]} number of cosmic rays are added to the spectrum...')
         return self
 
     def add_baseline(
@@ -216,7 +227,7 @@ class Spectrum:
 
         self.intensity = self.intensity + baseline_intensity * baseline_pars["baseline_amplifying_factor"]
 
-        print(f'A random baseline is added to the spectrum...')
+        # print(f'A random baseline is added to the spectrum...')
         
         return self
 
