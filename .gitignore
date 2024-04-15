@@ -1,5 +1,15 @@
 *.pdf
 *.asc
-*.txt
 .ipynb_checkpoints/
 .DS_Store
+scratch/
+*.png
+*.gif
+.vscode/
+*.pyc
+*.csv
+*.xlsx
+*.pickle
+*.pkl
+noodlepyvenv/
+wandb/
