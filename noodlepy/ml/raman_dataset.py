@@ -7,7 +7,7 @@ from noodlepy.utils.spectrum_class import Spectrum
 import torch
 
 class RamanDataset(Dataset):
-    def __init__(self, data_folder='/mnt/c/Users/Yifei/Documents/NoodlePy/noodlepy/data/Raman_DB',
+    def __init__(self, data_folder= None,
                  preprocessing_flag: bool = True,
                  augmentation_step_option_list: list[str]= ['baseline','shot_noise','dark_current_noise','photo_response_non_uniformity','cosmic_ray']
                  ):
