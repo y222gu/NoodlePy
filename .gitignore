@@ -12,3 +12,4 @@ scratch/
 *.pickle
 *.pkl
 noodlepyvenv/
+wandb/
