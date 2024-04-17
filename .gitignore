@@ -8,7 +8,6 @@ scratch/
 .vscode/
 *.pyc
 *.csv
-*.xlsx
 *.pickle
 *.pkl
 noodlepyvenv/
