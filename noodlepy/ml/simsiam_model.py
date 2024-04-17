@@ -99,9 +99,8 @@ if __name__ == "__main__":
     criterion = NegativeCosineSimilarity()
     optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
 
-    current_directory = os.getcwd()
-    train_dataset_path = os.path.join(current_directory, "noodlepy", "data", "Raman_DB", "train")
-    test_dataset_path = os.path.join(current_directory, "noodlepy", "data", "Raman_DB", "test")
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "train")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "test")
 
     train_dataset = RamanDataset(train_dataset_path)
     test_dataset = RamanDataset(test_dataset_path)
@@ -192,5 +191,5 @@ if __name__ == "__main__":
     ax.scatter(embeddingsdf.x, embeddingsdf.y, alpha=.1)
     plt.title('Scatter plot of games using t-SNE')
     plt.show()
-    save_path = os.path.join(current_directory, "output_plots", "tsne_plot.png")
+    save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot.png")
     plt.savefig(save_path)
