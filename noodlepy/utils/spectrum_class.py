@@ -14,9 +14,14 @@ class Spectrum:
                  patient_id:str ='',
                  sample_type:str ='',
                  spectrum_id:str ='', 
-                 laser_wavelength_nm:float = [],
+                 laser_wavelength_nm:float = 785, #TODO: this should be loaded from the experimental metadata
                  wavelength_nm:np.array =[],
-                 intensity:np.array =[]):
+                 intensity:np.array =[],
+                 staging:int = None,
+                 age:int = None,
+                 gender:str = None,
+                 race:str = None,
+                 bim:float = None):
 
         self.patient_id:str = patient_id
         self.sample_type:str = sample_type
@@ -25,6 +30,11 @@ class Spectrum:
         self.wavelength_nm:np.array = wavelength_nm.round(3)
         self.raman_shift_cm:np.array = Spectrum.wavelength_to_raman_shift(self.wavelength_nm, self.laser_wavelength_nm)
         self.intensity:np.array = intensity
+        self.staging = staging
+        self.age = age
+        self.gender = gender
+        self.race = race
+        self.bim = bim
         
     def __len__(self):
         return len(self.intensity)
