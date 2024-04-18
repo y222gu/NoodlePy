@@ -102,8 +102,10 @@ if __name__ == "__main__":
     train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "train")
     test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "test")
 
-    train_dataset = RamanDataset(train_dataset_path)
-    test_dataset = RamanDataset(test_dataset_path)
+    annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
+
+    train_dataset = RamanDataset(train_dataset_path, annotation_file_path)
+    test_dataset = RamanDataset(test_dataset_path, annotation_file_path)
 
     train_dataloaders = DataLoader(
         train_dataset,
@@ -125,8 +127,11 @@ if __name__ == "__main__":
         avg_loss = 0.0
         avg_output_std = 0.0
         #total_loss = 0.0
-        for i, batch in enumerate(train_dataloaders, 0):
-            x0, x1 = batch
+        for i, x in enumerate(train_dataloaders):
+            #x0, x1, _ = batch
+            x0= x[0]
+            x1= x[1]
+            labels = x[2]
             x0 = x0.to(device)
             x1 = x1.to(device)
             z0, p0 = model(x0)
@@ -162,12 +167,13 @@ if __name__ == "__main__":
     # disable gradients for faster calculations
     model.eval()
     with torch.no_grad():
-        for i,(x,_) in enumerate(test_dataloaders):
+        for i,(x,_,labels) in enumerate(test_dataloaders):
             # embed the images with the pre-trained backbone
             x = x.to(device)
             y = model.backbone(x).flatten(start_dim=1)
             # store the embeddings in a list
             embeddings.append(y)
+            print(labels)
 
     # concatenate the embeddings and convert to numpy
     embeddings = torch.cat(embeddings, dim=0)
