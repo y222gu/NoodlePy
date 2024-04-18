@@ -6,6 +6,7 @@ import os
 from noodlepy.utils.spectrum_class import Spectrum
 import torch
 import copy
+import numpy as np
 
 class RamanDataset(Dataset):
     def __init__(self, data_folder = None,
@@ -67,6 +68,8 @@ class RamanDataset(Dataset):
         augmented_spectrum_1,augmented_spectrum_2 = create_augment.apply_augmentations(preorocessed_spectrum, self.augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
+        print(augmented_spectrum_intensity_1)
+        print(chosen_spectrum.metadata)
 
         return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata
     
@@ -83,6 +86,7 @@ class RamanDataset(Dataset):
         # Extract the metadata for the given patient_id
         if patient_id in all_patient_labels['OD Number'].values:
             patient_metadata_row = all_patient_labels[all_patient_labels['OD Number'] == patient_id]
+
             if len(patient_metadata_row) > 1:
                 patient_metadata_row = patient_metadata_row.iloc[[0]]
                 print(f"Patient ID {patient_id} has multiple entries in the metadata file")
@@ -96,11 +100,13 @@ class RamanDataset(Dataset):
 
         else:
             # If the patient_id is not found in the metadata file, set the every metadata to empty string and number
-            patient_labels['staging'] = []
-            #patient_labels['age'] = []
-            #patient_labels['gender'] = ''
-            #patient_labels['race'] = ''
-            #patient_labels['bmi'] = []
+            patient_labels['staging'] = np.nan
+            #patient_labels['age'] = patient_metadata_row['Age'].values[0]
+            #patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
+            #patient_labels['race'] = patient_metadata_row['Race/Ethnicity'].values[0]
+            #patient_labels['bmi'] = patient_metadata_row['BMI'].values[0]
+
+            
         
             print(f"Patient ID {patient_id} not found in the metadata file")
             print("Metadata set to empty strings and numbers")
