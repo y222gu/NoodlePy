@@ -99,8 +99,8 @@ if __name__ == "__main__":
     criterion = NegativeCosineSimilarity()
     optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
 
-    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "train")
-    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "test")
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "train_2")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "test_2")
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
