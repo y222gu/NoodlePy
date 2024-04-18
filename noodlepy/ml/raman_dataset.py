@@ -68,8 +68,6 @@ class RamanDataset(Dataset):
         augmented_spectrum_1,augmented_spectrum_2 = create_augment.apply_augmentations(preorocessed_spectrum, self.augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
-        print(augmented_spectrum_intensity_1)
-        print(chosen_spectrum.metadata)
 
         return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata
     

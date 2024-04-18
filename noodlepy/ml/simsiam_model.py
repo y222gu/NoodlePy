@@ -91,7 +91,6 @@ if __name__ == "__main__":
             })
     training_cfg = wandb.config
     
-
     cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -123,15 +122,11 @@ if __name__ == "__main__":
     )
 
     print("Starting Training")
-    for epoch in range(10):
+    for epoch in range(training_cfg.epochs):
         avg_loss = 0.0
         avg_output_std = 0.0
         #total_loss = 0.0
-        for i, x in enumerate(train_dataloaders):
-            #x0, x1, _ = batch
-            x0= x[0]
-            x1= x[1]
-            labels = x[2]
+        for i, (x0, x1, labels) in enumerate(train_dataloaders):
             x0 = x0.to(device)
             x1 = x1.to(device)
             z0, p0 = model(x0)
@@ -173,7 +168,6 @@ if __name__ == "__main__":
             y = model.backbone(x).flatten(start_dim=1)
             # store the embeddings in a list
             embeddings.append(y)
-            print(labels)
 
     # concatenate the embeddings and convert to numpy
     embeddings = torch.cat(embeddings, dim=0)
