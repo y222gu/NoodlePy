@@ -158,38 +158,46 @@ if __name__ == "__main__":
 
     # Extract embedding of the test set
     embeddings = []
-    filenames = []
+    colors = []
+    # Define colors for each label
+    label_colors = {0: 'green', 1: 'gold', 2: 'orange', 3: 'red', 4: 'brown'}
+
     # disable gradients for faster calculations
     model.eval()
     with torch.no_grad():
-        for i,(x,_,labels) in enumerate(test_dataloaders):
+        for i, (x, _, labels) in enumerate(test_dataloaders):
             # embed the images with the pre-trained backbone
             x = x.to(device)
             y = model.backbone(x).flatten(start_dim=1)
             # store the embeddings in a list
             embeddings.append(y)
+            # assign color based on labels
+            if labels['staging'] in label_colors:
+                colors.append(label_colors[labels['staging']])
+            else:
+                colors.append('grey')
 
     # concatenate the embeddings and convert to numpy
     embeddings = torch.cat(embeddings, dim=0)
     embeddings = embeddings.cpu().numpy()
 
     # visualize the embeddings with t-SNE
-    tsne = TSNE(random_state = 0, n_iter = 1000, metric = 'cosine')
+    tsne = TSNE(random_state=0, n_iter=1000, metric='cosine')
     # Fit and transform
     embeddings2d = tsne.fit_transform(embeddings)
     # Create DF
     embeddingsdf = pd.DataFrame()
     # Add x coordinate
-    embeddingsdf['x'] = embeddings2d[:,0]
+    embeddingsdf['x'] = embeddings2d[:, 0]
     # Add y coordinate
-    embeddingsdf['y'] = embeddings2d[:,1]
-    # Check
-    embeddingsdf.head()
+    embeddingsdf['y'] = embeddings2d[:, 1]
+
     # Set figsize
-    fig, ax = plt.subplots(figsize=(10,8))
+    fig, ax = plt.subplots(figsize=(10, 8))
     # Scatter points, set alpha low to make points translucent
-    ax.scatter(embeddingsdf.x, embeddingsdf.y, alpha=.1)
-    plt.title('Scatter plot of games using t-SNE')
+    ax.scatter(embeddingsdf.x, embeddingsdf.y, c=colors, alpha=0.5)
+    plt.title('Scatter plot of embeddings using t-SNE')
     plt.show()
-    save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot.png")
+    save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot_1_epoch.png")
     plt.savefig(save_path)
+
