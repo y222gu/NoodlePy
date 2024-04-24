@@ -80,7 +80,7 @@ class RamanDataset(Dataset):
         patient_id = int(f_split[0])
         sample_type = f_split[1]
         patient_labels['patient_id'] = patient_id
-        #patient_labels['sample_type'] = sample_type
+        patient_labels['sample_type'] = sample_type
         # Extract the metadata for the given patient_id
         if patient_id in all_patient_labels['OD Number'].values:
             patient_metadata_row = all_patient_labels[all_patient_labels['OD Number'] == patient_id]
