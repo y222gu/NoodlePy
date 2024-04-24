@@ -85,7 +85,7 @@ if __name__ == "__main__":
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.02,
-            "epochs": 1,
+            "epochs": 10,
             "batch_size": 10,
             "backbone_dim": [1, 8, 16, 32, 64, 128]
             })
@@ -104,20 +104,13 @@ if __name__ == "__main__":
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
     train_dataset = RamanDataset(train_dataset_path, annotation_file_path)
-    test_dataset = RamanDataset(test_dataset_path, annotation_file_path)
+
 
     train_dataloaders = DataLoader(
         train_dataset,
         batch_size=training_cfg.batch_size,
         shuffle=True,
         drop_last=True,
-        num_workers=8,
-    )
-    test_dataloaders = DataLoader(
-        test_dataset,
-        batch_size=training_cfg.batch_size,
-        shuffle=False,
-        drop_last=False,
         num_workers=8,
     )
 
@@ -156,11 +149,23 @@ if __name__ == "__main__":
 
     print("Finished Training")
 
+    test_dataset = RamanDataset(test_dataset_path, annotation_file_path)
+
+    test_dataloaders = DataLoader(
+    test_dataset,
+    batch_size=training_cfg.batch_size,
+    shuffle=False,
+    drop_last=False,
+    num_workers=8,
+    )
+
     # Extract embedding of the test set
     embeddings = []
     colors = []
+    markers = []
     # Define colors for each label
-    label_colors = {0: 'green', 1: 'gold', 2: 'orange', 3: 'red', 4: 'brown'}
+    label_colors_map = {0: 'green', 1: 'gold', 2: 'orange', 3: 'red', 4: 'brown'}
+    label_markers_map = {'plasma': "P", 'saliva': "o"}
 
     # disable gradients for faster calculations
     model.eval()
@@ -172,10 +177,20 @@ if __name__ == "__main__":
             # store the embeddings in a list
             embeddings.append(y)
             # assign color based on labels
-            if labels['staging'] in label_colors:
-                colors.append(label_colors[labels['staging']])
-            else:
-                colors.append('grey')
+            labels_staging_np = labels['staging'].cpu().numpy()
+            labels_sample_type_np = labels['sample_type']
+
+            for label in labels_staging_np:
+                if label in label_colors_map:
+                    colors.append(label_colors_map[label])
+                else:
+                    colors.append('grey')
+            
+            for label in labels_sample_type_np:
+                if label in label_markers_map:
+                    markers.append(label_markers_map[label])
+                else:
+                    markers.append('1')
 
     # concatenate the embeddings and convert to numpy
     embeddings = torch.cat(embeddings, dim=0)
@@ -195,9 +210,11 @@ if __name__ == "__main__":
     # Set figsize
     fig, ax = plt.subplots(figsize=(10, 8))
     # Scatter points, set alpha low to make points translucent
-    ax.scatter(embeddingsdf.x, embeddingsdf.y, c=colors, alpha=0.5)
+    for i in range(len(embeddingsdf.x)):
+        ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
     plt.title('Scatter plot of embeddings using t-SNE')
+    plt.legend(loc='upper right')
     plt.show()
-    save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot_1_epoch.png")
+    save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot.png")
     plt.savefig(save_path)
 
