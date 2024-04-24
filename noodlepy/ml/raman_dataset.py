@@ -5,11 +5,12 @@ import noodlepy.utils.create_augment as create_augment
 import os
 from noodlepy.utils.spectrum_class import Spectrum
 import torch
+import copy
 import numpy as np
 
 class RamanDataset(Dataset):
     def __init__(self, data_folder = None,
-                 metadata_file_path = None,
+                 annotation_file_path = None,
                  preprocessing_flag: bool = True,
                  augmentation_step_option_list: list[str]= ['baseline','shot_noise','dark_current_noise','photo_response_non_uniformity','cosmic_ray']
                  ):
@@ -22,6 +23,7 @@ class RamanDataset(Dataset):
         Returns:
         list[Spectrum]: A list of Spectrum objects
         """
+        print("Loading the Raman dataset")
         self.preprocessing_flag = preprocessing_flag
         self.augmentation_step_option_list = augmentation_step_option_list
 
@@ -31,14 +33,15 @@ class RamanDataset(Dataset):
         list_of_file_names = sorted([f for f in os.listdir(data_folder) if f.endswith(('.txt'))])
 
         # load the metadata file
-        metadata_all = pd.read_excel(metadata_file_path)
+        annotation_all = pd.read_excel(annotation_file_path)
 
         for filename in list_of_file_names:
-            metadata_of_corresponding_file = RamanDataset._extract_metadata(filename, metadata_all)
-            spectrum_objects = RamanDataset._make_spectrum_objects(data_folder,filename=filename, metadata=metadata_of_corresponding_file)
+            patient_annotations = RamanDataset._extract_patient_labels(filename, annotation_all)
+            spectrum_objects = RamanDataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
             list_of_spectrum_objects+=spectrum_objects
 
         self.db = list_of_spectrum_objects
+        print(f"Loaded {len(self.db)} spectra")
 
     def __len__(self):
         return len(self.db)
@@ -57,7 +60,6 @@ class RamanDataset(Dataset):
         returns:
         augmented_spectrum_list (list[Spectrum]): a tuple of 2 augmented Spectrum objects
         """
-        
         chosen_spectrum:Spectrum = self.db[idx]
 
         if self.preprocessing_flag == True:
@@ -67,44 +69,50 @@ class RamanDataset(Dataset):
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
 
-        return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.staging
+        return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata
     
-    def _extract_metadata(spectrum_file_name:str, 
-                          metadata_all:pd.DataFrame):
+    def _extract_patient_labels(spectrum_file_name:str, 
+                          all_patient_labels:pd.DataFrame):
 
         # Patient metatdata extraction
-        metadata_of_corresponding_file = {}
-
+        patient_labels = {}
         f_split = spectrum_file_name.split('_')
         patient_id = int(f_split[0])
         sample_type = f_split[1]
-        metadata_of_corresponding_file['patient_id'] = patient_id
-        metadata_of_corresponding_file['sample_type'] = sample_type
-
+        patient_labels['patient_id'] = patient_id
+        #patient_labels['sample_type'] = sample_type
         # Extract the metadata for the given patient_id
-        if patient_id in metadata_all['OD Number'].values:
-            patient_metadata_row = metadata_all[metadata_all['OD Number'] == patient_id]
-            metadata_of_corresponding_file['staging'] = patient_metadata_row['Staging'].values[0]
-            metadata_of_corresponding_file['age'] = patient_metadata_row['Age'].values[0]
-            metadata_of_corresponding_file['gender'] = patient_metadata_row['Gender'].values[0]
-            metadata_of_corresponding_file['race'] = patient_metadata_row['Race/Ethnicity'].values[0]
-            metadata_of_corresponding_file['bmi'] = patient_metadata_row['BMI'].values[0]
+        if patient_id in all_patient_labels['OD Number'].values:
+            patient_metadata_row = all_patient_labels[all_patient_labels['OD Number'] == patient_id]
+
+            if len(patient_metadata_row) > 1:
+                patient_metadata_row = patient_metadata_row.iloc[[0]]
+                print(f"Patient ID {patient_id} has multiple entries in the metadata file")
+                print("Only the first entry will be used")
+                
+            patient_labels['staging'] = patient_metadata_row['Staging'].values[0]
+            #patient_labels['age'] = patient_metadata_row['Age'].values[0]
+            #patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
+            #patient_labels['race'] = patient_metadata_row['Race/Ethnicity'].values[0]
+            #patient_labels['bmi'] = patient_metadata_row['BMI'].values[0]
+
         else:
             # If the patient_id is not found in the metadata file, set the every metadata to empty string and number
-            metadata_of_corresponding_file['staging'] = ''
-            metadata_of_corresponding_file['age'] = []
-            metadata_of_corresponding_file['gender'] = ''
-            metadata_of_corresponding_file['race'] = ''
-            metadata_of_corresponding_file['bmi'] = []
+            patient_labels['staging'] = np.nan
+            #patient_labels['age'] = patient_metadata_row['Age'].values[0]
+            #patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
+            #patient_labels['race'] = patient_metadata_row['Race/Ethnicity'].values[0]
+            #patient_labels['bmi'] = patient_metadata_row['BMI'].values[0]
+
+            
         
             print(f"Patient ID {patient_id} not found in the metadata file")
-            print("Metadata set to empty string and number")
-
-        return metadata_of_corresponding_file
+            print("Metadata set to empty strings and numbers")
+        return patient_labels
     
-    def _make_spectrum_objects(data_folder:str,
+    def _load_files_to_spectrum_objects(data_folder:str,
                                filename:str, 
-                               metadata:dict):
+                               patient_annotations:dict):
         with open(os.path.join(data_folder, filename)) as f:
             data = pd.read_csv(f, sep=",", header=None)
 
@@ -122,17 +130,12 @@ class RamanDataset(Dataset):
                 else:
                     wavelength_nm = data.iloc[start_indexes[i]:start_indexes[i + 1], 0].values.round(3)
                     intensity = data.iloc[start_indexes[i]:start_indexes[i + 1], 1].values.round(3)
-
-                spectrum = Spectrum(patient_id=metadata['patient_id'], 
-                                    sample_type=metadata['sample_type'], 
-                                    spectrum_id=spectrum_id, 
-                                    wavelength_nm=wavelength_nm,
+                
+                metadata = copy.deepcopy(patient_annotations)
+                metadata['spectrum_id'] = spectrum_id
+                spectrum = Spectrum(wavelength_nm=wavelength_nm,
                                     intensity=intensity,
-                                    staging=metadata['staging'],
-                                    age=metadata['age'],
-                                    gender=metadata['gender'],
-                                    race=metadata['race'],
-                                    bim=metadata['bmi'])
+                                    metadata=metadata,)
                 spectrum_objects.append(spectrum)
         return spectrum_objects
 
@@ -142,5 +145,5 @@ if __name__ == "__main__":
 
     dataset = RamanDataset(data_folder, metadata_file)
 
-    for i in range(50):
-        augmented_spectrum1,augmented_spectrum2, label_staging = dataset.__getitem__(idx= i)
+    for i in range(100):
+        augmented_spectrum1,augmented_spectrum2, labels = dataset.__getitem__(idx= i)
