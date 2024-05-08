@@ -91,20 +91,18 @@ class RamanDataset(Dataset):
                 print("Only the first entry will be used")
                 
             patient_labels['staging'] = patient_metadata_row['Staging'].values[0]
-            #patient_labels['age'] = patient_metadata_row['Age'].values[0]
-            #patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
-            #patient_labels['race'] = patient_metadata_row['Race/Ethnicity'].values[0]
+            patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
+            patient_labels['race'] = patient_metadata_row['Race'].values[0]
             #patient_labels['bmi'] = patient_metadata_row['BMI'].values[0]
+            #patient_labels['age'] = patient_metadata_row['Age'].values[0]
 
         else:
             # If the patient_id is not found in the metadata file, set the every metadata to empty string and number
             patient_labels['staging'] = np.nan
-            #patient_labels['age'] = patient_metadata_row['Age'].values[0]
-            #patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
-            #patient_labels['race'] = patient_metadata_row['Race/Ethnicity'].values[0]
-            #patient_labels['bmi'] = patient_metadata_row['BMI'].values[0]
-
-            
+            patient_labels['gender'] = ''
+            patient_labels['race'] = ''
+            #patient_labels['age'] = np.nan
+            #patient_labels['bmi'] = np.nan
         
             print(f"Patient ID {patient_id} not found in the metadata file")
             print("Metadata set to empty strings and numbers")

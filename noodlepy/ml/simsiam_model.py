@@ -16,6 +16,7 @@ import math
 from sklearn.manifold import TSNE
 import pandas as pd
 import matplotlib.pyplot as plt
+import numpy as np
 
 class cnn_backbone(nn.Module):
     def __init__(self, layer_channel_sizes):
@@ -73,6 +74,93 @@ class SimSiam(pl.LightningModule):
         optim = torch.optim.SGD(self.parameters(), lr=0.06)
         return optim
 
+def map_label(labels, type, map=None):
+    if map is None:
+        map = {0:'green', 1:'gold', 2:'orangered', 3:'red', 4:'purple', # staging
+                    'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
+                    'White':'xkcd:salmon', # race
+                    'plasma':"P", 'saliva':">"} # sample type   
+    if type == 'to_color':
+        default_label = 'teal'
+    elif type == 'to_marker':
+        default_label = '*'
+    else:
+        raise ValueError("Invalid type. Choose 'to_color' or 'to_marker'")
+    
+    mapped_labels = []
+    for label in labels:
+        if label in map:
+            mapped_labels.append(map[label])
+        else:
+            mapped_labels.append(default_label)
+    return mapped_labels
+
+def visualize_embeddings(embeddings2d, labels_for_colors, labels_for_markers, plot_name="test",  map=None):
+    colors = map_label(labels_for_colors, 'to_color', map)
+    markers = map_label(labels_for_markers, 'to_marker', map)
+    # Create DF
+    embeddingsdf = pd.DataFrame()
+    # Add x coordinate
+    embeddingsdf['x'] = embeddings2d[:, 0]
+    # Add y coordinate
+    embeddingsdf['y'] = embeddings2d[:, 1]
+    # Loop through different plot groups
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Scatter points, set alpha low to make points translucent
+    for i in range(len(embeddingsdf.x)):
+        ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
+    plt.title('Scatter plot of embeddings using t-SNE')
+    plt.show()
+    save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot_" + plot_name + ".png")
+    plt.savefig(save_path)
+
+def visualize_embeddings_in_construction(embeddings2d, labels_for_colors, labels_for_markers, plot_name="test", map=None):
+    # Define a default color and marker mapping
+
+    # Map colors and markers based on labels
+    colors = map_label(labels_for_colors, 'to_color', map)
+    markers = map_label(labels_for_markers, 'to_marker', map)
+    # To store unique combinations of color, marker, and labels
+    unique_combinations = {}
+
+    # Create a DataFrame with embeddings and labels
+    x = embeddings2d[:, 0]
+    y = embeddings2d[:, 1]
+
+    # Create the scatter plot
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Plot scatter points with specified color and marker
+    for i in range(len(x)):
+        # Create a unique key for the legend (using both color and marker labels)
+        combination_key = (labels_for_colors[i], labels_for_markers[i])
+
+        # Check if this combination is already in the unique_combinations dict
+        if combination_key not in unique_combinations:
+            # Add to unique combinations with a meaningful label for legend
+            unique_combinations[combination_key] = f"{labels_for_colors[i]} & {labels_for_markers[i]}"
+            ax.scatter(x, y, 
+                   c=colors[i], 
+                   marker=markers[i], 
+                   alpha=0.6,
+                   label=unique_combinations[combination_key])
+        else:
+            # Plot without additional legend entry
+            ax.scatter(x, y, 
+                   c=colors[i], 
+                   marker=markers[i], 
+                   alpha=0.6)
+
+    plt.legend(loc='upper right', fontsize='small')  # Adjust legend size
+    ax.set_title('Scatter plot of embeddings using t-SNE')
+    ax.set_xlabel('TSNE Component 1')
+    ax.set_ylabel('TSNE Component 2')
+    plt.show()
+
+    # Save the plot
+    save_path = os.path.join(os.getcwd(), "output_plots", f"tsne_plot_{plot_name}.png")
+    plt.savefig(save_path)
 
 if __name__ == "__main__":
 
@@ -85,7 +173,7 @@ if __name__ == "__main__":
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.02,
-            "epochs": 10,
+            "epochs": 1,
             "batch_size": 10,
             "backbone_dim": [1, 8, 16, 32, 64, 128]
             })
@@ -98,8 +186,8 @@ if __name__ == "__main__":
     criterion = NegativeCosineSimilarity()
     optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
 
-    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "train_2")
-    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "test_2")
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed", "train_2")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed", "test_2" )
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
@@ -114,6 +202,7 @@ if __name__ == "__main__":
         num_workers=8,
     )
 
+    # training
     print("Starting Training")
     for epoch in range(training_cfg.epochs):
         avg_loss = 0.0
@@ -159,62 +248,43 @@ if __name__ == "__main__":
     num_workers=8,
     )
 
-    # Extract embedding of the test set
     embeddings = []
-    colors = []
-    markers = []
-    # Define colors for each label
-    label_colors_map = {0: 'green', 1: 'gold', 2: 'orange', 3: 'red', 4: 'brown'}
-    label_markers_map = {'plasma': "P", 'saliva': "o"}
+    labels_staging = []
+    labels_sample_type = []
+    labels_gender = []
+    labels_race = []
 
-    # disable gradients for faster calculations
+
+    # test the model on the test set
     model.eval()
     with torch.no_grad():
         for i, (x, _, labels) in enumerate(test_dataloaders):
-            # embed the images with the pre-trained backbone
             x = x.to(device)
             y = model.backbone(x).flatten(start_dim=1)
-            # store the embeddings in a list
             embeddings.append(y)
-            # assign color based on labels
-            labels_staging_np = labels['staging'].cpu().numpy()
-            labels_sample_type_np = labels['sample_type']
+            labels_staging.extend(labels['staging'].cpu().numpy())
+            labels_sample_type.extend(labels['sample_type'])
+            labels_gender.extend(labels['gender'])
+            labels_race.extend(labels['race'])    
 
-            for label in labels_staging_np:
-                if label in label_colors_map:
-                    colors.append(label_colors_map[label])
-                else:
-                    colors.append('grey')
-            
-            for label in labels_sample_type_np:
-                if label in label_markers_map:
-                    markers.append(label_markers_map[label])
-                else:
-                    markers.append('1')
-
-    # concatenate the embeddings and convert to numpy
     embeddings = torch.cat(embeddings, dim=0)
     embeddings = embeddings.cpu().numpy()
-
-    # visualize the embeddings with t-SNE
     tsne = TSNE(random_state=0, n_iter=1000, metric='cosine')
-    # Fit and transform
     embeddings2d = tsne.fit_transform(embeddings)
-    # Create DF
-    embeddingsdf = pd.DataFrame()
-    # Add x coordinate
-    embeddingsdf['x'] = embeddings2d[:, 0]
-    # Add y coordinate
-    embeddingsdf['y'] = embeddings2d[:, 1]
 
-    # Set figsize
-    fig, ax = plt.subplots(figsize=(10, 8))
-    # Scatter points, set alpha low to make points translucent
-    for i in range(len(embeddingsdf.x)):
-        ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
-    plt.title('Scatter plot of embeddings using t-SNE')
-    plt.legend(loc='upper right')
-    plt.show()
-    save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot.png")
-    plt.savefig(save_path)
+    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging')
+    visualize_embeddings(embeddings2d, labels_gender, labels_sample_type,'gender')
+    visualize_embeddings(embeddings2d, labels_race, labels_sample_type,'race')
+    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_in_3', map=
+                         {0: 'green', 1: 'gold', 2: 'gold', 3: 'red', 4: 'red', 'plasma': 'P', 'saliva': '>'})
+
+    print("Finished Visualizing")
+
+
+
+
+
+
+
+
 
