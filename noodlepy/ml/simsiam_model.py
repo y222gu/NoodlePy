@@ -10,7 +10,7 @@ from torch.utils.data import DataLoader
 import os
 from lightly.loss import NegativeCosineSimilarity
 from lightly.models.modules import SimSiamPredictionHead, SimSiamProjectionHead
-from noodlepy.ml.raman_dataset import RamanDataset
+from noodlepy.utils.class_RamanDataset import RamanDataset
 import wandb
 import math
 from sklearn.manifold import TSNE
