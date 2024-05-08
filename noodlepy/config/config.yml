@@ -1,12 +1,6 @@
 # This is a YAML file 
 # parameters for preprocessing
 preprocessing:
-  default_augmentation_steps:
-    - baseline
-    - shot_noise
-    - dark_current_noise
-    - photo_response_non_uniformity
-    - cosmic_ray
   cropping: # cropping options
     start: 624.573
     end: 1784.104
@@ -26,6 +20,13 @@ preprocessing:
   - by_max
 
 augmentation:
+  default_augmentation_steps:
+    - baseline
+    - shot_noise
+    - dark_current_noise
+    - photo_response_non_uniformity
+    - cosmic_ray
+    
   normalization: # normalization options
     normalization_type_options:
       - by_area
