@@ -6,7 +6,7 @@ import pickle
 import json
 
 # Import noodlespy modules
-import noodlepy.utils.spectrum_create_augment as create_augment
+import noodlepy.archive.spectrum_create_augment as create_augment
 
 # notes: python -m noodlepy.ml.generate_patient
 
