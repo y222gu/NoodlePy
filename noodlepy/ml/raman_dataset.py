@@ -1,9 +1,10 @@
 # https://pytorch.org/get-started/locally/
 from torch.utils.data import Dataset
 import pandas as pd
-import noodlepy.utils.create_augment as create_augment
 import os
 from noodlepy.utils.spectrum_class import Spectrum
+from noodlepy.utils.SpectrumPreprocessor_class import SpectrumPreprocessor
+from noodlepy.utils.SpectrumAugmentor_class import SpectrumAugmentor
 import torch
 import copy
 import numpy as np
@@ -11,9 +12,8 @@ import numpy as np
 class RamanDataset(Dataset):
     def __init__(self, data_folder = None,
                  annotation_file_path = None,
-                 preprocessing_flag: bool = True,
-                 augmentation_step_option_list: list[str]= ['baseline','shot_noise','dark_current_noise','photo_response_non_uniformity','cosmic_ray']
-                 ):
+                 preprocessor = None,
+                 augmentor = None):
         """
         Load the database of spectra from the txt file 
 
@@ -24,15 +24,12 @@ class RamanDataset(Dataset):
         list[Spectrum]: A list of Spectrum objects
         """
         print("Loading the Raman dataset")
-        self.preprocessing_flag = preprocessing_flag
-        self.augmentation_step_option_list = augmentation_step_option_list
+        self.preprocessor = preprocessor
+        self.augmentor = augmentor
 
-        # FIXME: This is a temporary function to create a list of spectrum objects on the fly from the text files
-        # Once we have a database, we will need to change this to a database query
         list_of_spectrum_objects = []
         list_of_file_names = sorted([f for f in os.listdir(data_folder) if f.endswith(('.txt'))])
 
-        # load the metadata file
         annotation_all = pd.read_excel(annotation_file_path)
 
         for filename in list_of_file_names:
@@ -62,10 +59,19 @@ class RamanDataset(Dataset):
         """
         chosen_spectrum:Spectrum = self.db[idx]
 
-        if self.preprocessing_flag == True:
-            preorocessed_spectrum = create_augment.pre_process(chosen_spectrum)
+        if self.preprocessor is not None:
+            preprocessor = self.preprocessor
+            preprocessed_spectrum = preprocessor.pre_process(chosen_spectrum)
+        else:
+            preprocessed_spectrum = chosen_spectrum
 
-        augmented_spectrum_1,augmented_spectrum_2 = create_augment.apply_augmentations(preorocessed_spectrum, self.augmentation_step_option_list, 2) # REQ: Only need 2 children of the chosen_spectrum
+        if self.augmentor is not None:
+            augmentor = self.augmentor
+            augmented_spectrum_1,augmented_spectrum_2 = augmentor.augment(preprocessed_spectrum, 2) # REQ: Only need 2 children of the chosen_spectrum
+        else:
+            augmented_spectrum_1 = preprocessed_spectrum
+            augmented_spectrum_2 = preprocessed_spectrum
+
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
 
@@ -138,10 +144,23 @@ class RamanDataset(Dataset):
         return spectrum_objects
 
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "all")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed","all")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
-    dataset = RamanDataset(data_folder, metadata_file)
+    preprocessor = SpectrumPreprocessor(cropping=True,
+                                        baseline_correction=False,
+                                        despike= False,
+                                        normalization=False,
+                                        smoothing=False)
+    
+    augmentor = SpectrumAugmentor(ramdom_augmentations=True,
+                                  augmentation_step_list = None,
+                                  config_path= None)
 
-    for i in range(100):
+    dataset = RamanDataset(data_folder, metadata_file, preprocessor, augmentor)
+
+    for i in range(10):
         augmented_spectrum1,augmented_spectrum2, labels = dataset.__getitem__(idx= i)
+        print(augmented_spectrum1.shape)
+        print(augmented_spectrum2.shape)
+        print(labels)

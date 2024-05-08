@@ -12,7 +12,7 @@ class SpectrumPreprocessor:
                 smoothing: bool = False,
                 config_path: str = None):
         
-        if config is None:
+        if config_path is None:
             current_directory = os.getcwd()
             config_path = os.path.join(current_directory, "noodlepy", "config", "config.yml")
         

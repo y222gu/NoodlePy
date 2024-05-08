@@ -38,14 +38,14 @@ class SpectrumAugmentor:
         """
 
         augmented_spectrum_list = []
-        for i in number_of_augmentation:
+        for i in range(number_of_augmentation):
 
             if self.ramdom_augmentations:
                 augmentation_steps_to_apply = SpectrumAugmentor.random_augmentation_steps_generator(self.augmentation_step_list)
             else:
                 augmentation_steps_to_apply = self.augmentation_step_list
                 
-            i_augmentation_par_dictionary = SpectrumAugmentor.augmentation_par_dictionary_generator(augmentation_steps_to_apply)
+            i_augmentation_par_dictionary = SpectrumAugmentor.augmentation_par_dictionary_generator(self, augmentation_steps_to_apply=augmentation_steps_to_apply)
             
             augmented_spectrum = copy.deepcopy(spectrum)
 
@@ -98,7 +98,7 @@ class SpectrumAugmentor:
         return random_augmentation_steps
 
 
-    def augmentation_par_dictionary_generator(augmentation_steps_to_apply) -> dict:
+    def augmentation_par_dictionary_generator(self, augmentation_steps_to_apply) -> dict:
         """
         Generate dictionaries with random parameters for random augmentation step chosen from augmentation_step_option_list.
 
@@ -109,43 +109,35 @@ class SpectrumAugmentor:
         Returns:
         dict: Dictionary of augmentation parameters dictionaries.
         """
-        # TODO: This should not be hard coded for future use 
-        # Load the configuration file
-        current_directory = os.getcwd()
-        config_path = os.path.join(current_directory, "noodlepy", "config", "config.yml")
-        
-        with open(config_path, "rb") as yaml_file:
-            config = yaml.safe_load(yaml_file)
-
         augmentation_par_dictionary = defaultdict(dict)
             
         # Create random parameters for each augment
         if "normalization" in augmentation_steps_to_apply:
             augmentation_par_dictionary["normalization"]= {
                 "normalization_type": np.random.choice(
-                config["normalization"]["normalization_type_options"]
+                self.config["normalization"]["normalization_type_options"]
                 )
             }
 
         if "amplification" in augmentation_steps_to_apply:
             augmentation_par_dictionary["amplification"]= {
                 "spectrum_amplifying_factor": np.random.uniform(
-                config["amplification"]["spectrum_amplifying_factor"]["low"],
-                config["amplification"]["spectrum_amplifying_factor"]["high"]
+                self.config["amplification"]["spectrum_amplifying_factor"]["low"],
+                self.config["amplification"]["spectrum_amplifying_factor"]["high"]
                 )
             }
 
         if "horizontal_shift" in augmentation_steps_to_apply:
             augmentation_par_dictionary["horizontal_shift"]= np.random.uniform(
-                config["horizontal_shift"]["low"],
-                config["horizontal_shift"]["high"]
+                self.config["horizontal_shift"]["low"],
+                self.config["horizontal_shift"]["high"]
             )
 
         if "convoluting_gaussian" in augmentation_steps_to_apply:
             augmentation_par_dictionary["convoluting_gaussian"]= {
                 "gaussian_std":np.random.uniform(
-                config["convoluting_gaussian"]["gaussian_std"]["low"],
-                config["convoluting_gaussian"]["gaussian_std"]["high"]
+                self.config["convoluting_gaussian"]["gaussian_std"]["low"],
+                self.config["convoluting_gaussian"]["gaussian_std"]["high"]
                 )
             }
 
@@ -153,8 +145,8 @@ class SpectrumAugmentor:
             augmentation_par_dictionary["shot_noise"]= {
                 "noise_type": "poisson",
                 "lam": np.random.uniform(
-                    config["shot_noise"]["lam"]["low"],
-                    config["shot_noise"]["lam"]["high"]
+                    self.config["shot_noise"]["lam"]["low"],
+                    self.config["shot_noise"]["lam"]["high"]
                 )
             }
 
@@ -162,8 +154,8 @@ class SpectrumAugmentor:
             augmentation_par_dictionary["dark_current_noise"]= {
                 "noise_type": "poisson",
                 "lam": np.random.uniform(
-                    config["dark_current_noise"]["lam"]["low"],
-                    config["dark_current_noise"]["lam"]["high"]
+                    self.config["dark_current_noise"]["lam"]["low"],
+                    self.config["dark_current_noise"]["lam"]["high"]
                 )
             }
 
@@ -171,12 +163,12 @@ class SpectrumAugmentor:
             augmentation_par_dictionary["photo_response_non_uniformity"]= {
                 "noise_type": "gaussian",
                 "mean": np.random.uniform(
-                    config["photo_response_non_uniformity"]["mean"]["low"],
-                    config["photo_response_non_uniformity"]["mean"]["high"]
+                    self.config["photo_response_non_uniformity"]["mean"]["low"],
+                    self.config["photo_response_non_uniformity"]["mean"]["high"]
                 ),
                 "std": np.random.uniform(
-                    config["photo_response_non_uniformity"]["std"]["low"],
-                    config["photo_response_non_uniformity"]["std"]["high"]
+                    self.config["photo_response_non_uniformity"]["std"]["low"],
+                    self.config["photo_response_non_uniformity"]["std"]["high"]
                 )
             }
             
@@ -185,46 +177,46 @@ class SpectrumAugmentor:
             augmentation_par_dictionary["FPN_noise"]= {
                 "noise_type": "lognormal",
                 "mean": np.random.uniform(
-                    config["FPN_noise"]["mean"]["low"],
-                    config["FPN_noise"]["mean"]["high"]
+                    self.config["FPN_noise"]["mean"]["low"],
+                    self.config["FPN_noise"]["mean"]["high"]
                 ),
                 "sigma": np.random.uniform(
-                    config["FPN_noise"]["sigma"]["low"],
-                    config["FPN_noise"]["sigma"]["high"]
+                    self.config["FPN_noise"]["sigma"]["low"],
+                    self.config["FPN_noise"]["sigma"]["high"]
                 )
             }
 
         if "cosmic_ray" in augmentation_steps_to_apply:
             augmentation_par_dictionary["cosmic_ray"] = {  
                 "spike_number": np.random.randint(
-                    config["cosmic_ray"]["spike_number"]["low"],
-                    config["cosmic_ray"]["spike_number"]["high"]
+                    self.config["cosmic_ray"]["spike_number"]["low"],
+                    self.config["cosmic_ray"]["spike_number"]["high"]
                 ),
                 "spike_amplitude": np.random.uniform(
-                    config["cosmic_ray"]["spike_amplitude"]["low"],
-                    config["cosmic_ray"]["spike_amplitude"]["high"]
+                    self.config["cosmic_ray"]["spike_amplitude"]["low"],
+                    self.config["cosmic_ray"]["spike_amplitude"]["high"]
                 )
             }
 
         if "baseline" in augmentation_steps_to_apply:
             baseline_type = np.random.choice(
-                config["baseline"]["baseline_type_options"]
+                self.config["baseline"]["baseline_type_options"]
             )
 
             baseline_amplifying_factor = np.random.uniform(
-            config["baseline"]["baseline_amplifying_factor"]["low"],
-            config["baseline"]["baseline_amplifying_factor"]["high"]
+            self.config["baseline"]["baseline_amplifying_factor"]["low"],
+            self.config["baseline"]["baseline_amplifying_factor"]["high"]
             )
 
             poly_orders = np.random.randint(
-                        config["baseline"]["poly_orders"]["low"],
-                        config["baseline"]["poly_orders"]["high"]
+                        self.config["baseline"]["poly_orders"]["low"],
+                        self.config["baseline"]["poly_orders"]["high"]
                         )
             
             # REQ: poly_orders+1 because the zero order (constant)
             poly_coefficients = np.random.uniform(
-                        config["baseline"]["poly_coefficients"]["low"],
-                        config["baseline"]["poly_coefficients"]["high"],
+                        self.config["baseline"]["poly_coefficients"]["low"],
+                        self.config["baseline"]["poly_coefficients"]["high"],
                         poly_orders+1
                         )
 
