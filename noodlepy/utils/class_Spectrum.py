@@ -73,7 +73,7 @@ class Spectrum:
             raise ValueError(f'Normalization method is not defined')
         return self
 
-    def despike(self, 
+    def remove_cosmic_rays(self, 
                 kernel_size: int = 2, 
                 threshold: float = 3.5
                 ):
@@ -133,7 +133,7 @@ class Spectrum:
         '''
         # print(f'Removing baseline using airPLS method with parameters: lam: {lam}, diff_order:{diff_order}, max_iter:{max_iter}, tol:{tol}, weights:{weights}...')
         baseline_fitter = pybaselines.Baseline(x_data=self.raman_shift_cm)
-        baseline, _ = baseline_fitter.airpls(self.intensity,lam, diff_order, max_iter, tol, weights) 
+        baseline, _ = baseline_fitter.airpls(self.intensity, lam, diff_order, max_iter, tol, weights) 
         self.intensity = self.intensity - baseline
 
     

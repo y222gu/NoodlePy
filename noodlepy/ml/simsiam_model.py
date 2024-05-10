@@ -10,13 +10,15 @@ from torch.utils.data import DataLoader
 import os
 from lightly.loss import NegativeCosineSimilarity
 from lightly.models.modules import SimSiamPredictionHead, SimSiamProjectionHead
-from noodlepy.utils.class_RamanDataset import RamanDataset
+from noodlepy.utils.class_SpectrumDataset import SpectrumDataset
 import wandb
 import math
 from sklearn.manifold import TSNE
 import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
+from noodlepy.utils.class_SpectrumAugmentor import SpectrumAugmentor
+from noodlepy.utils.class_SpectrumPreprocessor import SpectrumPreprocessor
 
 class cnn_backbone(nn.Module):
     def __init__(self, layer_channel_sizes):
@@ -111,7 +113,6 @@ def visualize_embeddings(embeddings2d, labels_for_colors, labels_for_markers, pl
     for i in range(len(embeddingsdf.x)):
         ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
     plt.title('Scatter plot of embeddings using t-SNE')
-    plt.show()
     save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot_" + plot_name + ".png")
     plt.savefig(save_path)
 
@@ -173,7 +174,7 @@ if __name__ == "__main__":
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.02,
-            "epochs": 1,
+            "epochs": 15,
             "batch_size": 10,
             "backbone_dim": [1, 8, 16, 32, 64, 128]
             })
@@ -186,13 +187,20 @@ if __name__ == "__main__":
     criterion = NegativeCosineSimilarity()
     optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
 
-    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed", "train_2")
-    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed", "test_2" )
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma","train")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma","test" )
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
-    train_dataset = RamanDataset(train_dataset_path, annotation_file_path)
-
+    train_preprocessor = SpectrumPreprocessor(cropping=True,
+                                        baseline_correction=True,
+                                        remove_cosmic_rays= True,
+                                        normalization=True,
+                                        smoothing=True)
+    train_augmentor = SpectrumAugmentor(ramdom_augmentations=True,
+                                  augmentation_step_list = None,
+                                  config_path= None)
+    train_dataset = SpectrumDataset(train_dataset_path, annotation_file_path, train_preprocessor, train_augmentor)
 
     train_dataloaders = DataLoader(
         train_dataset,
@@ -238,7 +246,17 @@ if __name__ == "__main__":
 
     print("Finished Training")
 
-    test_dataset = RamanDataset(test_dataset_path, annotation_file_path)
+    test_preprocessor = SpectrumPreprocessor(cropping=True,
+                                        baseline_correction=True,
+                                        remove_cosmic_rays= True,
+                                        normalization=True,
+                                        smoothing=True)
+    
+    test_augmentor = SpectrumAugmentor(ramdom_augmentations=True,
+                                  augmentation_step_list = None,
+                                  config_path= None)
+
+    test_dataset = SpectrumDataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor, augmentor=test_augmentor)
 
     test_dataloaders = DataLoader(
     test_dataset,
@@ -272,10 +290,54 @@ if __name__ == "__main__":
     tsne = TSNE(random_state=0, n_iter=1000, metric='cosine')
     embeddings2d = tsne.fit_transform(embeddings)
 
-    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging')
-    visualize_embeddings(embeddings2d, labels_gender, labels_sample_type,'gender')
-    visualize_embeddings(embeddings2d, labels_race, labels_sample_type,'race')
-    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_in_3', map=
+    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_plasma_only')
+    visualize_embeddings(embeddings2d, labels_gender, labels_sample_type,'gender_plasma_only')
+    visualize_embeddings(embeddings2d, labels_race, labels_sample_type,'race_plasma_only')
+    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_with_three_classes_plasma_only', map=
+                         {0: 'green', 1: 'gold', 2: 'gold', 3: 'red', 4: 'red', 'plasma': 'P', 'saliva': '>'})
+
+    test_preprocessor = SpectrumPreprocessor(cropping=True,
+                                        baseline_correction=False,
+                                        remove_cosmic_rays= False,
+                                        normalization=False,
+                                        smoothing=False)
+    test_dataset = SpectrumDataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor, augmentor=None)
+
+    test_dataloaders = DataLoader(
+    test_dataset,
+    batch_size=training_cfg.batch_size,
+    shuffle=False,
+    drop_last=False,
+    num_workers=8,
+    )
+
+    embeddings = []
+    labels_staging = []
+    labels_sample_type = []
+    labels_gender = []
+    labels_race = []
+
+    # test the model on the test set
+    model.eval()
+    with torch.no_grad():
+        for i, (x, _, labels) in enumerate(test_dataloaders):
+            x = x.to(device)
+            y = model.backbone(x).flatten(start_dim=1)
+            embeddings.append(y)
+            labels_staging.extend(labels['staging'].cpu().numpy())
+            labels_sample_type.extend(labels['sample_type'])
+            labels_gender.extend(labels['gender'])
+            labels_race.extend(labels['race'])    
+
+    embeddings = torch.cat(embeddings, dim=0)
+    embeddings = embeddings.cpu().numpy()
+    tsne = TSNE(random_state=0, n_iter=1000, metric='cosine')
+    embeddings2d = tsne.fit_transform(embeddings)
+
+    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_no_augmentations_plasma_only')
+    visualize_embeddings(embeddings2d, labels_gender, labels_sample_type,'gender_no_augmentations_plasma_only')
+    visualize_embeddings(embeddings2d, labels_race, labels_sample_type,'race_no_augmentations_plasma_only')
+    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_in_3_no_augmentations_plasma_only', map=
                          {0: 'green', 1: 'gold', 2: 'gold', 3: 'red', 4: 'red', 'plasma': 'P', 'saliva': '>'})
 
     print("Finished Visualizing")

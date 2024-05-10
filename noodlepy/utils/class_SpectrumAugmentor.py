@@ -115,110 +115,72 @@ class SpectrumAugmentor:
         if "normalization" in augmentation_steps_to_apply:
             augmentation_par_dictionary["normalization"]= {
                 "normalization_type": np.random.choice(
-                self.config["normalization"]["normalization_type_options"]
-                )
-            }
+                self.config["normalization"]["normalization_type_options"])}
 
         if "amplification" in augmentation_steps_to_apply:
             augmentation_par_dictionary["amplification"]= {
                 "spectrum_amplifying_factor": np.random.uniform(
-                self.config["amplification"]["spectrum_amplifying_factor"]["low"],
-                self.config["amplification"]["spectrum_amplifying_factor"]["high"]
-                )
-            }
+                **self.config["amplification"]["spectrum_amplifying_factor"])}
 
         if "horizontal_shift" in augmentation_steps_to_apply:
             augmentation_par_dictionary["horizontal_shift"]= np.random.uniform(
-                self.config["horizontal_shift"]["low"],
-                self.config["horizontal_shift"]["high"]
-            )
+                **self.config["horizontal_shift"])
 
         if "convoluting_gaussian" in augmentation_steps_to_apply:
             augmentation_par_dictionary["convoluting_gaussian"]= {
                 "gaussian_std":np.random.uniform(
-                self.config["convoluting_gaussian"]["gaussian_std"]["low"],
-                self.config["convoluting_gaussian"]["gaussian_std"]["high"]
-                )
-            }
+                **self.config["convoluting_gaussian"]["gaussian_std"])}
 
         if "shot_noise" in augmentation_steps_to_apply:
             augmentation_par_dictionary["shot_noise"]= {
                 "noise_type": "poisson",
                 "lam": np.random.uniform(
-                    self.config["shot_noise"]["lam"]["low"],
-                    self.config["shot_noise"]["lam"]["high"]
-                )
-            }
+                    **self.config["shot_noise"]["lam"])}
 
         if "dark_current_noise" in augmentation_steps_to_apply:
             augmentation_par_dictionary["dark_current_noise"]= {
                 "noise_type": "poisson",
                 "lam": np.random.uniform(
-                    self.config["dark_current_noise"]["lam"]["low"],
-                    self.config["dark_current_noise"]["lam"]["high"]
-                )
-            }
+                    **self.config["dark_current_noise"]["lam"])}
 
         if "photo_response_non_uniformity" in augmentation_steps_to_apply:
             augmentation_par_dictionary["photo_response_non_uniformity"]= {
                 "noise_type": "gaussian",
                 "mean": np.random.uniform(
-                    self.config["photo_response_non_uniformity"]["mean"]["low"],
-                    self.config["photo_response_non_uniformity"]["mean"]["high"]
-                ),
+                    **self.config["photo_response_non_uniformity"]["mean"]),
                 "std": np.random.uniform(
-                    self.config["photo_response_non_uniformity"]["std"]["low"],
-                    self.config["photo_response_non_uniformity"]["std"]["high"]
-                )
-            }
+                    **self.config["photo_response_non_uniformity"]["std"])}
             
             # TODO: This should be measured or generated once and used for all spectra
         if "FPN_noise" in augmentation_steps_to_apply:
             augmentation_par_dictionary["FPN_noise"]= {
                 "noise_type": "lognormal",
                 "mean": np.random.uniform(
-                    self.config["FPN_noise"]["mean"]["low"],
-                    self.config["FPN_noise"]["mean"]["high"]
-                ),
+                    **self.config["FPN_noise"]["mean"]),
                 "sigma": np.random.uniform(
-                    self.config["FPN_noise"]["sigma"]["low"],
-                    self.config["FPN_noise"]["sigma"]["high"]
-                )
-            }
+                    **self.config["FPN_noise"]["sigma"])}
 
         if "cosmic_ray" in augmentation_steps_to_apply:
             augmentation_par_dictionary["cosmic_ray"] = {  
                 "spike_number": np.random.randint(
-                    self.config["cosmic_ray"]["spike_number"]["low"],
-                    self.config["cosmic_ray"]["spike_number"]["high"]
-                ),
+                    **self.config["cosmic_ray"]["spike_number"]),
                 "spike_amplitude": np.random.uniform(
-                    self.config["cosmic_ray"]["spike_amplitude"]["low"],
-                    self.config["cosmic_ray"]["spike_amplitude"]["high"]
-                )
-            }
+                    **self.config["cosmic_ray"]["spike_amplitude"])}
 
         if "baseline" in augmentation_steps_to_apply:
             baseline_type = np.random.choice(
-                self.config["baseline"]["baseline_type_options"]
-            )
+                self.config["baseline"]["baseline_type_options"])
 
             baseline_amplifying_factor = np.random.uniform(
-            self.config["baseline"]["baseline_amplifying_factor"]["low"],
-            self.config["baseline"]["baseline_amplifying_factor"]["high"]
-            )
+            **self.config["baseline"]["baseline_amplifying_factor"])
 
             poly_orders = np.random.randint(
-                        self.config["baseline"]["poly_orders"]["low"],
-                        self.config["baseline"]["poly_orders"]["high"]
-                        )
+                        **self.config["baseline"]["poly_orders"])
             
             # REQ: poly_orders+1 because the zero order (constant)
             poly_coefficients = np.random.uniform(
-                        self.config["baseline"]["poly_coefficients"]["low"],
-                        self.config["baseline"]["poly_coefficients"]["high"],
-                        poly_orders+1
-                        )
+                        **self.config["baseline"]["poly_coefficients"],
+                        size=poly_orders+1)
 
             augmentation_par_dictionary["baseline"] = {
             "baseline_type": baseline_type,

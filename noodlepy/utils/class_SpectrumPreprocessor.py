@@ -7,7 +7,7 @@ class SpectrumPreprocessor:
     def __init__(self, 
                 cropping: bool = False,
                 baseline_correction: bool = False,
-                despike: bool = False,
+                remove_cosmic_rays: bool = False,
                 normalization: bool = False,
                 smoothing: bool = False,
                 config_path: str = None):
@@ -22,7 +22,7 @@ class SpectrumPreprocessor:
         self.config = config['preprocessing']
         self.cropping = cropping
         self.baseline_correction = baseline_correction
-        self.despike = despike
+        self.remove_cosmic_rays = remove_cosmic_rays
         self.normalization = normalization
         self.smoothing = smoothing
 
@@ -33,15 +33,14 @@ class SpectrumPreprocessor:
 
         # Cropping
         if self.cropping:
-            pre_processed_spectrum.crop_spectrum(self.config['cropping']['start'], self.config['cropping']['end']) # Range temporary chosen by Victor
+            pre_processed_spectrum.crop_spectrum(**self.config['cropping']) # Range temporary chosen by Victor
 
         # Baseline correction from config
         if self.baseline_correction:
-            pre_processed_spectrum.airPLS(self.config['baseline_correction'])
+            pre_processed_spectrum.airPLS(**self.config['baseline_correction'])
 
-        # Despike from config
-        if self.despike:
-            pre_processed_spectrum.despike(self.config['despike']['kernel_size'], self.config['despike']['threshold'])
+        if self.remove_cosmic_rays:
+            pre_processed_spectrum.remove_cosmic_rays(**self.config['cosmic_rays_removal'])
 
         # Normalization from config
         if self.normalization:
@@ -49,6 +48,6 @@ class SpectrumPreprocessor:
 
         # Smoothing from config
         if self.smoothing:
-            pre_processed_spectrum.savgol_filter(self.config['smoothing']['window_length'], self.config['smoothing']['polyorder'])
+            pre_processed_spectrum.savgol_filter(**self.config['smoothing'])
 
         return pre_processed_spectrum

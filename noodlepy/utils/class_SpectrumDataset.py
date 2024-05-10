@@ -9,7 +9,7 @@ import torch
 import copy
 import numpy as np
 
-class RamanDataset(Dataset):
+class SpectrumDataset(Dataset):
     def __init__(self, data_folder = None,
                  annotation_file_path = None,
                  preprocessor = None,
@@ -33,8 +33,8 @@ class RamanDataset(Dataset):
         annotation_all = pd.read_excel(annotation_file_path)
 
         for filename in list_of_file_names:
-            patient_annotations = RamanDataset._extract_patient_labels(filename, annotation_all)
-            spectrum_objects = RamanDataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
+            patient_annotations = SpectrumDataset._extract_patient_labels(filename, annotation_all)
+            spectrum_objects = SpectrumDataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
             list_of_spectrum_objects+=spectrum_objects
 
         self.db = list_of_spectrum_objects
@@ -148,16 +148,16 @@ if __name__ == "__main__":
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
     preprocessor = SpectrumPreprocessor(cropping=True,
-                                        baseline_correction=False,
-                                        despike= False,
-                                        normalization=False,
-                                        smoothing=False)
+                                        baseline_correction=True,
+                                        remove_cosmic_rays= True,
+                                        normalization=True,
+                                        smoothing=True)
     
     augmentor = SpectrumAugmentor(ramdom_augmentations=True,
                                   augmentation_step_list = None,
                                   config_path= None)
 
-    dataset = RamanDataset(data_folder, metadata_file, preprocessor, augmentor)
+    dataset = SpectrumDataset(data_folder, metadata_file, preprocessor, augmentor)
 
     for i in range(10):
         augmented_spectrum1,augmented_spectrum2, labels = dataset.__getitem__(idx= i)
