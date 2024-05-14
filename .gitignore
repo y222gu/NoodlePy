@@ -8,8 +8,8 @@ scratch/
 .vscode/
 *.pyc
 *.csv
-*.xlsx
 *.pickle
 *.pkl
 noodlepyvenv/
 wandb/
+*.html
