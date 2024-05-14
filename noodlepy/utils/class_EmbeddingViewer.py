@@ -7,7 +7,6 @@ from sklearn.manifold import TSNE
 import torch
 import csv
 
-
 class EmbeddingViewer():
     def __init__(self, embeddings, label_dict_list, map=None):
         if map is None:
@@ -43,12 +42,15 @@ class EmbeddingViewer():
         return embeddings_tsne
     
     def save_files_for_tf_embedding_projector(self, embedding_file_name='embeddings', metadata_file_name='metadata'):
-        with open(embedding_file_name + '.tsv', 'w') as f:
+        embedding_file_name = os.path.join(os.getcwd(), "output_plots", embedding_file_name + ".tsv")        
+        with open(embedding_file_name, 'w') as f:
             for embedding in self.embeddings:
                 embedding_str = '\t'.join(map(str, embedding))
                 f.write(embedding_str + '\n')
 
-        with open(metadata_file_name + '.tsv', 'w', newline='\n') as tsvfile:
+        
+        metadata_file_name = os.path.join(os.getcwd(), "output_plots", metadata_file_name + ".tsv")
+        with open(metadata_file_name, 'w', newline='\n') as tsvfile:
             tsv_writer = csv.writer(tsvfile, delimiter='\t')
             tsv_writer.writerow(self.labels.keys())
             for row in zip(*self.labels.values()):
@@ -83,36 +85,38 @@ class EmbeddingViewer():
         reorganized_label_dict = {}
         for d in list_of_label_dicts:
             for key, value in d.items():
+                if torch.is_tensor(value):
+                    value = value.tolist()
                 if key not in reorganized_label_dict:
                     reorganized_label_dict[key] = []
                 reorganized_label_dict[key].extend(value)
         return reorganized_label_dict
     
-    def tsne2d(self, label_name_for_color, label_name_for_marker, plot_name="2d_tsne_plot"):
+    def tsne2d(self, label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot"):
         embeddings_2d = EmbeddingViewer.compute_tsne(self.embeddings, dim=2)
         embeddingsdf = pd.DataFrame()
         embeddingsdf['x'] = embeddings_2d[:, 0]
         embeddingsdf['y'] = embeddings_2d[:, 1]
 
-        colors = EmbeddingViewer.map_label(self.labels[label_name_for_color], 'to_color')
-        markers = EmbeddingViewer.map_label(self.labels[label_name_for_marker], 'to_marker')
+        colors = EmbeddingViewer.map_label(self, labels=self.labels[label_name_for_color], type='to_color')
+        markers = EmbeddingViewer.map_label(self, labels=self.labels[label_name_for_marker], type='to_marker')
 
         fig, ax = plt.subplots(figsize=(10, 8))
 
         # Scatter points, set alpha low to make points translucent
         for i in range(len(embeddingsdf.x)):
             ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
-        plt.title('2D t-SNE of embeddings')
+        plt.title(title)
         plt.xlabel('Component 1')
         plt.ylabel('Component 2')
-        save_path = os.path.join(os.getcwd(), "output_plots" + plot_name + ".png")
+        save_path = os.path.join(os.getcwd(), "output_plots", title + ".png")
         plt.savefig(save_path)
 
 
-    def tsne3d(embeddings_3d, labels_for_color, labels_for_marker, title='t-SNE 3D Visualization'):
+    def tsne3d(self, embeddings_3d, labels_for_color, labels_for_marker, title='t-SNE 3D Visualization'):
 
-        colors = EmbeddingViewer.map_label(labels_for_color, 'to_color')
-        markers = EmbeddingViewer.map_label(labels_for_marker, 'to_marker')
+        colors = EmbeddingViewer.map_label(self, labels=labels_for_color, type='to_color')
+        markers = EmbeddingViewer.map_label(self, labels=labels_for_marker, type='to_marker')
     
         embeddings_3d = EmbeddingViewer.compute_tsne(embeddings_3d, dim=3)
         fig = go.Scatter3d(embeddings_3d[:, 0], embeddings_3d[:, 1], embeddings_3d[:, 2], mode='markers', marker=dict(color=colors, size=5, symbol=markers))
@@ -126,12 +130,3 @@ class EmbeddingViewer():
                 bgcolor='rgba(0,0,0,0)'
             ))
         fig.write_html(os.path.join(os.getcwd(), "output_plots", title + ".html"))
-
-        
-'''
-        combined_labels = [str(labels_staging[i]) + '\t' + labels_sample_type[i] + '\t' + labels_gender[i] + '\t' + labels_race[i] for i in range(len(labels_staging))]
-        with open('metadata_augment_plasma_saliva_mixed.tsv', 'w') as f:
-            f.write('Index\tstaging\tsample_type\tgender\trace\n')
-            for i, label in enumerate(combined_labels):
-                f.write('{}\t{}\n'.format(i, label))
-'''

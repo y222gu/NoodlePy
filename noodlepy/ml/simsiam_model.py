@@ -13,14 +13,11 @@ from lightly.models.modules import SimSiamPredictionHead, SimSiamProjectionHead
 from noodlepy.utils.class_SpectrumDataset import SpectrumDataset
 import wandb
 import math
-from sklearn.manifold import TSNE
-import pandas as pd
-import matplotlib.pyplot as plt
-import numpy as np
 from noodlepy.utils.class_SpectrumAugmentor import SpectrumAugmentor
 from noodlepy.utils.class_SpectrumPreprocessor import SpectrumPreprocessor
-import plotly.express as px
-import plotly.graph_objects as go
+from noodlepy.utils.class_EmbeddingViewer import EmbeddingViewer
+
+
 
 class cnn_backbone(nn.Module):
     def __init__(self, layer_channel_sizes):
@@ -78,116 +75,6 @@ class SimSiam(pl.LightningModule):
     def configure_optimizers(self):
         optim = torch.optim.SGD(self.parameters(), lr=0.06)
         return optim
-
-def visualize_embeddings(embeddings2d, labels_for_colors, labels_for_markers, plot_name="test",  map=None):
-        colors = map_label(labels_for_colors, 'to_color', map)
-        markers = map_label(labels_for_markers, 'to_marker', map)
-        # Create DF
-        embeddingsdf = pd.DataFrame()
-        # Add x coordinate
-        embeddingsdf['x'] = embeddings2d[:, 0]
-        # Add y coordinate
-        embeddingsdf['y'] = embeddings2d[:, 1]
-        # Loop through different plot groups
-        fig, ax = plt.subplots(figsize=(10, 8))
-
-        # Scatter points, set alpha low to make points translucent
-        for i in range(len(embeddingsdf.x)):
-            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
-        plt.title('Scatter plot of embeddings using t-SNE')
-        save_path = os.path.join(os.getcwd(), "output_plots", "tsne_plot_" + plot_name + ".png")
-        plt.savefig(save_path)
-
-
-def map_label(labels, type, map=None):
-    if map is None:
-        map = {0:'green', 1:'gold', 2:'orangered', 3:'red', 4:'purple', # staging
-                    'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
-                    'White':'xkcd:salmon', # race
-                    'plasma':"P", 'saliva':">"} #  'plasma':"circle", 'saliva':"cross"
-    if type == 'to_color':
-        default_label = 'teal'
-    elif type == 'to_marker':
-        default_label = '*'
-    else:
-        raise ValueError("Invalid type. Choose 'to_color' or 'to_marker'")
-    
-    mapped_labels = []
-    for label in labels:
-        if label in map:
-            mapped_labels.append(map[label])
-        else:
-            mapped_labels.append(default_label)
-    return mapped_labels
-
-def visualize_embeddings_in_construction(embeddings2d, labels_for_colors, labels_for_markers, plot_name="test", map=None):
-    # Define a default color and marker mapping
-
-    # Map colors and markers based on labels
-    colors = map_label(labels_for_colors, 'to_color', map)
-    markers = map_label(labels_for_markers, 'to_marker', map)
-    # To store unique combinations of color, marker, and labels
-    unique_combinations = {}
-
-    # Create a DataFrame with embeddings and labels
-    x = embeddings2d[:, 0]
-    y = embeddings2d[:, 1]
-
-    # Create the scatter plot
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Plot scatter points with specified color and marker
-    for i in range(len(x)):
-        # Create a unique key for the legend (using both color and marker labels)
-        combination_key = (labels_for_colors[i], labels_for_markers[i])
-
-        # Check if this combination is already in the unique_combinations dict
-        if combination_key not in unique_combinations:
-            # Add to unique combinations with a meaningful label for legend
-            unique_combinations[combination_key] = f"{labels_for_colors[i]} & {labels_for_markers[i]}"
-            ax.scatter(x, y, 
-                   c=colors[i], 
-                   marker=markers[i], 
-                   alpha=0.6,
-                   label=unique_combinations[combination_key])
-        else:
-            # Plot without additional legend entry
-            ax.scatter(x, y, 
-                   c=colors[i], 
-                   marker=markers[i], 
-                   alpha=0.6)
-
-    plt.legend(loc='upper right', fontsize='small')  # Adjust legend size
-    ax.set_title('Scatter plot of embeddings using t-SNE')
-    ax.set_xlabel('TSNE Component 1')
-    ax.set_ylabel('TSNE Component 2')
-    plt.show()
-
-    # Save the plot
-    save_path = os.path.join(os.getcwd(), "output_plots", f"tsne_plot_{plot_name}.png")
-    plt.savefig(save_path)
-
-
-def visualize_embeddings_3d(embeddings_3d, colors, markers, title='t-SNE 3D Visualization'):
-
-    fig = go.Scatter3d(embeddings_3d[:, 0], embeddings_3d[:, 1], embeddings_3d[:, 2], mode='markers', marker=dict(color=colors, size=5, symbol=markers))
-
-            
-    fig.update_layout(
-        title=title,
-        scene=dict(
-            xaxis=dict(showgrid=False),
-            yaxis=dict(showgrid=False),
-            zaxis=dict(showgrid=False),
-            bgcolor='rgba(0,0,0,0)'
-        ))
-    fig.write_html(os.path.join(os.getcwd(), "output_plots", "tsne_plot_3d.html"))
-
-
-def compute_tsne_3d(embeddings, n_components=3, **kwargs):
-    tsne = TSNE(n_components=n_components, **kwargs)
-    embeddings_3d = tsne.fit_transform(embeddings)
-    return embeddings_3d
 
 if __name__ == "__main__":
 
@@ -272,16 +159,14 @@ if __name__ == "__main__":
 
     print("Finished Training")
 
+    print("Visualizing test set embeddings with preprocess and augmentations")
     test_preprocessor = SpectrumPreprocessor(cropping=True,
                                         baseline_correction=True,
                                         remove_cosmic_rays= True,
                                         normalization=True,
                                         smoothing=True)
-    
     test_augmentor = SpectrumAugmentor(ramdom_augmentations=True)
-
     test_dataset = SpectrumDataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor, augmentor=test_augmentor)
-
     test_dataloaders = DataLoader(
     test_dataset,
     batch_size=training_cfg.batch_size,
@@ -291,52 +176,26 @@ if __name__ == "__main__":
     )
 
     embeddings = []
-    labels_staging = []
-    labels_sample_type = []
-    labels_gender = []
-    labels_race = []
-
-    # test the model on the test set
+    label_dict_list = []
     model.eval()
     with torch.no_grad():
         for i, (x, _, labels) in enumerate(test_dataloaders):
             x = x.to(device)
             y = model.backbone(x).flatten(start_dim=1)
             embeddings.append(y)
-            labels_staging.extend(labels['staging'].cpu().numpy())
-            labels_sample_type.extend(labels['sample_type'])
-            labels_gender.extend(labels['gender'])
-            labels_race.extend(labels['race'])    
+            label_dict_list.append(labels)
 
     embeddings = torch.cat(embeddings, dim=0)
     embeddings = embeddings.cpu().numpy()
 
-    # Save embeddings to file
-    with open('embeddings_augment_plasma_saliva_mixed.tsv', 'w') as f:
-        for embedding in embeddings:
-            embedding_str = '\t'.join(map(str, embedding))
-            f.write(embedding_str + '\n')
+    viewer = EmbeddingViewer(embeddings, label_dict_list)
+    viewer.tsne2d(label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot_augmented")
+    viewer.save_files_for_tf_embedding_projector(embedding_file_name='embeddings_augmented', metadata_file_name='metadata_augmented')
 
-    combined_labels = [str(labels_staging[i]) + '\t' + labels_sample_type[i] + '\t' + labels_gender[i] + '\t' + labels_race[i] for i in range(len(labels_staging))]
-    with open('metadata_augment_plasma_saliva_mixed.tsv', 'w') as f:
-        f.write('Index\tstaging\tsample_type\tgender\trace\n')
-        for i, label in enumerate(combined_labels):
-            f.write('{}\t{}\n'.format(i, label))
-
-    tsne = TSNE(random_state=0, n_iter=1000, metric='cosine')
-    embeddings2d = tsne.fit_transform(embeddings)
-
-    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_augment_plasma_saliva_mixed')
-    visualize_embeddings(embeddings2d, labels_gender, labels_sample_type,'gender_augment_plasma_saliva_mixed')
-    visualize_embeddings(embeddings2d, labels_race, labels_sample_type,'race_augment_plasma_saliva_mixed')
-    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_with_three_classes_augment_plasma_saliva_mixed', map=
-                         {0: 'green', 1: 'gold', 2: 'gold', 3: 'red', 4: 'red', 'plasma': 'P', 'saliva': '>'})
-
-
-
+    
+    print("Visualizing test set embeddings with cropping only")
     test_preprocessor_crop_only = SpectrumPreprocessor(cropping=True)
     test_dataset_crop_only = SpectrumDataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor_crop_only, augmentor=None)
-
     test_dataloaders_crop_only = DataLoader(
     test_dataset_crop_only,
     batch_size=training_cfg.batch_size,
@@ -346,44 +205,19 @@ if __name__ == "__main__":
     )
 
     embeddings = []
-    labels_staging = []
-    labels_sample_type = []
-    labels_gender = []
-    labels_race = []
-
-    # test the model on the test set
+    label_dict_list = []
     model.eval()
     with torch.no_grad():
         for i, (x, _, labels) in enumerate(test_dataloaders_crop_only):
             x = x.to(device)
             y = model.backbone(x).flatten(start_dim=1)
             embeddings.append(y)
-            labels_staging.extend(labels['staging'].cpu().numpy())
-            labels_sample_type.extend(labels['sample_type'])
-            labels_gender.extend(labels['gender'])
-            labels_race.extend(labels['race'])    
-
-    # Save embeddings to file
-    with open('embeddings_crop_only_plasma_saliva_mixed.tsv', 'w') as f:
-        for embedding in embeddings:
-            embedding_str = '\t'.join(map(str, embedding))
-            f.write(embedding_str + '\n')
-
-    combined_labels = [str(labels_staging[i]) + '\t' + labels_sample_type[i] + '\t' + labels_gender[i] + '\t' + labels_race[i] for i in range(len(labels_staging))]
-    with open('metadata_crop_only_plasma_saliva_mixed.tsv', 'w') as f:
-        f.write('Index\tstaging\tsample_type\tgender\trace\n')
-        for i, label in enumerate(combined_labels):
-            f.write('{}\t{}\n'.format(i, label))
+            label_dict_list.append(labels)
 
     embeddings = torch.cat(embeddings, dim=0)
     embeddings = embeddings.cpu().numpy()
-    tsne = TSNE(random_state=0, n_iter=1000, metric='cosine')
-    embeddings2d = tsne.fit_transform(embeddings)
 
-    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_crop_only_plasma_saliva_mixed')
-    visualize_embeddings(embeddings2d, labels_gender, labels_sample_type,'gender_crop_only_plasma_saliva_mixed')
-    visualize_embeddings(embeddings2d, labels_race, labels_sample_type,'race_crop_only_plasma_saliva_mixed')
-    visualize_embeddings(embeddings2d, labels_staging, labels_sample_type, 'staging_with_three_classes_crop_only_plasma_saliva_mixed', map=
-                         {0: 'green', 1: 'gold', 2: 'gold', 3: 'red', 4: 'red', 'plasma': 'P', 'saliva': '>'})
-
+    viewer = EmbeddingViewer(embeddings, label_dict_list)
+    viewer.tsne2d(label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot_crop_only")
+    viewer.save_files_for_tf_embedding_projector(embedding_file_name='embeddings_crop_only', metadata_file_name='metadata_crop_only')
     print("Finished Visualizing")
