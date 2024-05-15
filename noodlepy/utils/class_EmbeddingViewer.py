@@ -94,6 +94,12 @@ class EmbeddingViewer():
     
     def tsne2d(self, label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot"):
         embeddings_2d = EmbeddingViewer.compute_tsne(self.embeddings, dim=2)
+        embedding_file_name = os.path.join(os.getcwd(), "output_plots", title+"_2d.tsv")        
+        with open(embedding_file_name, 'w') as f:
+            for embedding in embeddings_2d:
+                embedding_str = '\t'.join(map(str, embedding))
+                f.write(embedding_str + '\n')
+
         embeddingsdf = pd.DataFrame()
         embeddingsdf['x'] = embeddings_2d[:, 0]
         embeddingsdf['y'] = embeddings_2d[:, 1]
@@ -130,3 +136,23 @@ class EmbeddingViewer():
                 bgcolor='rgba(0,0,0,0)'
             ))
         fig.write_html(os.path.join(os.getcwd(), "output_plots", title + ".html"))
+
+    def tsne2d_by_patient(self, title='t-SNE 2D Visualization by Patient'):
+        embeddings_2d = EmbeddingViewer.compute_tsne(self.embeddings, dim=2)
+        embeddingsdf = pd.DataFrame()
+        embeddingsdf['x'] = embeddings_2d[:, 0]
+        embeddingsdf['y'] = embeddings_2d[:, 1]
+
+        colors = EmbeddingViewer.map_label(self, labels=self.labels['patient_id'], type='to_color')
+        markers = EmbeddingViewer.map_label(self, labels=self.labels['sample_type'], type='to_marker')
+
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        # Scatter points, set alpha low to make points translucent
+        for i in range(len(embeddingsdf.x)):
+            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
+        plt.title(title)
+        plt.xlabel('Component 1')
+        plt.ylabel('Component 2')
+        save_path = os.path.join(os.getcwd(), "output_plots", title + ".png")
+        plt.savefig(save_path)

@@ -58,12 +58,16 @@ class SpectrumDataset(Dataset):
         augmented_spectrum_list (list[Spectrum]): a tuple of 2 augmented Spectrum objects
         """
         chosen_spectrum:Spectrum = self.db[idx]
+        chosen_spectrum.display("raw_spectrum")
 
         if self.preprocessor is not None:
             preprocessor = self.preprocessor
             preprocessed_spectrum = preprocessor.pre_process(chosen_spectrum)
         else:
             preprocessed_spectrum = chosen_spectrum
+        
+        preprocessed_spectrum.display("preprocessed_spectrum")
+
 
         if self.augmentor is not None:
             augmentor = self.augmentor
@@ -71,6 +75,9 @@ class SpectrumDataset(Dataset):
         else:
             augmented_spectrum_1 = preprocessed_spectrum
             augmented_spectrum_2 = preprocessed_spectrum
+
+        augmented_spectrum_1.display("augmented_spectrum_A")
+        augmented_spectrum_2.display("augmented_spectrum_B")
 
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
@@ -144,7 +151,7 @@ class SpectrumDataset(Dataset):
         return spectrum_objects
 
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed","all")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "saliva","saliva_all")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
     preprocessor = SpectrumPreprocessor(cropping=True,
@@ -159,8 +166,5 @@ if __name__ == "__main__":
 
     dataset = SpectrumDataset(data_folder, metadata_file, preprocessor, augmentor)
 
-    for i in range(10):
+    for i in range(5):
         augmented_spectrum1,augmented_spectrum2, labels = dataset.__getitem__(idx= i)
-        print(augmented_spectrum1.shape)
-        print(augmented_spectrum2.shape)
-        print(labels)

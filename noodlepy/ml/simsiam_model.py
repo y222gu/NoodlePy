@@ -91,14 +91,14 @@ if __name__ == "__main__":
         # Set the project where this run will be logged
         project="SimSiam", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"plasma_saliva_mixed", 
+        name=f"plasma_only", 
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.02,
-            "epochs": 1,
+            "epochs": 12,
             "batch_size": 10,
             "backbone_dim": [1, 8, 16, 32, 64, 128],
-            "random_seed" : 42,
+            "random_seed" : 0,
             "number_of_workers": 8
             })
     training_cfg = wandb.config
@@ -118,7 +118,6 @@ if __name__ == "__main__":
     g.manual_seed(training_cfg.random_seed)
 
 
-
     cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -126,8 +125,8 @@ if __name__ == "__main__":
     criterion = NegativeCosineSimilarity()
     optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
 
-    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed","train")
-    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma_saliva_mixed","test" )
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma","train")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma","test" )
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
