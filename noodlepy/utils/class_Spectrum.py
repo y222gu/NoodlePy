@@ -1,5 +1,3 @@
-# define spectrum class
-from hmac import new
 import numpy as np
 import matplotlib.pyplot as plt
 from typing import Any

@@ -1,13 +1,13 @@
 # Note: The model and training settings do not follow the reference settings
 # from the paper. The settings are chosen such that the example can easily be
 # run on a small dataset with a single GPU.
-
+import os
+os.environ["CUBLAS_WORKSPACE_CONFIG"] = ":4096:8"
 import pytorch_lightning as pl
 import torch
 import torchvision
 from torch import nn
 from torch.utils.data import DataLoader
-import os
 from lightly.loss import NegativeCosineSimilarity
 from lightly.models.modules import SimSiamPredictionHead, SimSiamProjectionHead
 from noodlepy.utils.class_SpectrumDataset import SpectrumDataset
@@ -16,6 +16,9 @@ import math
 from noodlepy.utils.class_SpectrumAugmentor import SpectrumAugmentor
 from noodlepy.utils.class_SpectrumPreprocessor import SpectrumPreprocessor
 from noodlepy.utils.class_EmbeddingViewer import EmbeddingViewer
+import random
+import numpy as np
+
 
 
 
@@ -75,6 +78,11 @@ class SimSiam(pl.LightningModule):
     def configure_optimizers(self):
         optim = torch.optim.SGD(self.parameters(), lr=0.06)
         return optim
+    
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
 
 if __name__ == "__main__":
 
@@ -89,10 +97,28 @@ if __name__ == "__main__":
             "learning_rate": 0.02,
             "epochs": 1,
             "batch_size": 10,
-            "backbone_dim": [1, 8, 16, 32, 64, 128]
+            "backbone_dim": [1, 8, 16, 32, 64, 128],
+            "random_seed" : 42,
+            "number_of_workers": 8
             })
     training_cfg = wandb.config
-    
+
+    random.seed(training_cfg.random_seed)
+    torch.manual_seed(training_cfg.random_seed)
+    torch.cuda.manual_seed(training_cfg.random_seed)
+    torch.cuda.manual_seed_all(training_cfg.random_seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+    np.random.seed(training_cfg.random_seed)
+    pl.seed_everything(training_cfg.random_seed)
+    os.environ['PYTHONHASHSEED'] = str(training_cfg.random_seed)
+    g = torch.Generator()
+    g.manual_seed(training_cfg.random_seed)
+
+
+
     cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -119,8 +145,10 @@ if __name__ == "__main__":
         train_dataset,
         batch_size=training_cfg.batch_size,
         shuffle=True,
-        drop_last=True,
-        num_workers=8,
+        drop_last=False,
+        num_workers=training_cfg.number_of_workers,
+        worker_init_fn=seed_worker,
+        generator=g
     )
 
     # training
@@ -172,7 +200,9 @@ if __name__ == "__main__":
     batch_size=training_cfg.batch_size,
     shuffle=False,
     drop_last=False,
-    num_workers=8
+    num_workers=training_cfg.number_of_workers,
+    worker_init_fn=seed_worker,
+    generator=g
     )
 
     embeddings = []
@@ -201,7 +231,9 @@ if __name__ == "__main__":
     batch_size=training_cfg.batch_size,
     shuffle=False,
     drop_last=False,
-    num_workers=8,
+    num_workers=training_cfg.number_of_workers,
+    worker_init_fn=seed_worker,
+    generator=g
     )
 
     embeddings = []
