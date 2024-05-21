@@ -13,7 +13,7 @@ class SpectrumAugmentor:
         
         if config_path is None:
             current_directory = os.getcwd()
-            config_path = os.path.join(current_directory, "noodlepy", "config", "config_default.yml")
+            config_path = os.path.join(current_directory, 'NoodlePy', "noodlepy", "config", "config_default.yml")
 
         with open(config_path, "rb") as yaml_file:
             config = yaml.safe_load(yaml_file)
