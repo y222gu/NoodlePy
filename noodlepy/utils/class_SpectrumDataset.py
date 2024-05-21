@@ -62,7 +62,7 @@ class SpectrumDataset(Dataset):
 
         if self.preprocessor is not None:
             preprocessor = self.preprocessor
-            preprocessed_spectrum = preprocessor.pre_process(chosen_spectrum)
+            preprocessed_spectrum = preprocessor.preprocess(chosen_spectrum)
         else:
             preprocessed_spectrum = chosen_spectrum
         
