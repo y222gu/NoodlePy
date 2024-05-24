@@ -87,22 +87,40 @@ def load_files_to_spectrum_objects(data_folder:str,
                 spectrum = Spectrum(wavelength_nm=wavelength_nm,
                                     intensity=intensity,
                                     metadata=metadata,)
+                print(len(intensity))
+                print(len(wavelength_nm))
+                print(metadata)
+
                 spectrum_objects.append(spectrum)
         return spectrum_objects
 
 def preprocess_and_save_to_file(db, folder_to_save:str):
-        preprocessor = SpectrumPreprocessor()
+        preprocessor = SpectrumPreprocessor(cropping= True,
+                baseline_correction = True,
+                remove_cosmic_rays = True,
+                normalization = True,
+                smoothing = True)
         # save spectrum objects of with the sample patient_id to a file with name as patient_id_sample_type_staging.txt
         for spectrum in db:
             preprocessed_spectrum = preprocessor.preprocess(spectrum)
+            print('preprocessed_spectrum')
+            print(len(preprocessed_spectrum.intensity))
+            print(len(preprocessed_spectrum.raman_shift_cm))
+            print(preprocessed_spectrum.metadata)
+
             patient_id = spectrum.metadata['patient_id']
             sample_type = spectrum.metadata['sample_type']
             staging = spectrum.metadata['staging']
             file_name = f"{patient_id}_{sample_type}_{staging}.txt"
             file_path = os.path.join(folder_to_save, str(sample_type), str(staging), file_name)
-            with open(file_path, "w") as f:
-                for i in range(len(preprocessed_spectrum.wavelength_nm)):
-                    f.write(f"{preprocessed_spectrum.wavelength_nm[i]},{preprocessed_spectrum.intensity[i]}\n")
+            # append the raman shift and intensity to the file without rewrite the file
+            if not os.path.exists(os.path.dirname(file_path)):
+                os.makedirs(os.path.dirname(file_path))
+
+            with open(file_path, 'a') as f:
+                for i in range(len(preprocessed_spectrum.raman_shift_cm)):
+                    f.write(f"{preprocessed_spectrum.raman_shift_cm[i]},{preprocessed_spectrum.intensity[i]}\n") 
+
         print(f"Preprocessed spectra saved to {folder_to_save}")
 
 
