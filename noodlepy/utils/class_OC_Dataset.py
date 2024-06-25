@@ -127,7 +127,7 @@ class OC_Dataset(Dataset):
         return spectrum_objects
 
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy","data","202404_OvCa-project_calibrated")
+    data_folder = os.path.join(os.getcwd(), "noodlepy","data","202404_OvCa-project_calibrated", "test")
 
     preprocessor = SpectrumPreprocessor(cropping=True,
                                         baseline_correction=True,
