@@ -19,9 +19,6 @@ from noodlepy.utils.class_EmbeddingViewer import EmbeddingViewer
 import random
 import numpy as np
 
-
-
-
 class cnn_backbone(nn.Module):
     def __init__(self, layer_channel_sizes):
         super(cnn_backbone, self).__init__()
@@ -79,84 +76,19 @@ class SimSiam(pl.LightningModule):
         optim = torch.optim.SGD(self.parameters(), lr=0.06)
         return optim
     
-def seed_worker(worker_id):
-    worker_seed = torch.initial_seed() % 2**32
-    np.random.seed(worker_seed)
-    random.seed(worker_seed)
-
-if __name__ == "__main__":
-
-    wandb.login()
-    wandb.init(
-        # Set the project where this run will be logged
-        project="SimSiam", 
-        # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"plasma_only", 
-        # Track hyperparameters and run metadata
-        config={
-            "learning_rate": 0.02,
-            "epochs": 12,
-            "batch_size": 10,
-            "backbone_dim": [1, 8, 16, 32, 64, 128],
-            "random_seed" : 0,
-            "number_of_workers": 8
-            })
-    training_cfg = wandb.config
-
-    random.seed(training_cfg.random_seed)
-    torch.manual_seed(training_cfg.random_seed)
-    torch.cuda.manual_seed(training_cfg.random_seed)
-    torch.cuda.manual_seed_all(training_cfg.random_seed)
-    torch.backends.cudnn.benchmark = False
-    torch.backends.cudnn.enabled = False
-    torch.backends.cudnn.deterministic = True
-    torch.use_deterministic_algorithms(True)
-    np.random.seed(training_cfg.random_seed)
-    pl.seed_everything(training_cfg.random_seed)
-    os.environ['PYTHONHASHSEED'] = str(training_cfg.random_seed)
-    g = torch.Generator()
-    g.manual_seed(training_cfg.random_seed)
-
-
-    cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
-    model = SimSiam(cnn_backbone_1d)
+def train_model(model, train_dataloader, training_cfg):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     criterion = NegativeCosineSimilarity()
     optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
 
-    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma","train")
-    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "plasma","test" )
-
-    annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
-
-    train_preprocessor = SpectrumPreprocessor(cropping=True,
-                                        baseline_correction=True,
-                                        remove_cosmic_rays= True,
-                                        normalization=True,
-                                        smoothing=True)
-    train_augmentor = SpectrumAugmentor(ramdom_augmentations=True,
-                                  augmentation_step_list = None,
-                                  config_path= None)
-    train_dataset = SpectrumDataset(train_dataset_path, annotation_file_path, train_preprocessor, train_augmentor)
-
-    train_dataloaders = DataLoader(
-        train_dataset,
-        batch_size=training_cfg.batch_size,
-        shuffle=True,
-        drop_last=False,
-        num_workers=training_cfg.number_of_workers,
-        worker_init_fn=seed_worker,
-        generator=g
-    )
-
-    # training
+        # training
     print("Starting Training")
     for epoch in range(training_cfg.epochs):
         avg_loss = 0.0
         avg_output_std = 0.0
         #total_loss = 0.0
-        for i, (x0, x1, labels) in enumerate(train_dataloaders):
+        for i, (x0, x1, labels) in enumerate(train_dataloader):
             x0 = x0.to(device)
             x1 = x1.to(device)
             z0, p0 = model(x0)
@@ -183,10 +115,99 @@ if __name__ == "__main__":
         collapse_level = max(0.0, 1 - math.sqrt(64) * avg_output_std)
         wandb.log({'epoch': epoch+1, 'loss': avg_loss, 'collapse_level': collapse_level})
         print(f"epoch: {epoch:>02}, loss: {avg_loss:.5f}, collapse_level: {collapse_level:.5f}")
-
     print("Finished Training")
+    return model
 
-    print("Visualizing test set embeddings with preprocess and augmentations")
+def test_model(model, test_dataloader):
+    print("Visualizing test set embeddings")
+    device = "cuda" if torch.cuda.is_available() else "cpu"
+    embeddings = []
+    label_dict_list = []
+    model.eval()
+    with torch.no_grad():
+        for i, (x, _, labels) in enumerate(test_dataloader):
+            x = x.to(device)
+            y = model.backbone(x).flatten(start_dim=1)
+            embeddings.append(y)
+            label_dict_list.append(labels)
+
+    embeddings = torch.cat(embeddings, dim=0)
+    embeddings = embeddings.cpu().numpy()
+
+    viewer = EmbeddingViewer(embeddings, label_dict_list)
+    viewer.tsne2d(label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot")
+    viewer.save_files_for_tf_embedding_projector(embedding_file_name='embeddings', metadata_file_name='metadata')
+
+
+def seed_all_random_process(seed):
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+    np.random.seed(seed)
+    pl.seed_everything(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
+    generator = torch.Generator()
+    generator.manual_seed(seed)
+    return generator
+
+def seed_worker(worker_id):
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+    
+
+if __name__ == "__main__":
+
+    wandb.login()
+    wandb.init(
+        # Set the project where this run will be logged
+        project="SimSiam", 
+        # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
+        name=f"plasma_only", 
+        # Track hyperparameters and run metadata
+        config={
+            "learning_rate": 0.02,
+            "epochs": 3,
+            "batch_size": 10,
+            "backbone_dim": [1, 8, 16, 32, 64, 128],
+            "random_seed" : 0,
+            "number_of_workers": 8
+            })
+    training_cfg = wandb.config
+    generator = seed_all_random_process(training_cfg.random_seed)
+
+    cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
+    model = SimSiam(cnn_backbone_1d)
+
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "plasma_saliva_mixed","train")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "plasma_saliva_mixed","test" )
+    annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
+
+    train_preprocessor = SpectrumPreprocessor(cropping=True,
+                                        baseline_correction=True,
+                                        remove_cosmic_rays= True,
+                                        normalization=True,
+                                        smoothing=True)
+    train_augmentor = SpectrumAugmentor(ramdom_augmentations=True,
+                                  augmentation_step_list = None,
+                                  config_path= None)
+    train_dataset = SpectrumDataset(train_dataset_path, annotation_file_path, train_preprocessor, train_augmentor)
+
+    train_dataloaders = DataLoader(
+        train_dataset,
+        batch_size=training_cfg.batch_size,
+        shuffle=True,
+        drop_last=False,
+        num_workers=training_cfg.number_of_workers,
+        worker_init_fn=seed_worker,
+        generator=generator
+    )
+
     test_preprocessor = SpectrumPreprocessor(cropping=True,
                                         baseline_correction=True,
                                         remove_cosmic_rays= True,
@@ -201,54 +222,9 @@ if __name__ == "__main__":
     drop_last=False,
     num_workers=training_cfg.number_of_workers,
     worker_init_fn=seed_worker,
-    generator=g
+    generator=generator
     )
 
-    embeddings = []
-    label_dict_list = []
-    model.eval()
-    with torch.no_grad():
-        for i, (x, _, labels) in enumerate(test_dataloaders):
-            x = x.to(device)
-            y = model.backbone(x).flatten(start_dim=1)
-            embeddings.append(y)
-            label_dict_list.append(labels)
-
-    embeddings = torch.cat(embeddings, dim=0)
-    embeddings = embeddings.cpu().numpy()
-
-    viewer = EmbeddingViewer(embeddings, label_dict_list)
-    viewer.tsne2d(label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot_augmented")
-    viewer.save_files_for_tf_embedding_projector(embedding_file_name='embeddings_augmented', metadata_file_name='metadata_augmented')
-
-    
-    print("Visualizing test set embeddings with cropping only")
-    test_preprocessor_crop_only = SpectrumPreprocessor(cropping=True)
-    test_dataset_crop_only = SpectrumDataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor_crop_only, augmentor=None)
-    test_dataloaders_crop_only = DataLoader(
-    test_dataset_crop_only,
-    batch_size=training_cfg.batch_size,
-    shuffle=False,
-    drop_last=False,
-    num_workers=training_cfg.number_of_workers,
-    worker_init_fn=seed_worker,
-    generator=g
-    )
-
-    embeddings = []
-    label_dict_list = []
-    model.eval()
-    with torch.no_grad():
-        for i, (x, _, labels) in enumerate(test_dataloaders_crop_only):
-            x = x.to(device)
-            y = model.backbone(x).flatten(start_dim=1)
-            embeddings.append(y)
-            label_dict_list.append(labels)
-
-    embeddings = torch.cat(embeddings, dim=0)
-    embeddings = embeddings.cpu().numpy()
-
-    viewer = EmbeddingViewer(embeddings, label_dict_list)
-    viewer.tsne2d(label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot_crop_only")
-    viewer.save_files_for_tf_embedding_projector(embedding_file_name='embeddings_crop_only', metadata_file_name='metadata_crop_only')
-    print("Finished Visualizing")
+    model = train_model(model, train_dataloaders, training_cfg)
+    test_model(model, test_dataloaders)
+   

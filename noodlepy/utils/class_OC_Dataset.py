@@ -58,7 +58,7 @@ class OC_Dataset(Dataset):
         augmented_spectrum_list (list[Spectrum]): a tuple of 2 augmented Spectrum objects
         """
         chosen_spectrum:Spectrum = self.db[idx]
-        chosen_spectrum.display("raw_spectrum")
+        # chosen_spectrum.display("raw_spectrum")
 
         if self.preprocessor is not None:
             preprocessor = self.preprocessor
@@ -66,7 +66,7 @@ class OC_Dataset(Dataset):
         else:
             preprocessed_spectrum = chosen_spectrum
         
-        preprocessed_spectrum.display("preprocessed_spectrum")
+        # preprocessed_spectrum.display("preprocessed_spectrum")
 
 
         if self.augmentor is not None:
@@ -75,9 +75,6 @@ class OC_Dataset(Dataset):
         else:
             augmented_spectrum_1 = preprocessed_spectrum
             augmented_spectrum_2 = preprocessed_spectrum
-
-        augmented_spectrum_1.display("augmented_spectrum_A")
-        augmented_spectrum_2.display("augmented_spectrum_B")
 
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
@@ -93,6 +90,7 @@ class OC_Dataset(Dataset):
         staging = re.findall('\D+', f_split[2][4:])
 
         patient_labels['patient_id'] = patient_id
+        patient_labels['sample_type'] = f_split[3]
         patient_labels['exposure_time'] = patient_id = re.findall('\d+', f_split[-1])
         patient_labels['diltuion'] = f_split[4]
         patient_labels['staging'] = staging
@@ -129,7 +127,7 @@ class OC_Dataset(Dataset):
         return spectrum_objects
 
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy","data","202404_OvCa-project_calibrated","test")
+    data_folder = os.path.join(os.getcwd(), "noodlepy","data","202404_OvCa-project_calibrated")
 
     preprocessor = SpectrumPreprocessor(cropping=True,
                                         baseline_correction=True,
