@@ -10,7 +10,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from lightly.loss import NegativeCosineSimilarity
 from lightly.models.modules import SimSiamPredictionHead, SimSiamProjectionHead
-from noodlepy.utils.class_SpectrumDataset import SpectrumDataset
+from noodlepy.utils.class_OC_Dataset import OC_Dataset
 import wandb
 import math
 from noodlepy.utils.class_SpectrumAugmentor import SpectrumAugmentor
@@ -118,7 +118,7 @@ def train_model(model, train_dataloader, training_cfg):
     print("Finished Training")
     return model
 
-def test_model(model, test_dataloader):
+def test_model(model, test_dataloader, label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None):
     print("Visualizing test set embeddings")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embeddings = []
@@ -134,8 +134,8 @@ def test_model(model, test_dataloader):
     embeddings = torch.cat(embeddings, dim=0)
     embeddings = embeddings.cpu().numpy()
 
-    viewer = EmbeddingViewer(embeddings, label_dict_list)
-    viewer.tsne2d(label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot")
+    viewer = EmbeddingViewer(embeddings, label_dict_list, map=map_for_color_and_marker)
+    viewer.tsne2d(label_name_for_color=label_name_for_color, label_name_for_marker=label_name_for_marker, title="2d_tsne_plot")
     viewer.save_files_for_tf_embedding_projector(embedding_file_name='embeddings', metadata_file_name='metadata')
 
 
@@ -184,8 +184,9 @@ if __name__ == "__main__":
     cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
 
-    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "plasma_saliva_mixed","train")
-    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "plasma_saliva_mixed","test" )
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "202404_OvCa-project_calibrated","train")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "202404_OvCa-project_calibrated","test" )
+
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
     train_preprocessor = SpectrumPreprocessor(cropping=True,
@@ -196,7 +197,8 @@ if __name__ == "__main__":
     train_augmentor = SpectrumAugmentor(ramdom_augmentations=True,
                                   augmentation_step_list = None,
                                   config_path= None)
-    train_dataset = SpectrumDataset(train_dataset_path, annotation_file_path, train_preprocessor, train_augmentor)
+    
+    train_dataset = OC_Dataset(train_dataset_path, preprocessor=train_preprocessor, augmentor=train_augmentor)
 
     train_dataloaders = DataLoader(
         train_dataset,
@@ -214,7 +216,7 @@ if __name__ == "__main__":
                                         normalization=True,
                                         smoothing=True)
     test_augmentor = SpectrumAugmentor(ramdom_augmentations=True)
-    test_dataset = SpectrumDataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor, augmentor=test_augmentor)
+    test_dataset = OC_Dataset(test_dataset_path, preprocessor=test_preprocessor, augmentor=test_augmentor)
     test_dataloaders = DataLoader(
     test_dataset,
     batch_size=training_cfg.batch_size,
@@ -226,5 +228,7 @@ if __name__ == "__main__":
     )
 
     model = train_model(model, train_dataloaders, training_cfg)
-    test_model(model, test_dataloaders)
+
+    map_for_color_and_marker = {'Plasma': 'o', 'Serum': 'x', 'C': 'b', 'OC': 'r', 'EVs': 'g', 'serum': 'y', 'desalted1x': 'o', 'original': 'x'}
+    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None)
    

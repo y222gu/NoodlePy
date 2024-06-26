@@ -29,12 +29,14 @@ class OC_Dataset(Dataset):
         self.augmentor = augmentor
 
         list_of_spectrum_objects = []
-        list_of_file_names = glob.glob(os.path.join(data_folder, '**/*.txt'), recursive=True)
+        list_of_file_paths = glob.glob(os.path.join(data_folder, '**/*.txt'), recursive=True)
+        list_of_file_names = [os.path.basename(file_path) for file_path in list_of_file_paths]
 
 
-        for filename in list_of_file_names:
+        for file_path in list_of_file_paths:
+            filename = os.path.basename(file_path)
             patient_annotations = OC_Dataset._extract_patient_labels(filename)
-            spectrum_objects = OC_Dataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
+            spectrum_objects = OC_Dataset._load_files_to_spectrum_objects(file_path, patient_annotations)
             list_of_spectrum_objects+=spectrum_objects
 
         self.db = list_of_spectrum_objects
@@ -89,18 +91,29 @@ class OC_Dataset(Dataset):
         patient_id = re.findall('\d+', f_split[2][4:])
         staging = re.findall('\D+', f_split[2][4:])
 
-        patient_labels['patient_id'] = patient_id
+        exposure_time = []
+        match = re.search(r'\d+(\.\d+)?', f_split[-1])
+        if match:
+            exposure_time.append(float(match.group()))
+
+        if f_split[4] != 'desalted1x' and f_split[4] != 'original':
+            dilution = 'none'
+        else:
+            dilution = f_split[4]
+
+        patient_labels['patient_id'] = patient_id[0]
         patient_labels['sample_type'] = f_split[3]
-        patient_labels['exposure_time'] = patient_id = re.findall('\d+', f_split[-1])
-        patient_labels['diltuion'] = f_split[4]
-        patient_labels['staging'] = staging
+        patient_labels['exposure_time'] = exposure_time[0]
+        patient_labels['diltuion'] = dilution
+        patient_labels['staging'] = staging[0]
+
+        print(patient_labels)
         
         return patient_labels
     
-    def _load_files_to_spectrum_objects(data_folder:str,
-                               filename:str, 
+    def _load_files_to_spectrum_objects(file_path: str,
                                patient_annotations:dict):
-        with open(os.path.join(data_folder, filename)) as f:
+        with open(file_path) as f:
             data = pd.read_csv(f, sep=",", header=None)
 
             repeated_wavelengths = data.iloc[:,0].value_counts()
