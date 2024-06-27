@@ -229,6 +229,6 @@ if __name__ == "__main__":
 
     model = train_model(model, train_dataloaders, training_cfg)
 
-    map_for_color_and_marker = {'Plasma': 'o', 'Serum': 'x', 'C': 'b', 'OC': 'r', 'EVs': 'g', 'serum': 'y', 'desalted1x': 'o', 'original': 'x'}
-    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None)
+    map_for_color_and_marker = {'Plasma': 'o', 'Serum': 'x', 'C': 'b', 'OC': 'r', 'EVs': 'g', 'serum': 'y', 'desalted1x': 'p', 'original': 'x', 'none': 'o'}
+    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = map_for_color_and_marker)
    
