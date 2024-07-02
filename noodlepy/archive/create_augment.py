@@ -4,7 +4,7 @@
 import numpy as np
 from sklearn import base
 import yaml
-from noodlepy.utils.class_Spectrum import Spectrum
+from noodlepy.utils.spectrum import Spectrum
 from typing import Any
 import copy
 from collections import defaultdict

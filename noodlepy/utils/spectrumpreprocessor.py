@@ -1,5 +1,5 @@
 import copy
-from noodlepy.utils.class_Spectrum import Spectrum
+from noodlepy.utils.spectrum import Spectrum
 import os
 import yaml
 

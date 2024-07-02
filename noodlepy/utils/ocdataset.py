@@ -2,9 +2,9 @@
 from torch.utils.data import Dataset
 import pandas as pd
 import os
-from noodlepy.utils.class_Spectrum import Spectrum
-from noodlepy.utils.class_SpectrumPreprocessor import SpectrumPreprocessor
-from noodlepy.utils.class_SpectrumAugmentor import SpectrumAugmentor
+from noodlepy.utils.spectrum import Spectrum
+from noodlepy.utils.spectrumpreprocessor import SpectrumPreprocessor
+from noodlepy.utils.spectrumaugmentor import SpectrumAugmentor
 import torch
 import copy
 import numpy as np

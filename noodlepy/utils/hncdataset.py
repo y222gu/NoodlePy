@@ -2,14 +2,14 @@
 from torch.utils.data import Dataset
 import pandas as pd
 import os
-from noodlepy.utils.class_Spectrum import Spectrum
-from noodlepy.utils.class_SpectrumPreprocessor import SpectrumPreprocessor
-from noodlepy.utils.class_SpectrumAugmentor import SpectrumAugmentor
+from noodlepy.utils.spectrum import Spectrum
+from noodlepy.utils.spectrumpreprocessor import SpectrumPreprocessor
+from noodlepy.utils.spectrumaugmentor import SpectrumAugmentor
 import torch
 import copy
 import numpy as np
 
-class SpectrumDataset(Dataset):
+class HNC_Dataset(Dataset):
     def __init__(self, data_folder = None,
                  annotation_file_path = None,
                  preprocessor = None,
@@ -33,8 +33,8 @@ class SpectrumDataset(Dataset):
         annotation_all = pd.read_excel(annotation_file_path)
 
         for filename in list_of_file_names:
-            patient_annotations = SpectrumDataset._extract_patient_labels(filename, annotation_all)
-            spectrum_objects = SpectrumDataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
+            patient_annotations = HNC_Dataset._extract_patient_labels(filename, annotation_all)
+            spectrum_objects = HNC_Dataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
             list_of_spectrum_objects+=spectrum_objects
 
         self.db = list_of_spectrum_objects
@@ -161,7 +161,7 @@ if __name__ == "__main__":
                                   augmentation_step_list = None,
                                   config_path= None)
 
-    dataset = SpectrumDataset(data_folder, metadata_file, preprocessor, augmentor)
+    dataset = HNC_Dataset(data_folder, metadata_file, preprocessor, augmentor)
 
     for i in range(5):
         augmented_spectrum1,augmented_spectrum2, labels = dataset.__getitem__(idx= i)
