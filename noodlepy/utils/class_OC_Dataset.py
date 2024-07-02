@@ -102,6 +102,7 @@ class OC_Dataset(Dataset):
             dilution = f_split[4]
 
         patient_labels['patient_id'] = patient_id[0]
+        patient_labels['file_id'] = int(f_split[-2])
         patient_labels['sample_type'] = f_split[3]
         patient_labels['exposure_time'] = exposure_time[0]
         patient_labels['diltuion'] = dilution
