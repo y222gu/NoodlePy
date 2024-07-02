@@ -10,7 +10,7 @@ from torch import nn
 from torch.utils.data import DataLoader
 from lightly.loss import NegativeCosineSimilarity
 from lightly.models.modules import SimSiamPredictionHead, SimSiamProjectionHead
-from noodlepy.utils.class_OC_Dataset import OC_Dataset
+from noodlepy.utils.class_SpectrumDataset import SpectrumDataset
 import wandb
 import math
 from noodlepy.utils.class_SpectrumAugmentor import SpectrumAugmentor
@@ -123,6 +123,7 @@ def test_model(model, test_dataloader, label_name_for_color='staging', label_nam
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embeddings = []
     label_dict_list = []
+    model.to(device)
     model.eval()
     with torch.no_grad():
         for i, (x, _, labels) in enumerate(test_dataloader):
@@ -162,17 +163,18 @@ def seed_worker(worker_id):
     
 
 if __name__ == "__main__":
+    device = "cuda" if torch.cuda.is_available() else "cpu"
 
     wandb.login()
     wandb.init(
         # Set the project where this run will be logged
         project="SimSiam", 
         # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
-        name=f"plasma_only", 
+        name=f"mixed_plasma_saliva_HNC", 
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.02,
-            "epochs": 3,
+            "epochs": 10,
             "batch_size": 10,
             "backbone_dim": [1, 8, 16, 32, 64, 128],
             "random_seed" : 0,
@@ -184,8 +186,8 @@ if __name__ == "__main__":
     cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
 
-    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "202404_OvCa-project_calibrated","train")
-    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "202404_OvCa-project_calibrated","test" )
+    train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer","plasma_saliva_mixed","train")
+    test_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer","plasma_saliva_mixed","test" )
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
@@ -198,7 +200,7 @@ if __name__ == "__main__":
                                   augmentation_step_list = None,
                                   config_path= None)
     
-    train_dataset = OC_Dataset(train_dataset_path, preprocessor=train_preprocessor, augmentor=train_augmentor)
+    train_dataset = SpectrumDataset(train_dataset_path, annotation_file_path, preprocessor=train_preprocessor, augmentor=train_augmentor)
 
     train_dataloaders = DataLoader(
         train_dataset,
@@ -209,14 +211,14 @@ if __name__ == "__main__":
         worker_init_fn=seed_worker,
         generator=generator
     )
-
+ 
     test_preprocessor = SpectrumPreprocessor(cropping=True,
                                         baseline_correction=True,
                                         remove_cosmic_rays= True,
                                         normalization=True,
                                         smoothing=True)
     test_augmentor = SpectrumAugmentor(ramdom_augmentations=True)
-    test_dataset = OC_Dataset(test_dataset_path, preprocessor=test_preprocessor, augmentor=test_augmentor)
+    test_dataset = SpectrumDataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor, augmentor=test_augmentor)
     test_dataloaders = DataLoader(
     test_dataset,
     batch_size=training_cfg.batch_size,
@@ -229,6 +231,13 @@ if __name__ == "__main__":
 
     model = train_model(model, train_dataloaders, training_cfg)
 
-    map_for_color_and_marker = {'Plasma': 'o', 'Serum': 'x', 'C': 'b', 'OC': 'r', 'EVs': 'g', 'serum': 'y', 'desalted1x': 'p', 'original': 'x', 'none': 'o'}
-    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = map_for_color_and_marker)
+    # ## save the model
+    torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", "model_HNC_2.pth"))
+
+   # load the saved model
+    # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "model_HNC.pth")))
+
+    # map_for_color_and_marker = {'C': 'b', 'OC': 'r', 'EVs': 'x', 'serum': 'o', 'desalted1x': 'p', 'original': 'x', 'none': 'o', 'default_color':'teal', 'default_marker':'*'}
+
+    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None)
    
