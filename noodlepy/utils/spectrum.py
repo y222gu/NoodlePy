@@ -6,19 +6,23 @@ from collections import defaultdict
 import scipy.signal
 import pybaselines
 import os
+import copy
+import pandas as pd
 
 class Spectrum:
     def __init__(self, 
                  wavelength_nm:np.array =[],
                  intensity:np.array =[],
                  laser_wavelength_nm:float = 785, #TODO: this should be loaded from the experimental metadata
-                 metadata:dict = defaultdict(dict)):
+                 metadata:dict = defaultdict(dict),
+                 file_path:str = None):
 
         self.laser_wavelength_nm:float = round(laser_wavelength_nm,3)
         self.wavelength_nm:np.array = wavelength_nm.round(3)
         self.raman_shift_cm:np.array = Spectrum.wavelength_to_raman_shift(self.wavelength_nm, self.laser_wavelength_nm)
         self.intensity:np.array = intensity
         self.metadata = metadata
+        self.file_path = file_path
         
     def __len__(self):
         return len(self.intensity)
@@ -348,6 +352,36 @@ class Spectrum:
 
 
     @classmethod
-    def from_file(cls, file_path:str):
-        # placeholder for reading spectrum from file
-        pass
+    def load_from_file(cls, file_path:str):
+        # load Spectrum objects from a file
+        with open(file_path) as f:
+            data = pd.read_csv(f, sep=",", header=None)
+
+            repeated_wavelengths = data.iloc[:,0].value_counts()
+            first_repeated_wavelength = repeated_wavelengths.idxmax()
+            start_indexes = data[data.iloc[:,0] == first_repeated_wavelength].index.tolist()
+
+            spectrum_objects = []
+            # split the repeated measurements into individual spectra
+            for i in range(len(start_indexes)):
+                spectrum_id = i + 1
+                if i == len(start_indexes) - 1:
+                    wavelength_nm = data.iloc[start_indexes[i]:, 0].values.round(3)
+                    intensity = data.iloc[start_indexes[i]:, 1].values.round(3)
+                else:
+                    wavelength_nm = data.iloc[start_indexes[i]:start_indexes[i + 1], 0].values.round(3)
+                    intensity = data.iloc[start_indexes[i]:start_indexes[i + 1], 1].values.round(3)
+                
+            
+                metadata = {}
+                metadata['spectrum_id'] = spectrum_id
+                spectrum = Spectrum(wavelength_nm=wavelength_nm,
+                                    intensity=intensity,
+                                    metadata=metadata,)
+                spectrum_objects.append(spectrum)
+        return spectrum_objects
+    
+    def update_metadata(cls, metadata:dict):
+        cls.metadata.update(metadata)
+        return cls
+
