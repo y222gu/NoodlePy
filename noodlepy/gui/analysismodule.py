@@ -5,6 +5,8 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from noodlepy.utils.spectrum import Spectrum
 from tkinter import filedialog, Text, END, RIGHT, LEFT, Y, BOTH, VERTICAL
+from ttkbootstrap.constants import *
+
 
 
 class FileBrowser(ttk.Frame):
