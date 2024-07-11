@@ -8,7 +8,7 @@ from noodlepy.utils.spectrumaugmentor import SpectrumAugmentor
 import torch
 import copy
 import numpy as np
-
+import matplotlib.pyplot as plt
 class HNC_Dataset(Dataset):
     def __init__(self, data_folder = None,
                  annotation_file_path = None,
@@ -146,9 +146,50 @@ class HNC_Dataset(Dataset):
                                     metadata=metadata,)
                 spectrum_objects.append(spectrum)
         return spectrum_objects
+    
+    def get_peak_distribution(self):
+        """
+        Get the distribution of the highest intensity peaks
+        """
+        # get the highest intensity
+        highest_intensity = []
+        mean_intensity = []
+        for spectrum in self.db:
+            # smooth the spectrum
+            spectrum.savgol_filter(window_length=5, polyorder=3)
+            # get the highest intensity
+            max_intensity = max(spectrum.intensity)
+            highest_intensity.append(max_intensity)
+            mean_intensity.append(np.mean(spectrum.intensity))
 
+        # plt.figure()
+        # plt.hist(highest_intensity, bins=1000)
+        # plt.show()
+
+        # plt.figure()
+        # plt.hist(mean_intensity, bins=1000)
+        # plt.show()
+        mean_peak = np.mean(highest_intensity)
+        std_peak = np.std(highest_intensity)
+        return mean_peak, std_peak
+    
+    def get_cosmic_ray_counts_distribution(self):
+        """
+        Get the distribution of the cosmic ray counts
+        """
+        cosmic_ray_counts = []
+        for spectrum in self.db:
+            cosmic_ray_counts.append(spectrum.count_number_of_cosmic_rays())
+        
+        plt.figure()
+        plt.hist(cosmic_ray_counts, bins=1000)
+        plt.xlim(0, 50)
+        mean_cosmic_ray_count = np.mean(cosmic_ray_counts)
+        std_cosmic_ray_count = np.std(cosmic_ray_counts)
+        return mean_cosmic_ray_count, std_cosmic_ray_count
+    
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "Raman_DB", "saliva","saliva_all")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "saliva","saliva_all")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
     preprocessor = SpectrumPreprocessor(cropping=True,
@@ -163,5 +204,6 @@ if __name__ == "__main__":
 
     dataset = HNC_Dataset(data_folder, metadata_file, preprocessor, augmentor)
 
-    for i in range(5):
-        augmented_spectrum1,augmented_spectrum2, labels = dataset.__getitem__(idx= i)
+    dataset.get_peak_distribution()
+    dataset.get_cosmic_ray_counts_distribution()
+    print("Done")

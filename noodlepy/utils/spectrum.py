@@ -349,6 +349,27 @@ class Spectrum:
         raman_shift_cm = laser_wavenumber_cm - wavenumber_cm
         raman_shift_cm = raman_shift_cm.round(3)
         return raman_shift_cm
+    
+    def count_number_of_cosmic_rays(self, threshold: float = 3.5):
+        """
+        Count the number of cosmic rays in the spectrum.
+
+        Parameters:
+        threshold (float): The threshold to identify cosmic rays.
+
+        Returns:
+        int: The number of cosmic rays in the spectrum.
+        """
+
+        def modified_z_score(delta_intensity: np.array):
+            median_int = np.median(delta_intensity)
+            mad_int = np.median([np.abs(delta_intensity - median_int)])
+            modified_z_scores = 0.6745 * (delta_intensity - median_int) / mad_int
+            return np.array(modified_z_scores)
+
+        delta_intensity = np.diff(self.intensity)
+        spikes = abs(modified_z_score(delta_intensity)) > threshold
+        return sum(spikes)
 
 
     @classmethod

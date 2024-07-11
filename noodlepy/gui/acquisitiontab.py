@@ -2,27 +2,49 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from PIL import Image, ImageTk
 from tkinter import StringVar
+import tkinter as tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import matplotlib.pyplot as plt
 
-class StageControlGUI(ttk.Window):
-    def __init__(self):
-        super().__init__(themename="superhero")
 
-        # Main frame
+class AcquisitionGUI(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.create_widgets()
+
+    def create_widgets(self):
+                
         main_frame = ttk.Frame(self)
-        main_frame.pack(padx=5, pady=5, fill=BOTH, expand=YES)
+        main_frame.grid(row=0, column=0, sticky="nsew")
 
-        # Top frame for connection and home buttons
+        stage_control_frame = StageControlerModule(main_frame)
+        stage_control_frame.grid(row = 0, column= 0, sticky="nsew", padx=5, pady=5)
+
+        autofocus_frame = AutoFocusModule(main_frame)
+        autofocus_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+
+
+class StageControlerModule(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.create_widgets()
+
+    def create_widgets(self):
+
+        main_frame = ttk.Labelframe(self, text='Stage Control', padding=5)
+        main_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
+
         top_frame = ttk.Frame(main_frame)
-        top_frame.pack(side=TOP, fill=X, expand=YES)
+        top_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
 
         # Connection status button
         self.connect_button = ttk.Button(top_frame, text="Connect", command=self.connect_device, bootstyle="secondary")
-        self.connect_button.pack(side=LEFT, fill=Y, padx=5, pady=5)
+        self.connect_button.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
         self.connect_button.config(width=8)
 
         # Reference buttons frame
         reference_frame = ttk.Labelframe(top_frame, text="Reference", padding=5)
-        reference_frame.pack(side=LEFT, fill=BOTH, expand=YES, padx=5, pady=5)
+        reference_frame.grid(row=0, column=1, columnspan=4, padx=5, pady=5)
 
         ttk.Button(reference_frame, text="Ref X", command=lambda: self.send_gcode("Ref X"), bootstyle="secondary").grid(row=0, column=0, padx=5)
         ttk.Button(reference_frame, text="Ref Y", command=lambda: self.send_gcode("Ref Y"), bootstyle="secondary").grid(row=0, column=1, padx=5)
@@ -35,7 +57,7 @@ class StageControlGUI(ttk.Window):
 
         # Frame for movement
         movement_frame = ttk.Labelframe(main_frame, text="Move", padding=5)
-        movement_frame.pack(side=TOP, fill=BOTH, expand=YES, padx=5, pady=5)
+        movement_frame.grid(row=1, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
 
         ttk.Label(movement_frame, text="X").grid(row=0, column=1)
         ttk.Label(movement_frame, text="Y").grid(row=0, column=2)
@@ -146,7 +168,7 @@ class StageControlGUI(ttk.Window):
 
         # Frame for register
         register_frame = ttk.Labelframe(main_frame, text="Register", padding=5)
-        register_frame.pack(side=TOP, fill=BOTH, expand=YES, padx=5, pady=5)
+        register_frame.grid(row=2, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
 
         # Register labels and entries
         self.register_first_smaple_button = ttk.Button(register_frame, text="Register Current Position as First Sample", command = self.register_first_smaple, bootstyle ="success")
@@ -163,6 +185,7 @@ class StageControlGUI(ttk.Window):
         self.remove_first_sample_button.grid(row=0, column=2, padx=5, pady=5)
         self.remove_lowest_point_button = ttk.Button(register_frame, text="Remove", command= self.remove_lowest_point_registration,bootstyle="danger", state=DISABLED)
         self.remove_lowest_point_button.grid(row=1, column=2, padx=5, pady=5)
+
 
     def move_to_coordinates(self):
         p2_x = self.p2_x_entry.get()
@@ -231,6 +254,125 @@ class StageControlGUI(ttk.Window):
     def update_label(self, value):
         self.slider_value.set(f"{float(value):.2f} mm/s")
 
-if __name__ == "__main__":
-    app = StageControlGUI()
-    app.mainloop()
+class AutoFocusModule(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.create_widgets()
+
+    def create_widgets(self):
+
+        main_frame = ttk.Labelframe(self, text='Auto Focus', padding=5)
+        main_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+
+        # Create the figure and axes
+        fig, axes = plt.subplots(2, 1, figsize=(2, 2))
+        self.ax1, self.ax2= axes.flatten()
+
+        self.ax1.set_xlabel('Z-axis position',fontsize=5)
+        self.ax1.set_ylabel('Entropy', fontsize=5)
+        self.ax1.set_title('Entropy minimization', fontsize=5)
+        self.ax1.tick_params(axis='both', which='major', labelsize=4)
+        self.ax1.tick_params(axis='both', which='minor', labelsize=4)
+        self.ax1.spines['top'].set_visible(False)
+        self.ax1.spines['right'].set_visible(False)
+        self.ax1.grid(True)
+
+        self.ax2.set_xlabel('Z-axis position', fontsize=5)
+        self.ax2.set_ylabel('Intensity', fontsize=5)
+        self.ax2.set_title('Focus', fontsize=5)
+        self.ax2.tick_params(axis='both', which='major', labelsize=4)
+        self.ax2.tick_params(axis='both', which='minor', labelsize=4)
+        self.ax2.spines['top'].set_visible(False)
+        self.ax2.spines['right'].set_visible(False)
+        self.ax2.grid(True)
+
+        plt.tight_layout(pad=0.5)
+
+        # Create a canvas widget for the figure
+        self.canvas = FigureCanvasTkAgg(fig, master=main_frame)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=3, rowspan=2, sticky="nsew", padx=5, pady=5)
+
+        # Create the entries for the autofocus parameters
+        num_steps_label = ttk.Label(main_frame, text="Number of Steps")
+        num_steps_label.grid(row=2, column=0, padx=5, pady=5)
+        num_steps_entry = ttk.Entry(main_frame, width=8)
+        num_steps_entry.grid(row=2, column=1, padx=5, pady=5)
+
+        range_label = ttk.Label(main_frame, text="Z-axis Range [um]")
+        range_label.grid(row=3, column=0, padx=5, pady=5)
+        range_entry = ttk.Entry(main_frame, width=8)
+        range_entry.grid(row=3, column=1, padx=5, pady=5)
+
+        exposure_time_label = ttk.Label(main_frame, text="Exposure Time [ms]")
+        exposure_time_label.grid(row=4, column=0, padx=5, pady=5)
+        exposure_time_entry = ttk.Entry(main_frame, width=8)
+        exposure_time_entry.grid(row=4, column=1, padx=5, pady=5)
+
+        num_rep_label = ttk.Label(main_frame, text="Number of Reps")
+        num_rep_label.grid(row=5, column=0, padx=5, pady=5)
+        num_rep_entry = ttk.Entry(main_frame, width=8)
+        num_rep_entry.grid(row=5, column=1, padx=5, pady=5)
+
+        # Create the button to run autofocus
+        button = ttk.Button(main_frame, text="Coarse Focus", command=self.autofocus, bootstyle="success", width=10)
+        button.grid(row=2, column=2, padx=5, pady=5)
+
+        # Create the button to stop autofocus
+        button = ttk.Button(main_frame, text="Fine Focus", command=self.autofocus, bootstyle="success", width=10)
+        button.grid(row=3, column=2, padx=5, pady=5)
+
+        # Create the button to save the autofocus results
+        button = ttk.Button(main_frame, text="Run Both", command=self.autofocus, bootstyle="warning", width=10)
+        button.grid(row=4, column=2, columnspan=3, padx=5, pady=5)
+
+        button = ttk.Button(main_frame, text="Stop", command=self.stop_autofocus, bootstyle="danger", width=10)
+        button.grid(row=5, column=2, columnspan=3, padx=5, pady=5)
+
+    def autofocus(self):
+        for i in range(10):
+            # Implement the autofocus algorithm here
+            print(f"Running autofocus iteration {i+1}")
+            # For example, you might use serial communication:
+            # ser.write((f"RUN AUTOFOCUS {i}\n").encode())
+            # Update the plots
+            entropy = 1 / (i + 1)
+            wavelength = [400, 500, 600, 700]
+            intensity = [0.1, 0.2, 0.3, 0.4]
+
+            self.ax1.plot(i, entropy, 'ro')
+            self.ax2.plot(wavelength, intensity, 'bo')
+            self.canvas.draw()
+
+    def stop_autofocus(self):
+        # Implement the code to stop autofocus here
+        print("Stopping autofocus")
+        # For example, you might use serial communication:
+        # ser.write("STOP AUTOFOCUS\n".encode())
+    
+
+
+    def save_results(self):
+        # Implement the code to save the autofocus results here
+        print("Saving autofocus results")
+        # For example, you might save the plots as images:
+        # fig.savefig("autofocus_results.png")
+
+
+class SampleDetectionModule(ttk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent)
+        self.create_widgets()
+
+
+
+
+
+
+
+if __name__ == '__main__':
+    root = ttk.Window()
+    root.style.theme_use('superhero')
+    app = AcquisitionGUI(root)
+    app.pack()
+    root.mainloop()
