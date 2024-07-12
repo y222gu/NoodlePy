@@ -1,3 +1,10 @@
+import tkinter as tk
+from PIL import Image, ImageTk
+import typing
+import threading
+import queue
+import ttkbootstrap as ttk
+
 try:
     # if on Windows, use the provided setup script to add the DLLs folder to the PATH
     from noodlepy.utils.windows_setup import configure_path
@@ -10,37 +17,33 @@ from thorlabs_tsi_sdk.tl_camera import TLCameraSDK, TLCamera, Frame
 from thorlabs_tsi_sdk.tl_camera_enums import SENSOR_TYPE
 from thorlabs_tsi_sdk.tl_mono_to_color_processor import MonoToColorProcessorSDK
 
-try:
-    #  For python 2.7 tkinter is named Tkinter
-    import tkinter as tk
-except ImportError:
-    import tkinter as tk
-from PIL import Image, ImageTk
-import typing
-import threading
-import queue
-
 
 class LiveViewCanvas(tk.Canvas):
     def __init__(self, parent, image_queue):
         # type: (typing.Any, queue.Queue) -> LiveViewCanvas
         self.image_queue = image_queue
-        self._image_width = 0
-        self._image_height = 0
+        self._image_width = 10
+        self._image_height = 10
+        self._image = None
+        self.tk_image = None
         tk.Canvas.__init__(self, parent)
         self.pack()
+        self.bind("<Configure>", self._resize)
         self._get_image()
+
+    def _resize(self, event=None):
+        if self._image:
+            new_width = self.winfo_width()
+            new_height = self.winfo_height()
+            resized_image = self._image.resize((new_width, new_height), Image.LANCZOS)
+            self.tk_image = ImageTk.PhotoImage(resized_image)
+            self.create_image(0, 0, image=self.tk_image, anchor='nw')
 
     def _get_image(self):
         try:
             image = self.image_queue.get_nowait()
-            self._image = ImageTk.PhotoImage(master=self, image=image)
-            if (self._image.width() != self._image_width) or (self._image.height() != self._image_height):
-                # resize the canvas to match the new image size
-                self._image_width = self._image.width()
-                self._image_height = self._image.height()
-                self.config(width=self._image_width, height=self._image_height)
-            self.create_image(0, 0, image=self._image, anchor='nw')
+            self._image = image.convert("RGB")  # Ensure image is in RGB mode
+            self._resize()  # Trigger resize to adjust the initial image
         except queue.Empty:
             pass
         self.after(10, self._get_image)
@@ -76,7 +79,6 @@ class ImageAcquisitionThread(threading.Thread):
         self._stop_event = threading.Event()
 
     def get_output_queue(self):
-        # type: (type(None)) -> queue.Queue
         return self._image_queue
 
     def stop(self):
@@ -119,16 +121,18 @@ class ImageAcquisitionThread(threading.Thread):
                 # No point in keeping this image around when the queue is full, let's skip to the next one
                 pass
             except Exception as error:
-                print("Encountered error: {error}, image acquisition will stop.".format(error=error))
+                print(f"Encountered error: {error}, image acquisition will stop.")
                 break
         print("Image acquisition has stopped")
         if self._is_color:
             self._mono_to_color_processor.dispose()
             self._mono_to_color_sdk.dispose()
 
+
 class LiveViewModule(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.grid()
         self.sdk = TLCameraSDK()
         camera_list = self.sdk.discover_available_cameras()
         if not camera_list:
@@ -153,9 +157,11 @@ class LiveViewModule(tk.Frame):
 
 
 if __name__ == "__main__":
-    root = tk.Tk()
-    root.title("Camera Live View")
+    root = ttk.Window()
+    # set the ttkbootstrap theme to superhero
+    root.style.theme_use('superhero')
     live_view_frame = LiveViewModule(root)
+    root.protocol("WM_DELETE_WINDOW", live_view_frame.stop)
     root.mainloop()
     live_view_frame.stop()
     print("App closed")

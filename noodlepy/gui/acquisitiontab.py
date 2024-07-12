@@ -5,7 +5,7 @@ from tkinter import StringVar
 import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
-from noodlepy.gui.livecamera import LiveViewModule
+from noodlepy.gui.liveviewmodule import LiveViewModule
 import os
 
 class AcquisitionGUI(ttk.Frame):
@@ -175,14 +175,10 @@ class StageControlerModule(ttk.Frame):
         register_frame.grid(row=2, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
 
         # Register labels and entries
-        self.register_first_smaple_button = ttk.Button(register_frame, text="Register Current Position as First Sample", command = self.register_first_smaple, bootstyle ="success")
+        self.register_first_smaple_button = ttk.Button(register_frame, text="Register Current Position as First Sample", command = self.register_first_smaple, bootstyle ="success", width=36)
         self.register_first_smaple_button.grid(row=0, column=1, padx=5, pady=5)
-        self.register_lowest_point_button = ttk.Button(register_frame, text="Register Current Z as the Lowest Point", command=self.register_lowest_point, bootstyle = "success")
+        self.register_lowest_point_button = ttk.Button(register_frame, text="Register Current Z as the Lowest Point", command=self.register_lowest_point, bootstyle = "success", width=36)
         self.register_lowest_point_button.grid(row=1, column=1, padx=5, pady=5)
-
-        # configure the size of the buttons
-        for child in register_frame.winfo_children():
-            child.config(width=30)
 
         # Remove button
         self.remove_first_sample_button = ttk.Button(register_frame, text="Remove", command= self.remove_first_sample_registration,bootstyle="danger", state=DISABLED)
@@ -299,38 +295,38 @@ class AutoFocusModule(ttk.Frame):
 
         # Create the entries for the autofocus parameters
         num_steps_label = ttk.Label(main_frame, text="Number of Steps")
-        num_steps_label.grid(row=2, column=0, padx=5, pady=5)
-        num_steps_entry = ttk.Entry(main_frame, width=8)
-        num_steps_entry.grid(row=2, column=1, padx=5, pady=5)
+        num_steps_label.grid(row=2, column=0,pady=5)
+        num_steps_entry = ttk.Entry(main_frame, width=5)
+        num_steps_entry.grid(row=2, column=1)
 
         range_label = ttk.Label(main_frame, text="Z-axis Range [um]")
-        range_label.grid(row=3, column=0, padx=5, pady=5)
-        range_entry = ttk.Entry(main_frame, width=8)
-        range_entry.grid(row=3, column=1, padx=5, pady=5)
+        range_label.grid(row=3, column=0,pady=5)
+        range_entry = ttk.Entry(main_frame, width=5)
+        range_entry.grid(row=3, column=1)
 
         exposure_time_label = ttk.Label(main_frame, text="Exposure Time [ms]")
-        exposure_time_label.grid(row=4, column=0, padx=5, pady=5)
-        exposure_time_entry = ttk.Entry(main_frame, width=8)
-        exposure_time_entry.grid(row=4, column=1, padx=5, pady=5)
+        exposure_time_label.grid(row=4, column=0,pady=5)
+        exposure_time_entry = ttk.Entry(main_frame, width=5)
+        exposure_time_entry.grid(row=4, column=1)
 
         num_rep_label = ttk.Label(main_frame, text="Number of Reps")
-        num_rep_label.grid(row=5, column=0, padx=5, pady=5)
-        num_rep_entry = ttk.Entry(main_frame, width=8)
-        num_rep_entry.grid(row=5, column=1, padx=5, pady=5)
+        num_rep_label.grid(row=5, column=0, pady=5)
+        num_rep_entry = ttk.Entry(main_frame, width=5)
+        num_rep_entry.grid(row=5, column=1)
 
         # Create the button to run autofocus
-        button = ttk.Button(main_frame, text="Coarse Focus", command=self.autofocus, bootstyle="success", width=10)
+        button = ttk.Button(main_frame, text="Coarse Focus", command=self.autofocus, bootstyle="success", width=15)
         button.grid(row=2, column=2, padx=5, pady=5)
 
         # Create the button to stop autofocus
-        button = ttk.Button(main_frame, text="Fine Focus", command=self.autofocus, bootstyle="success", width=10)
+        button = ttk.Button(main_frame, text="Fine Focus", command=self.autofocus, bootstyle="success", width=15)
         button.grid(row=3, column=2, padx=5, pady=5)
 
         # Create the button to save the autofocus results
-        button = ttk.Button(main_frame, text="Run Both", command=self.autofocus, bootstyle="warning", width=10)
+        button = ttk.Button(main_frame, text="Run Both", command=self.autofocus, bootstyle="warning", width=15)
         button.grid(row=4, column=2, columnspan=3, padx=5, pady=5)
 
-        button = ttk.Button(main_frame, text="Stop", command=self.stop_autofocus, bootstyle="danger", width=10)
+        button = ttk.Button(main_frame, text="Stop", command=self.stop_autofocus, bootstyle="danger", width=15)
         button.grid(row=5, column=2, columnspan=3, padx=5, pady=5)
 
     def autofocus(self):
