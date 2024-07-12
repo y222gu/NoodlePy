@@ -12,7 +12,7 @@ from thorlabs_tsi_sdk.tl_mono_to_color_processor import MonoToColorProcessorSDK
 
 try:
     #  For python 2.7 tkinter is named Tkinter
-    import Tkinter as tk
+    import tkinter as tk
 except ImportError:
     import tkinter as tk
 from PIL import Image, ImageTk
