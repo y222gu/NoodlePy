@@ -126,8 +126,7 @@ class ImageAcquisitionThread(threading.Thread):
             self._mono_to_color_processor.dispose()
             self._mono_to_color_sdk.dispose()
 
-
-class LiveViewFrame(tk.Frame):
+class LiveViewModule(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.pack()
@@ -151,14 +150,13 @@ class LiveViewFrame(tk.Frame):
         print("Stopping image acquisition thread...")
         self.image_acquisition_thread.stop()
         self.image_acquisition_thread.join()
-        self.camera.close()
-        self.sdk.dispose()
         print("Resources released")
 
 
 if __name__ == "__main__":
     root = tk.Tk()
     root.title("Camera Live View")
-    live_view_frame = LiveViewFrame(root)
-    root.protocol("WM_DELETE_WINDOW", live_view_frame.stop)
+    live_view_frame = LiveViewModule(root)
     root.mainloop()
+    live_view_frame.stop()
+    print("App closed")

@@ -5,7 +5,7 @@ from tkinter import StringVar
 import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
-
+from noodlepy.gui.livecamera import LiveViewModule
 
 class AcquisitionGUI(ttk.Frame):
     def __init__(self, parent):
@@ -22,6 +22,9 @@ class AcquisitionGUI(ttk.Frame):
 
         autofocus_frame = AutoFocusModule(main_frame)
         autofocus_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+
+        live_view_frame = LiveViewModule(main_frame)
+        live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
 
 class StageControlerModule(ttk.Frame):
@@ -363,12 +366,6 @@ class SampleDetectionModule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.create_widgets()
-
-
-
-
-
-
 
 if __name__ == '__main__':
     root = ttk.Window()
