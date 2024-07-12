@@ -1,6 +1,6 @@
 try:
     # if on Windows, use the provided setup script to add the DLLs folder to the PATH
-    from windows_setup import configure_path
+    from noodlepy.utils.windows_setup import configure_path
     print("Configuring path...")
     configure_path()
 except ImportError:
