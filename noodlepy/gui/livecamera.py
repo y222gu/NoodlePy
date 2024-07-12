@@ -129,7 +129,6 @@ class ImageAcquisitionThread(threading.Thread):
 class LiveViewModule(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.pack()
         self.sdk = TLCameraSDK()
         camera_list = self.sdk.discover_available_cameras()
         if not camera_list:

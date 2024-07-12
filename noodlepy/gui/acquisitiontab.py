@@ -6,6 +6,7 @@ import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from noodlepy.gui.livecamera import LiveViewModule
+import os
 
 class AcquisitionGUI(ttk.Frame):
     def __init__(self, parent):
@@ -104,27 +105,27 @@ class StageControlerModule(ttk.Frame):
         self.speed_slider.bind("<ButtonRelease-1>", lambda e: self.update_label(self.speed_slider.get()))
 
         # Load images for the direction buttons
-        self.img_low_speed = Image.open("/Users/yifeigu/Downloads/chevron-right_116844.png")
-        self.img_medium_speed = Image.open("/Users/yifeigu/Downloads/double-left-chevron_icon-icons.com_73595.png")
-        self.img_high_speed = Image.open("/Users/yifeigu/Downloads/chevron_triple_right_icon_137766.png")
+        self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png"))
+        self.img_medium_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","medium_step.png"))
+        self.img_large_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","large_step.png"))
 
         # set the size of the images
-        self.img_low_speed = self.img_low_speed.resize((20, 20))
-        self.img_medium_speed = self.img_medium_speed.resize((20, 20))
-        self.img_high_speed = self.img_high_speed.resize((20, 20))
+        self.img_small_step = self.img_small_step.resize((20, 20))
+        self.img_medium_step = self.img_medium_step.resize((20, 20))
+        self.img_large_step = self.img_large_step.resize((20, 20))
         # rotate the images
-        self.img_up_low = ImageTk.PhotoImage(self.img_low_speed.rotate(90))
-        self.img_up_medium = ImageTk.PhotoImage(self.img_medium_speed.rotate(-90))
-        self.img_up_high = ImageTk.PhotoImage(self.img_high_speed.rotate(90))
-        self.img_down_low = ImageTk.PhotoImage(self.img_low_speed.rotate(-90))
-        self.img_down_medium = ImageTk.PhotoImage(self.img_medium_speed.rotate(90))
-        self.img_down_high = ImageTk.PhotoImage(self.img_high_speed.rotate(-90))
-        self.img_left_low = ImageTk.PhotoImage(self.img_low_speed.rotate(180))
-        self.img_left_medium = ImageTk.PhotoImage(self.img_medium_speed)
-        self.img_left_high = ImageTk.PhotoImage(self.img_high_speed.rotate(180))
-        self.img_right_low = ImageTk.PhotoImage(self.img_low_speed)
-        self.img_right_medium = ImageTk.PhotoImage(self.img_medium_speed.rotate(180))
-        self.img_right_high = ImageTk.PhotoImage(self.img_high_speed)
+        self.img_up_low = ImageTk.PhotoImage(self.img_small_step.rotate(90))
+        self.img_up_medium = ImageTk.PhotoImage(self.img_medium_step.rotate(-90))
+        self.img_up_high = ImageTk.PhotoImage(self.img_large_step.rotate(90))
+        self.img_down_low = ImageTk.PhotoImage(self.img_small_step.rotate(-90))
+        self.img_down_medium = ImageTk.PhotoImage(self.img_medium_step.rotate(90))
+        self.img_down_high = ImageTk.PhotoImage(self.img_large_step.rotate(-90))
+        self.img_left_low = ImageTk.PhotoImage(self.img_small_step.rotate(180))
+        self.img_left_medium = ImageTk.PhotoImage(self.img_medium_step)
+        self.img_left_high = ImageTk.PhotoImage(self.img_large_step.rotate(180))
+        self.img_right_low = ImageTk.PhotoImage(self.img_small_step)
+        self.img_right_medium = ImageTk.PhotoImage(self.img_medium_step.rotate(180))
+        self.img_right_high = ImageTk.PhotoImage(self.img_large_step)
 
         # Frame for direction buttons
         direction_frame = ttk.Frame(movement_frame, padding=3)
