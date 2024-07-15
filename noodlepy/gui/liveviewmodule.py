@@ -22,8 +22,8 @@ class LiveViewCanvas(tk.Canvas):
     def __init__(self, parent, image_queue):
         # type: (typing.Any, queue.Queue) -> LiveViewCanvas
         self.image_queue = image_queue
-        self._image_width = 10
-        self._image_height = 10
+        self._image_width = 0
+        self._image_height = 0
         self._image = None
         self.tk_image = None
         tk.Canvas.__init__(self, parent)

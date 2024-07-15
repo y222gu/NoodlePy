@@ -24,8 +24,11 @@ class AcquisitionGUI(ttk.Frame):
         autofocus_frame = AutoFocusModule(main_frame)
         autofocus_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        live_view_frame = LiveViewModule(main_frame)
-        live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
+        # live_view_frame = LiveViewModule(main_frame)
+        # live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
+
+        sample_detection_frame = SampleDetectionModule(main_frame)
+        sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
 
 class StageControlerModule(ttk.Frame):
