@@ -3,68 +3,74 @@ import cv2
 from segment_anything import SamAutomaticMaskGenerator, SamPredictor, sam_model_registry
 import matplotlib.pyplot as plt
 import ttkbootstrap as ttk
-
+import tkinter as tk
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+from matplotlib.figure import Figure
 
 class SampleDetectionModule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.create_widgets()
-
-    def create_widgets(self):
-        self.image_path = ttk.Entry(self)
-        self.image_path.pack()
-
-        self.auto_mask_button = ttk.Button(self, text="Auto Mask Generate", command=self.auto_mask_generate)
-        self.auto_mask_button.pack()
-
-        self.point_prompt_button = ttk.Button(self, text="Point Prompt Mask Generate", command=self.point_prompt_mask_generate)
-        self.point_prompt_button.pack()
-
-        self.box_prompt_button = ttk.Button(self, text="Box Prompt Mask Generate", command=self.box_prompt_mask_generate)
-        self.box_prompt_button.pack()
-
-        self.canvas = ttk.Canvas(self)
-        self.canvas.pack()
-
-
-class SampleDetector(SamPredictor):
-    def __init__(self, image_path):
+        image_path = '/Users/yifeigu/Documents/Carney_Lab/DiddyKong/outputs/img1.png'
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.image = image
-        sam = sam_model_registry["vit_b"](checkpoint="/Users/yifeigu/Downloads/sam_vit_b_01ec64.pth")
-        self.auto_mask_generator = SamAutomaticMaskGenerator(model=sam)
-        self.prompted_mask_generator = SamPredictor(sam)
+        self.sam = sam_model_registry["vit_b"](checkpoint="/Users/yifeigu/Downloads/sam_vit_b_01ec64.pth")
+        self.create_widgets()
+
+    def create_widgets(self):
+        main_frame = ttk.Labelframe(self, text='Sample Detection', padding=5)
+        main_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+
+        figure = Figure(figsize=(5, 4), dpi=100)
+        ax = figure.add_subplot(111)
+        ax.imshow(self.image)
+        ax.axis('off')  # Turn off the axis
+
+        self.canvas = FigureCanvasTkAgg(figure, master=main_frame)
+        self.canvas.draw()
+        self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=3, rowspan=2, sticky="nsew", padx=5, pady=5)
+
+        self.auto_mask_button = ttk.Button(self, text="Auto Mask Generate", command=self.auto_mask_generate)
+        self.auto_mask_button.grid(row=1, column=0, padx=5, pady=5)
+
+        self.point_prompt_button = ttk.Button(self, text="Point Prompt Mask Generate", command=self.point_prompt_mask_generate)
+        self.point_prompt_button.grid(row=1, column=1, padx=5, pady=5)
+
+        self.box_prompt_button = ttk.Button(self, text="Box Prompt Mask Generate", command=self.box_prompt_mask_generate)
+        self.box_prompt_button.grid(row=1, column=2, padx=5, pady=5)
 
     def auto_mask_generate(self):
-        masks = self.auto_mask_generator.generate(self.image)
+        generator = SamAutomaticMaskGenerator(model=self.sam)
+        masks = generator.generate(self.image)
         _, axes = plt.subplots(1,3, figsize=(16,16))
         axes[0].imshow(self.image)
-        SampleDetector.show_anns(masks, axes[1])
+        SampleDetectionModule.show_anns(masks, axes[1])
         axes[2].imshow(self.image)
-        SampleDetector.show_anns(masks, axes[2])
+        SampleDetectionModule.show_anns(masks, axes[2])
         plt.show()
 
     def point_prompt_mask_generate(self):
         input_point = np.array([[400, 400], [1200, 400], [400, 700]])
         input_label = np.array([1, 1, 0])
-        self.prompted_mask_generator.set_image(self.image)
-        masks, scores, logits = self.prompted_mask_generator.predict(
+        generator = SamPredictor(model=self.sam)
+        generator.set_image(self.image)
+        masks, scores, logits = generator.predict(
             point_coords=input_point,
             point_labels=input_label,
             multimask_output=False,
         )
         for i, (mask, score) in enumerate(zip(masks, scores)):
             plt.imshow(self.image)
-            SampleDetector.show_mask(mask, plt.gca())
-            SampleDetector.show_points(input_point, input_label, plt.gca())
+            SampleDetectionModule.show_mask(mask, plt.gca())
+            SampleDetectionModule.show_points(input_point, input_label, plt.gca())
             plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
             plt.show()  
   
     def box_prompt_mask_generate(self, x_low=950, y_low=180, x_high=1400, y_high=620):
         input_box = np.array([x_low, y_low, x_high, y_high])
-        self.prompted_mask_generator.set_image(self.image)
-        masks, scores, logits = self.prompted_mask_generator.predict(
+        generator = SamPredictor(model=self.sam)
+        generator.set_image(self.image)
+        masks, scores, logits = generator.predict(
             point_coords=None,
             point_labels=None,
             box=input_box[None, :],
@@ -72,8 +78,8 @@ class SampleDetector(SamPredictor):
         )
         for i, (mask, score) in enumerate(zip(masks, scores)):
             plt.imshow(self.image)
-            SampleDetector.show_mask(mask, plt.gca())
-            SampleDetector.show_box(input_box, plt.gca())
+            SampleDetectionModule.show_mask(mask, plt.gca())
+            SampleDetectionModule.show_box(input_box, plt.gca())
             plt.title(f"Mask {i+1}, Score: {score:.3f}", fontsize=18)
             plt.show()
 
@@ -118,11 +124,12 @@ class SampleDetector(SamPredictor):
 
 
 if __name__ == '__main__':
-        
-    image_path = '/Users/yifeigu/Documents/Carney_Lab/DiddyKong/outputs/img1.png'
-    sd = SampleDetector(image_path)
-    sd.auto_mask_generate()
-    sd.point_prompt_mask_generate()
-    sd.box_prompt_mask_generate()
+
+    root = ttk.Window()
+    root.style.theme_use('superhero')
+    app = SampleDetectionModule(root)
+    app.pack()
+    root.mainloop()
+
 
 
