@@ -7,7 +7,12 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from noodlepy.gui.liveviewmodule import LiveViewModule
 import os
-
+from ultralytics import YOLO
+import time
+import serial
+import cv2
+from matplotlib import pyplot as plt
+import serial.tools.list_ports
 class AcquisitionGUI(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -24,53 +29,51 @@ class AcquisitionGUI(ttk.Frame):
         autofocus_frame = AutoFocusModule(main_frame)
         autofocus_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
-        # live_view_frame = LiveViewModule(main_frame)
-        # live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
+        live_view_frame = LiveViewModule(main_frame)
+        live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
-        sample_detection_frame = SampleDetectionModule(main_frame)
-        sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
+        # sample_detection_frame = SampleDetectionModule(main_frame)
+        # sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
 
 class StageControlerModule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png"))
+        self.img_medium_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","medium_step.png"))
+        self.img_large_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","large_step.png"))
+        self.img_small_step = self.img_small_step.resize((20, 20))
+        self.img_medium_step = self.img_medium_step.resize((20, 20))
+        self.img_large_step = self.img_large_step.resize((20, 20))
+        self.ser = None
         self.create_widgets()
 
     def create_widgets(self):
 
         main_frame = ttk.Labelframe(self, text='Stage Control', padding=5)
         main_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
-
         top_frame = ttk.Frame(main_frame)
         top_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
-
-        # Connection status button
         self.connect_button = ttk.Button(top_frame, text="Connect", command=self.connect_device, bootstyle="secondary")
         self.connect_button.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
-        self.connect_button.config(width=8)
+        self.connect_button.config(width=10)
 
         # Reference buttons frame
         reference_frame = ttk.Labelframe(top_frame, text="Reference", padding=5)
         reference_frame.grid(row=0, column=1, columnspan=4, padx=5, pady=5)
 
-        ttk.Button(reference_frame, text="Ref X", command=lambda: self.send_gcode("Ref X"), bootstyle="secondary").grid(row=0, column=0, padx=5)
-        ttk.Button(reference_frame, text="Ref Y", command=lambda: self.send_gcode("Ref Y"), bootstyle="secondary").grid(row=0, column=1, padx=5)
-        ttk.Button(reference_frame, text="Ref Z", command=lambda: self.send_gcode("Ref Z"), bootstyle="secondary").grid(row=0, column=2, padx=5)
-        ttk.Button(reference_frame, text="Ref All", command=lambda: self.send_gcode("Ref ALL"), bootstyle="warning").grid(row=0, column=3, padx=5)
-
-        # set all button sizes to 6
-        for child in reference_frame.winfo_children():
-            child.config(width=6)
+        ttk.Button(reference_frame, text="Ref X", command=lambda: self.ref("X"), bootstyle="secondary", width=6).grid(row=0, column=0, padx=5)
+        ttk.Button(reference_frame, text="Ref Y", command=lambda: self.ref("X"), bootstyle="secondary", width=6).grid(row=0, column=1, padx=5)
+        ttk.Button(reference_frame, text="Ref Z", command=lambda: self.ref("Z"), bootstyle="secondary", width=6).grid(row=0, column=2, padx=5)
+        ttk.Button(reference_frame, text="Ref All", command=lambda: self.ref("ALL"), bootstyle="warning", width=6).grid(row=0, column=3, padx=5)
 
         # Frame for movement
         movement_frame = ttk.Labelframe(main_frame, text="Move", padding=5)
         movement_frame.grid(row=1, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
-
         ttk.Label(movement_frame, text="X").grid(row=0, column=1)
         ttk.Label(movement_frame, text="Y").grid(row=0, column=2)
         ttk.Label(movement_frame, text="Z").grid(row=0, column=3)
 
-        # Labels for current position
         ttk.Label(movement_frame, text="Current").grid(row=1, column=0, padx=5, pady=5)
         self.p1_x_entry = ttk.Label(movement_frame, text="0")
         self.p1_y_entry = ttk.Label(movement_frame, text="0")
@@ -78,8 +81,6 @@ class StageControlerModule(ttk.Frame):
         self.p1_x_entry.grid(row=1, column=1, padx=5, pady=5)
         self.p1_y_entry.grid(row=1, column=2, padx=5, pady=5)
         self.p1_z_entry.grid(row=1, column=3, padx=5, pady=5)
-
-        # Labels and entries for a position to move to
         ttk.Label(movement_frame, text="Move To").grid(row=2, column=0, padx=5, pady=5)
         self.p2_x_entry = ttk.Entry(movement_frame, width=5)
         self.p2_y_entry = ttk.Entry(movement_frame, width=5)
@@ -88,35 +89,37 @@ class StageControlerModule(ttk.Frame):
         self.p2_y_entry.grid(row=2, column=2, padx=5, pady=5)
         self.p2_z_entry.grid(row=2, column=3, padx=5, pady=5)
 
-        # Go button
-        self.go_button = ttk.Button(movement_frame, text="Go", command=self.move_to_coordinates, bootstyle="success")
+        self.go_button = ttk.Button(movement_frame, text="Go", command=lambda: self.send_gcode("GO"),bootstyle="success")
         self.go_button.grid(row=2, column=4, padx=10, pady=5)
         self.go_button.config(width=6)
 
         # Speed slider
         self.slider_value = StringVar()
-        ttk.Label(movement_frame, text="Speed").grid(row=3, column=0, padx=5, pady=5)
-        ttk.Label(movement_frame, text="1 mm/s").grid(row=3, column=1, padx=5, pady=5)
-        ttk.Label(movement_frame, text="20 mm/s").grid(row=3, column=4, padx=5, pady=5)
-        self.speed_slider = ttk.Scale(movement_frame, from_=1, to=100, orient=HORIZONTAL, bootstyle="success")
+        self.speed_slider = ttk.Scale(
+            movement_frame,
+            from_=1000,
+            to=3000,
+            orient=HORIZONTAL,
+            bootstyle="success",
+            variable=self.slider_value
+        )
         self.speed_slider.grid(row=3, column=2, columnspan=2, pady=20)
         self.speed_slider.config(length=200)
-        self.speed_slider.set(50)
-        self.speed_slider.config()
-        ttk.Label(movement_frame, textvariable=self.slider_value).grid(row=4, column=1, columnspan=3, pady=5)
-        self.update_label(self.speed_slider.get())
-        self.speed_slider.bind("<ButtonRelease-1>", lambda e: self.update_label(self.speed_slider.get()))
+        self.speed_slider.set(10)
+        self.speed = self.speed_slider.get()
+        ttk.Label(movement_frame, text="Speed").grid(row=3, column=0, padx=5, pady=5)
+        ttk.Label(movement_frame, text="1000 mm/s").grid(row=3, column=1, padx=5, pady=5)
+        ttk.Label(movement_frame, text="3000 mm/s").grid(row=3, column=4, padx=5, pady=5)
+        self.speed_slider.bind("<ButtonRelease-1>", lambda e: self.update_speed())
 
-        # Load images for the direction buttons
-        self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png"))
-        self.img_medium_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","medium_step.png"))
-        self.img_large_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","large_step.png"))
 
-        # set the size of the images
-        self.img_small_step = self.img_small_step.resize((20, 20))
-        self.img_medium_step = self.img_medium_step.resize((20, 20))
-        self.img_large_step = self.img_large_step.resize((20, 20))
-        # rotate the images
+        # Frame for direction buttons
+        direction_frame = ttk.Frame(movement_frame, padding=3)
+        direction_frame.grid(row=4, column=0, columnspan=10, pady=3, padx=3)
+        ttk.Label(direction_frame, text="Y").grid(row=0, column=4, pady=3)
+        ttk.Label(direction_frame, text="X").grid(row=4, column=0, padx=3)
+
+        # X, Y axis Direction buttons
         self.img_up_low = ImageTk.PhotoImage(self.img_small_step.rotate(90))
         self.img_up_medium = ImageTk.PhotoImage(self.img_medium_step.rotate(-90))
         self.img_up_high = ImageTk.PhotoImage(self.img_large_step.rotate(90))
@@ -130,30 +133,20 @@ class StageControlerModule(ttk.Frame):
         self.img_right_medium = ImageTk.PhotoImage(self.img_medium_step.rotate(180))
         self.img_right_high = ImageTk.PhotoImage(self.img_large_step)
 
-        # Frame for direction buttons
-        direction_frame = ttk.Frame(movement_frame, padding=3)
-        direction_frame.grid(row=4, column=0, columnspan=10, pady=3, padx=3)
-
-        # X, Y axis Direction labels
-        ttk.Label(direction_frame, text="Y").grid(row=0, column=4, pady=3)
-        ttk.Label(direction_frame, text="X").grid(row=4, column=0, padx=3)
-
-        # X, Y axis Direction buttons
-        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.send_gcode("UP SLOW"), bootstyle="light").grid(row=3, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.send_gcode("UP MEDIUM"), bootstyle="secondary").grid(row=2, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.send_gcode("UP FAST"), bootstyle="dark").grid(row=1, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_left_low, command=lambda: self.send_gcode("LEFT SLOW"), bootstyle="light").grid(row=4, column=3, padx=3)
+        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.send_gcode("BACK SMALL"), bootstyle="light").grid(row=3, column=4, pady=3)
+        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.send_gcode("BACK MEDIUM"), bootstyle="secondary").grid(row=2, column=4, pady=3)
+        ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.send_gcode("BACK LARGE"), bootstyle="dark").grid(row=1, column=4, pady=3)
+        ttk.Button(direction_frame, image=self.img_left_low, command=lambda: self.send_gcode("LEFT SMALL"), bootstyle="light").grid(row=4, column=3, padx=3)
         ttk.Button(direction_frame, image=self.img_left_medium, command=lambda: self.send_gcode("LEFT MEDIUM"), bootstyle="secondary").grid(row=4, column=2, padx=3)
-        ttk.Button(direction_frame, image=self.img_left_high, command=lambda: self.send_gcode("LEFT FAST"), bootstyle="dark").grid(row=4, column=1, padx=3)
-        ttk.Button(direction_frame, image=self.img_right_low, command=lambda: self.send_gcode("RIGHT SLOW"),bootstyle="light").grid(row=4, column=5, padx=3)
+        ttk.Button(direction_frame, image=self.img_left_high, command=lambda: self.send_gcode("LEFT LARGE"), bootstyle="dark").grid(row=4, column=1, padx=3)
+        ttk.Button(direction_frame, image=self.img_right_low, command=lambda: self.send_gcode("RIGHT SMALL"),bootstyle="light").grid(row=4, column=5, padx=3)
         ttk.Button(direction_frame, image=self.img_right_medium, command=lambda: self.send_gcode("RIGHT MEDIUM"), bootstyle="secondary").grid(row=4, column=6, padx=3)
-        ttk.Button(direction_frame, image=self.img_right_high, command=lambda: self.send_gcode("RIGHT FAST"), bootstyle="dark").grid(row=4, column=7, padx=3, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.send_gcode("DOWN SLOW"), bootstyle="light").grid(row=5, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("DOWN MEDIUM"), bootstyle="secondary").grid(row=6, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("DOWN FAST"), bootstyle="dark").grid(row=7, column=4, pady=3)
+        ttk.Button(direction_frame, image=self.img_right_high, command=lambda: self.send_gcode("RIGHT LARGE"), bootstyle="dark").grid(row=4, column=7, padx=3, pady=3)
+        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.send_gcode("FRONT SMALL"), bootstyle="light").grid(row=5, column=4, pady=3)
+        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("FRONT MEDIUM"), bootstyle="secondary").grid(row=6, column=4, pady=3)
+        ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("FRONT LARGE"), bootstyle="dark").grid(row=7, column=4, pady=3)
 
-        # label for step size with bold font
-
+        # label for step size
         ttk.Label(direction_frame, text="10").grid(row=3, column=1, pady=3)
         ttk.Label(direction_frame, text="1").grid(row=3, column=2, pady=3)
         ttk.Label(direction_frame, text="0.1").grid(row=3, column=3,  pady=3)
@@ -166,18 +159,16 @@ class StageControlerModule(ttk.Frame):
         ttk.Label(direction_frame, text="Z (down)").grid(row=8, column=10, pady=3)
 
         # Z-axis control buttons
-        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.send_gcode("MOVE Z UP"), bootstyle="light").grid(row=3, column=10, columnspan=2)
-        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.send_gcode("MEDIUM STEP Z UP"), bootstyle="secondary").grid(row=2, column=10, columnspan=2, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.send_gcode("BIG STEP Z UP"), bootstyle="dark").grid(row=1, column=10, columnspan=2, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.send_gcode("MOVE Z DOWN"), bootstyle="light").grid(row=5, column=10, columnspan=2)
-        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("MEDIUM STEP Z DOWN"), bootstyle="secondary").grid(row=6, column=10, columnspan=2, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("BIG STEP Z DOWN"), bootstyle="dark").grid(row=7, column=10, columnspan=2, pady=3)
+        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.send_gcode("UP SMALL"), bootstyle="light").grid(row=3, column=10, columnspan=2)
+        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.send_gcode("UP MEDIUM"), bootstyle="secondary").grid(row=2, column=10, columnspan=2, pady=3)
+        ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.send_gcode("UP LARGE"), bootstyle="dark").grid(row=1, column=10, columnspan=2, pady=3)
+        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.send_gcode("DOWN SMALL"), bootstyle="light").grid(row=5, column=10, columnspan=2)
+        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("DOWN MEDIUM"), bootstyle="secondary").grid(row=6, column=10, columnspan=2, pady=3)
+        ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("DOWN LARGE"), bootstyle="dark").grid(row=7, column=10, columnspan=2, pady=3)
 
         # Frame for register
         register_frame = ttk.Labelframe(main_frame, text="Register", padding=5)
         register_frame.grid(row=2, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
-
-        # Register labels and entries
         self.register_first_smaple_button = ttk.Button(register_frame, text="Register Current Position as First Sample", command = self.register_first_smaple, bootstyle ="success", width=36)
         self.register_first_smaple_button.grid(row=0, column=1, padx=5, pady=5)
         self.register_lowest_point_button = ttk.Button(register_frame, text="Register Current Z as the Lowest Point", command=self.register_lowest_point, bootstyle = "success", width=36)
@@ -189,39 +180,149 @@ class StageControlerModule(ttk.Frame):
         self.remove_lowest_point_button = ttk.Button(register_frame, text="Remove", command= self.remove_lowest_point_registration,bootstyle="danger", state=DISABLED)
         self.remove_lowest_point_button.grid(row=1, column=2, padx=5, pady=5)
 
+    def find_printer_com_ports():
+        ports = serial.tools.list_ports.comports()
+        for port in ports:
+            print(f"Device: {port.device}, Name: {port.name}, Description: {port.description}, HWID: {port.hwid}")
+            if port.description == "Original Prusa i3 MK3 (COM3)":
+                return port.name
 
-    def move_to_coordinates(self):
-        p2_x = self.p2_x_entry.get()
-        p2_y = self.p2_y_entry.get()
-        p2_z = self.p2_z_entry.get()
+    def ref(self, option):
+        if self.ser is None:
+            print("Please connect to the printer first")
+            return
+        if option == "X":
+            self.ser.write(str.encode("G28 X\r\n"))
+        elif option == "Y":
+            self.ser.write(str.encode("G28 Y\r\n"))
+        elif option == "Z":
+            self.ser.write(str.encode("G28 Z\r\n"))
+        elif option == "ALL":
+            self.ser.write(str.encode("G28 X Y Z\r\n"))
+        else:
+            print("Invalid option")
+            return
 
-        if p2_x and p2_y and p2_z:
-            gcode = f"G0 X{p2_x} Y{p2_y} Z{p2_z}"
-            self.send_gcode(gcode)
+    def send_gcode(self, option):
+        if self.ser is None:
+            print("Please connect to the printer first")
+            return
+        if option == "UP SMALL":
+            gecode = f"G0 Z0.1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gecode))
+            print("Moving up small")
+        elif option == "UP MEDIUM":
+            gcode = f"G0 Z1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+            print("Moving up medium")
+        elif option == "UP LARGE":
+            gcode = f"G0 Z10 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+            print("Moving up large")
 
-    def send_gcode(self, gcode):
-        # Implement the code to send G-code to your device here.
-        print(f"Sending G-code: {gcode}")
-        # For example, you might use serial communication:
-        # ser.write((gcode + '\n').encode())
+        elif option == "DOWN SMALL":
+            gcode = f"G1 Z-0.1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "DOWN MEDIUM":
+            gcode = f"G1 Z-1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "DOWN LARGE":
+            gcode = f"G1 Z-10 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+
+        elif option == "LEFT SMALL":
+            gcode = f"G1 X-0.1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "LEFT MEDIUM":
+            gcode = f"G1 X-1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "LEFT LARGE":
+            gcode = f"G1 X-10 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+
+        elif option == "RIGHT SMALL":
+            gcode = f"G1 X0.1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "RIGHT MEDIUM":
+            gcode = f"G1 X1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "RIGHT LARGE":
+            gcode = f"G1 X10 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+
+        elif option == "BACK SMALL":
+            gcode = f"G1 Y0.1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "BACK MEDIUM":
+            gcode = f"G1 Y1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "BACK LARGE":
+            gcode = f"G1 Y10 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+
+        elif option == "FRONT SMALL":
+            gcode = f"G1 Y-0.1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "FRONT MEDIUM":
+            gcode = f"G1 Y-1 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "FRONT LARGE":
+            gcode = f"G1 Y-10 F{self.speed}\r\n"
+            self.ser.write(str.encode("G91\r\n"))
+            self.ser.write(str.encode(gcode))
+        elif option == "GO":
+            p2_x = self.p2_x_entry.get()
+            p2_y = self.p2_y_entry.get()
+            p2_z = self.p2_z_entry.get()
+
+            if p2_x and p2_y and p2_z:
+                gcode = f"G0 X{p2_x} Y{p2_y} Z{p2_z} F{self.speed}\r\n"
+                self.ser.write(str.encode("G90\r\n"))
+                self.ser.write(str.encode(gcode))
+            else:
+                print("Please enter all the coordinates")
+                return
+        else:
+            print("Invalid option")
+            return
 
     def update_speed(self):
-        speed_x = self.speed_x_entry.get()
-        speed_y = self.speed_y_entry.get()
-        speed_z = self.speed_z_entry.get()
+        self.speed = self.speed_slider.get()
+        print(f"Speed of stage is updated to: {self.speed} mm/s")
 
-        if speed_x and speed_y and speed_z:
-            gcode = f"SET SPEED X{speed_x} Y{speed_y} Z{speed_z}"
-            self.send_gcode(gcode)
 
     def connect_device(self):
         self.connect_button.configure(text="Disconnect", command=self.disconnect_device)
         self.connect_button.configure(bootstyle="success")
+        self.port = StageControlerModule.find_printer_com_ports()
+        self.ser = serial.Serial(self.port, 115200)
+        print("Connected to the printer " + self.ser.name)
+        return self.ser
 
     def disconnect_device(self):
         self.connect_button.configure(text="Connect", command=self.connect_device)
         # change the color of the connect button to primary
         self.connect_button.configure(bootstyle="secondary")
+        self.port = None
+        self.ser = None
+        print("Disconnected to the printer")
 
     def register_first_smaple(self):
         # change the text of the button
