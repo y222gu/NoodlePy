@@ -7,7 +7,6 @@ from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from noodlepy.gui.liveviewmodule import LiveViewModule
 import os
-from ultralytics import YOLO
 import time
 import serial
 import cv2
@@ -318,45 +317,76 @@ class StageControlerModule(ttk.Frame):
 
     def disconnect_device(self):
         self.connect_button.configure(text="Connect", command=self.connect_device)
-        # change the color of the connect button to primary
         self.connect_button.configure(bootstyle="secondary")
         self.port = None
         self.ser = None
         print("Disconnected to the printer")
 
+    def get_current_position(self):
+        self.ser.write(b'M114\n')
+        response = self.ser.readline().decode('utf-8').strip()
+        return response
+
     def register_first_smaple(self):
-        # change the text of the button
+        # record the current position as the first sample
+        self.position_first_smaple = self.get_current_position()
         self.register_first_smaple_button.configure(text="First Sample Registered")
-        # change the color of the button
         self.register_first_smaple_button.configure(bootstyle="success")
         self.register_first_smaple_button.configure(state=DISABLED)
-        # enable the remove button
         self.remove_first_sample_button.configure(state=NORMAL)
         print("First sample registered")
 
     def register_lowest_point(self):
+        current_position = self.get_current_position()
+        self.lowest_point = float(current_position.split(' ')[2].split(':')[1])
         self.register_lowest_point_button.configure(text="Lowest Z Point registered")
         self.register_lowest_point_button.configure(bootstyle="success")
         self.register_lowest_point_button.configure(state=DISABLED)
         self.remove_lowest_point_button.configure(state=NORMAL)
         print("Lowest Z registered")
 
-
     def remove_first_sample_registration(self):
+        self.position_lowest_point = None
+        print("Registration of the first sample removed")
         self.remove_first_sample_button.configure(state=DISABLED)
         self.register_first_smaple_button.configure(text="Register Current Position as First Sample")
         self.register_first_smaple_button.configure(state=NORMAL)
         self.register_first_smaple_button.configure(bootstyle="success")
-        print("Registration of the first sample removed")
 
     def remove_lowest_point_registration(self):
+        self.lowest_point = None
         print("Registration of the lowest Z removed")
         self.remove_lowest_point_button.configure(state=DISABLED)
         self.register_lowest_point_button.configure(text ='Register Current Z as the Lowest Point', state = NORMAL, bootstyle = 'success')
 
-    # Function to update the StringVar with the slider's value
     def update_label(self, value):
         self.slider_value.set(f"{float(value):.2f} mm/s")
+
+    def go_to_first_sample(self):
+        if self.position_first_smaple:
+            # rise the z-axis to the highest point
+            current_position = self.get_current_position()
+            current_x = float(current_position.split(' ')[0].split(':')[1])
+            current_y = float(current_position.split(' ')[1].split(':')[1])
+
+            # rise to a safe height
+            self.ser.write(str.encode(f"G90 X{current_x} Y{current_y} Z30 \r\n"))
+            # move to the position of the first sample
+            self.ser.write(str.encode(f"G90 " + self.position_first_smaple + "\r\n"))
+        else:
+            print("Please register the first sample first")
+
+    def go_to_lowest_point(self):
+        if self.lowest_point:
+            # rise the z-axis to the highest point
+            current_position = self.get_current_position()
+            current_x = float(current_position.split(' ')[0].split(':')[1])
+            current_y = float(current_position.split(' ')[1].split(':')[1])
+
+            # move to the lowest point
+            self.ser.write(str.encode(f"G90 X{current_x} Y{current_y} Z{self.lowest_point} \r\n"))
+        else:
+            print("Please register the lowest point first")
 
 class AutoFocusModule(ttk.Frame):
     def __init__(self, parent):
@@ -454,8 +484,6 @@ class AutoFocusModule(ttk.Frame):
         # For example, you might use serial communication:
         # ser.write("STOP AUTOFOCUS\n".encode())
     
-
-
     def save_results(self):
         # Implement the code to save the autofocus results here
         print("Saving autofocus results")
