@@ -77,13 +77,13 @@ if __name__ == "__main__":
     generator=generator
     )
 
-    model = train_model(model, train_dataloaders, training_cfg)
+    # model = train_model(model, train_dataloaders, training_cfg)
 
     # ## save the model
-    torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", "model_HNC_test_the_new_script.pth"))
+    # torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", "model_HNC_test_the_new_script.pth"))
 
-   # load the saved model
-    # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "model_HNC.pth")))
+#    load the saved model
+    model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "model_HNC.pth")))
 
     # map_for_color_and_marker = {'C': 'b', 'OC': 'r', 'EVs': 'x', 'serum': 'o', 'desalted1x': 'p', 'original': 'x', 'none': 'o', 'default_color':'teal', 'default_marker':'*'}
 
