@@ -62,7 +62,7 @@ class StageControlerModule(ttk.Frame):
         reference_frame.grid(row=0, column=1, columnspan=4, padx=5, pady=5)
 
         ttk.Button(reference_frame, text="Ref X", command=lambda: self.ref("X"), bootstyle="secondary", width=6).grid(row=0, column=0, padx=5)
-        ttk.Button(reference_frame, text="Ref Y", command=lambda: self.ref("X"), bootstyle="secondary", width=6).grid(row=0, column=1, padx=5)
+        ttk.Button(reference_frame, text="Ref Y", command=lambda: self.ref("Y"), bootstyle="secondary", width=6).grid(row=0, column=1, padx=5)
         ttk.Button(reference_frame, text="Ref Z", command=lambda: self.ref("Z"), bootstyle="secondary", width=6).grid(row=0, column=2, padx=5)
         ttk.Button(reference_frame, text="Ref All", command=lambda: self.ref("ALL"), bootstyle="warning", width=6).grid(row=0, column=3, padx=5)
 
@@ -74,9 +74,9 @@ class StageControlerModule(ttk.Frame):
         ttk.Label(movement_frame, text="Z").grid(row=0, column=3)
 
         ttk.Label(movement_frame, text="Current").grid(row=1, column=0, padx=5, pady=5)
-        self.p1_x_entry = ttk.Label(movement_frame, text="0")
-        self.p1_y_entry = ttk.Label(movement_frame, text="0")
-        self.p1_z_entry = ttk.Label(movement_frame, text="0")
+        self.p1_x_entry = ttk.Label(movement_frame, text="Nan")
+        self.p1_y_entry = ttk.Label(movement_frame, text="Nan")
+        self.p1_z_entry = ttk.Label(movement_frame, text="Nan")
         self.p1_x_entry.grid(row=1, column=1, padx=5, pady=5)
         self.p1_y_entry.grid(row=1, column=2, padx=5, pady=5)
         self.p1_z_entry.grid(row=1, column=3, padx=5, pady=5)
@@ -174,15 +174,20 @@ class StageControlerModule(ttk.Frame):
         self.register_lowest_point_button.grid(row=1, column=1, padx=5, pady=5)
 
         # Remove button
-        self.remove_first_sample_button = ttk.Button(register_frame, text="Remove", command= self.remove_first_sample_registration,bootstyle="danger", state=DISABLED)
+        self.remove_first_sample_button = ttk.Button(register_frame, text="x", command= self.remove_first_sample_registration,bootstyle="danger", state=DISABLED)
         self.remove_first_sample_button.grid(row=0, column=2, padx=5, pady=5)
-        self.remove_lowest_point_button = ttk.Button(register_frame, text="Remove", command= self.remove_lowest_point_registration,bootstyle="danger", state=DISABLED)
+        self.remove_lowest_point_button = ttk.Button(register_frame, text="x", command= self.remove_lowest_point_registration,bootstyle="danger", state=DISABLED)
         self.remove_lowest_point_button.grid(row=1, column=2, padx=5, pady=5)
+
+        self.go_to_first_sample_button = ttk.Button(register_frame, text="Go", command=self.go_to_first_sample, bootstyle="success", width=6)
+        self.go_to_first_sample_button.grid(row=0, column=3, padx=5, pady=5)
+        self.go_to_lowest_point_button = ttk.Button(register_frame, text="Go", command=self.go_to_lowest_point, bootstyle="success", width=6)
+        self.go_to_lowest_point_button.grid(row=1, column=3, padx=5, pady=5)
+
 
     def find_printer_com_ports():
         ports = serial.tools.list_ports.comports()
         for port in ports:
-            print(f"Device: {port.device}, Name: {port.name}, Description: {port.description}, HWID: {port.hwid}")
             if port.description == "Original Prusa i3 MK3 (COM3)":
                 return port.name
 
@@ -192,15 +197,31 @@ class StageControlerModule(ttk.Frame):
             return
         if option == "X":
             self.ser.write(str.encode("G28 X\r\n"))
+            self.get_current_position('X')
         elif option == "Y":
             self.ser.write(str.encode("G28 Y\r\n"))
+            self.get_current_position('Y')
         elif option == "Z":
             self.ser.write(str.encode("G28 Z\r\n"))
+            self.get_current_position('Z')
         elif option == "ALL":
             self.ser.write(str.encode("G28 X Y Z\r\n"))
+            self.ser.write(str.encode("G90\r\n"))
+            self.ser.write(str.encode("G0 X0 Y0 Z0 F3000\r\n"))
+            self.get_current_position('XYZ')
         else:
             print("Invalid option")
             return
+
+    def wait_for_process_complete(self, process_name, critiria):
+        """Waits for a signal from the printer that homing is complete."""
+        while True:
+            line = self.ser.readline().decode('utf-8').strip()
+            if critiria in line:
+                print(f"Received during {process_name}: {line}")
+                return line
+            elif line:
+                print(f"Received during {process_name}: {line}")
 
     def send_gcode(self, option):
         if self.ser is None:
@@ -300,20 +321,28 @@ class StageControlerModule(ttk.Frame):
                 return
         else:
             print("Invalid option")
-            return
+        
+        self.get_current_position('XYZ')
+        return
 
     def update_speed(self):
         self.speed = self.speed_slider.get()
         print(f"Speed of stage is updated to: {self.speed} mm/s")
 
-
     def connect_device(self):
-        self.connect_button.configure(text="Disconnect", command=self.disconnect_device)
-        self.connect_button.configure(bootstyle="success")
         self.port = StageControlerModule.find_printer_com_ports()
         self.ser = serial.Serial(self.port, 115200)
-        print("Connected to the printer " + self.ser.name)
-        return self.ser
+        
+        printer_status = StageControlerModule.is_printer_on(self.ser)
+        # Check if the device is online
+        if printer_status:
+            self.connect_button.configure(text="Disconnect", command=self.disconnect_device)
+            self.connect_button.configure(bootstyle="success")
+            print("Connected to the printer " + self.ser.name)
+        else:
+            self.ser.close()
+            print("Couldn't connect to the printer")
+
 
     def disconnect_device(self):
         self.connect_button.configure(text="Connect", command=self.connect_device)
@@ -322,14 +351,53 @@ class StageControlerModule(ttk.Frame):
         self.ser = None
         print("Disconnected to the printer")
 
-    def get_current_position(self):
+    def is_printer_on(ser):
+        try:
+            ser.flushInput()
+            ser.flushOutput()
+            ser.write(b'M105\n')
+            time.sleep(3)
+            response = ser.read_all().decode('utf-8')
+            print(response)
+
+            if 'start\necho:' in response:
+                return True
+            else:
+                return False
+        except Exception as e:
+            print(f"Unexpected Error: {e}")
+            return False
+
+            
+    def get_current_position(self, dim = 'XYZ'):
+        self.ser.flushInput()
+        self.ser.flushOutput()
         self.ser.write(b'M114\n')
-        response = self.ser.readline().decode('utf-8').strip()
-        return response
+        line = self.wait_for_process_complete(process_name = "get_current_position", critiria='X')
+        if dim == 'XYZ':
+            X = line.split(' ')[0].split(':')[1]
+            Y = line.split(' ')[1].split(':')[1]
+            Z = line.split(' ')[2].split(':')[1]
+            self.p1_x_entry.config(text=X)
+            self.p1_y_entry.config(text=Y)
+            self.p1_z_entry.config(text=Z)   
+            return X, Y, Z
+        elif dim == 'X':
+            X = line.split(' ')[0].split(':')[1]
+            self.p1_x_entry.config(text=X)
+            return X
+        elif dim == 'Y':
+            Y = line.split(' ')[1].split(':')[1]
+            self.p1_y_entry.config(text=Y)
+            return Y
+        elif dim == 'Z':
+            Z = line.split(' ')[2].split(':')[1]
+            self.p1_z_entry.config(text=Z)
+            return Z
 
     def register_first_smaple(self):
         # record the current position as the first sample
-        self.position_first_smaple = self.get_current_position()
+        self.position_first_smaple = self.get_current_position('XYZ')
         self.register_first_smaple_button.configure(text="First Sample Registered")
         self.register_first_smaple_button.configure(bootstyle="success")
         self.register_first_smaple_button.configure(state=DISABLED)
@@ -337,8 +405,8 @@ class StageControlerModule(ttk.Frame):
         print("First sample registered")
 
     def register_lowest_point(self):
-        current_position = self.get_current_position()
-        self.lowest_point = float(current_position.split(' ')[2].split(':')[1])
+        current_position = self.get_current_position('XYZ')
+        self.lowest_point = current_position[2]
         self.register_lowest_point_button.configure(text="Lowest Z Point registered")
         self.register_lowest_point_button.configure(bootstyle="success")
         self.register_lowest_point_button.configure(state=DISABLED)
@@ -346,7 +414,7 @@ class StageControlerModule(ttk.Frame):
         print("Lowest Z registered")
 
     def remove_first_sample_registration(self):
-        self.position_lowest_point = None
+        self.position_first_smaple = None
         print("Registration of the first sample removed")
         self.remove_first_sample_button.configure(state=DISABLED)
         self.register_first_smaple_button.configure(text="Register Current Position as First Sample")
@@ -364,27 +432,26 @@ class StageControlerModule(ttk.Frame):
 
     def go_to_first_sample(self):
         if self.position_first_smaple:
-            # rise the z-axis to the highest point
-            current_position = self.get_current_position()
-            current_x = float(current_position.split(' ')[0].split(':')[1])
-            current_y = float(current_position.split(' ')[1].split(':')[1])
-
             # rise to a safe height
-            self.ser.write(str.encode(f"G90 X{current_x} Y{current_y} Z30 \r\n"))
+            self.ser.write(str.encode("G90\r\n"))
+            self.ser.write(str.encode(f"G0 Z30 \r\n"))
             # move to the position of the first sample
-            self.ser.write(str.encode(f"G90 " + self.position_first_smaple + "\r\n"))
+            self.ser.write(str.encode("G90\r\n"))
+            gcode = f"G0 X{self.position_first_smaple[0]} Y{self.position_first_smaple[1]} F{self.speed}\r\n"
+            self.ser.write(str.encode(gcode))
+            self.ser.write(str.encode("G90\r\n"))
+            gcode = f"G0 Z{self.position_first_smaple[2]}\r\n"
+            self.ser.write(str.encode(gcode))
+
+            self.get_current_position('XYZ')
         else:
             print("Please register the first sample first")
 
     def go_to_lowest_point(self):
         if self.lowest_point:
-            # rise the z-axis to the highest point
-            current_position = self.get_current_position()
-            current_x = float(current_position.split(' ')[0].split(':')[1])
-            current_y = float(current_position.split(' ')[1].split(':')[1])
-
-            # move to the lowest point
-            self.ser.write(str.encode(f"G90 X{current_x} Y{current_y} Z{self.lowest_point} \r\n"))
+            self.ser.write(str.encode("G90\r\n"))
+            self.ser.write(str.encode(f"G0 Z{self.lowest_point} \r\n"))
+            self.get_current_position('XYZ')
         else:
             print("Please register the lowest point first")
 
