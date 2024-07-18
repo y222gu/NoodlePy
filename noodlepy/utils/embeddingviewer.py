@@ -20,6 +20,7 @@ class EmbeddingViewer():
         self.embeddings = embeddings
         self.labels = EmbeddingViewer.reorganize_dicts(label_dict_list)
 
+
     def map_label(self, labels, type):
         if type == 'to_color':
             default_label = self.map['default_color']
@@ -116,7 +117,7 @@ class EmbeddingViewer():
         plt.xlabel('Component 1')
         plt.ylabel('Component 2')
         save_path = os.path.join(os.getcwd(), "output_plots", title + ".png")
-        plt.savefig(save_path)
+        plt.savefig(save_path, transparent=True)
 
 
     def tsne3d(self, embeddings_3d, labels_for_color, labels_for_marker, title='t-SNE 3D Visualization'):
@@ -156,3 +157,28 @@ class EmbeddingViewer():
         plt.ylabel('Component 2')
         save_path = os.path.join(os.getcwd(), "output_plots", title + ".png")
         plt.savefig(save_path)
+
+
+def load_files_for_tf_embedding_projector(embedding_file_name='embeddings', metadata_file_name='metadata'):
+    
+    # Load embeddings
+    embeddings = []
+    with open(embedding_file_name, 'r') as f:
+        for line in f:
+            embedding = list(map(float, line.strip().split('\t')))
+            embeddings.append(embedding)
+    embeddings = np.array(embeddings)
+    
+    # Load metadata
+    metadata_df = pd.read_csv(metadata_file_name, delimiter='\t')
+    labels = metadata_df.to_dict(orient='list')
+    
+    return embeddings, labels
+
+
+if __name__ == '__main__':
+    embedding_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/tensorflow_embedding/embeddings.tsv")
+    metadata_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/tensorflow_embedding/labels.tsv")
+    embeddings, label_dict_list = load_files_for_tf_embedding_projector(embedding_file_name=embedding_file_path, metadata_file_name=metadata_file_path)
+    embedding_viewer = EmbeddingViewer(embeddings, label_dict_list)
+    embedding_viewer.tsne2d()
