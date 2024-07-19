@@ -9,6 +9,7 @@ import torch
 import copy
 import numpy as np
 import matplotlib.pyplot as plt
+import random
 class HNC_Dataset(Dataset):
     def __init__(self, data_folder = None,
                  annotation_file_path = None,
@@ -58,7 +59,7 @@ class HNC_Dataset(Dataset):
         augmented_spectrum_list (list[Spectrum]): a tuple of 2 augmented Spectrum objects
         """
         chosen_spectrum:Spectrum = self.db[idx]
-        # chosen_spectrum.display("raw_spectrum")
+
 
         if self.preprocessor is not None:
             preprocessor = self.preprocessor
@@ -78,6 +79,57 @@ class HNC_Dataset(Dataset):
 
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
+
+        # cropped_spectrum = copy.deepcopy(chosen_spectrum)        
+        # cropped_spectrum = cropped_spectrum.crop_spectrum(624.573, 1784.104)
+        # cropped_spectrum.display(f"cropped_spectrum_{idx}")
+        # preprocessed_spectrum.display(f"preprocessed_spectrum_{idx}")
+        # augmented_spectrum_1.display(f"augmented_spectrum_1_{idx}")
+        # augmented_spectrum_2.display(f"augmented_spectrum_2_{idx}")
+
+        # fig, ax = plt.subplots(4,1,figsize=(12, 10),sharex=True, gridspec_kw={'hspace': 0})
+        # fig.suptitle("Spectra Augmentation Example", fontsize=25, color = "white")
+        # fig.supylabel("Intensity (a.u.)", fontsize=25, color = "white")
+
+        # ax[0].plot(cropped_spectrum.raman_shift_cm, cropped_spectrum.intensity, linewidth=2, color = "rebeccapurple", label = "Raw spectrum")
+        # ax[1].plot(preprocessed_spectrum.raman_shift_cm, preprocessed_spectrum.intensity, linewidth=2, color = "mediumslateblue", label = "Preprocessed spectrum")
+        # ax[2].plot(augmented_spectrum_1.raman_shift_cm, augmented_spectrum_1.intensity, linewidth=2, color = "lightskyblue", label = "Augmented spectrum 1")
+        # ax[3].plot(augmented_spectrum_2.raman_shift_cm, augmented_spectrum_2.intensity, linewidth=2, color = "tab:blue", label = "Augmented spectrum 2")
+
+        # ax[0].legend(loc='upper left', fontsize=20, facecolor='none', edgecolor='rebeccapurple', labelcolor='white')
+        # ax[1].legend(loc='upper left', fontsize=20, facecolor='none', edgecolor='mediumslateblue', labelcolor='white')
+        # ax[2].legend(loc='upper left', fontsize=20, facecolor='none', edgecolor='lightskyblue', labelcolor='white')
+        # ax[3].legend(loc='upper left', fontsize=20, facecolor='none', edgecolor='tab:blue', labelcolor='white')
+
+        # ax[0].set_ylim(2500, 6250)
+        # ax[1].set_ylim(-0.1, 1.1)
+        # ax[2].set_ylim(2500, 6250)
+        # ax[3].set_ylim(2500, 6250)
+
+        # for ax in fig.get_axes():
+        #     ax.label_outer(remove_inner_ticks= True)
+        #     ax.spines['top'].set_color('white')
+        #     ax.spines['top'].set_linewidth(1.5)
+        #     ax.spines['right'].set_color('white')
+        #     ax.spines['right'].set_linewidth(1.5)
+        #     ax.spines['bottom'].set_color('white')
+        #     ax.spines['bottom'].set_linewidth(1.5)
+        #     ax.spines['left'].set_color('white')
+        #     ax.spines['left'].set_linewidth(1.5)
+        #     ax.title.set_color('white')
+        #     ax.xaxis.label.set_color('white')
+        #     ax.yaxis.label.set_color('white')
+        #     ax.tick_params(axis='x', which= 'major',colors='white', labelsize=25)
+        #     ax.tick_params(axis='y', which= 'major',colors='white', labelsize=25)
+        #     ax.yaxis.label.set_size(25)
+        #     ax.xaxis.label.set_size(25)
+        #     ax.set_xlim(624.573, 1782.711)
+
+        # plt.xlabel("Raman Shift (cm^-1)", fontsize=25)
+        # plt.subplots_adjust(hspace=0)
+        # plt.tight_layout()
+        # path_for_figure = os.path.join(os.getcwd(), "output_plots", "example_spectra_from_the_training_set.png")
+        # plt.savefig(path_for_figure, transparent=True)
 
         return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata
     
@@ -103,16 +155,12 @@ class HNC_Dataset(Dataset):
             patient_labels['staging'] = patient_metadata_row['Staging'].values[0]
             patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
             patient_labels['race'] = patient_metadata_row['Race'].values[0]
-            #patient_labels['bmi'] = patient_metadata_row['BMI'].values[0]
-            #patient_labels['age'] = patient_metadata_row['Age'].values[0]
 
         else:
             # If the patient_id is not found in the metadata file, set the every metadata to empty string and number
             patient_labels['staging'] = np.nan
             patient_labels['gender'] = ''
             patient_labels['race'] = ''
-            #patient_labels['age'] = np.nan
-            #patient_labels['bmi'] = np.nan
         
             print(f"Patient ID {patient_id} not found in the metadata file")
             print("Metadata set to empty strings and numbers")
@@ -189,8 +237,20 @@ class HNC_Dataset(Dataset):
         return mean_cosmic_ray_count, std_cosmic_ray_count
     
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "saliva","saliva_all")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "plasma_saliva_mixed","train")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
+
+    seed = 4
+    random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.enabled = False
+    torch.backends.cudnn.deterministic = True
+    torch.use_deterministic_algorithms(True)
+    np.random.seed(seed)
+    os.environ['PYTHONHASHSEED'] = str(seed)
 
     preprocessor = SpectrumPreprocessor(cropping=True,
                                         baseline_correction=True,
@@ -198,12 +258,18 @@ if __name__ == "__main__":
                                         normalization=True,
                                         smoothing=True)
     
-    augmentor = SpectrumAugmentor(ramdom_augmentations=True,
+    augmentor = SpectrumAugmentor(ramdom_augmentations=False,
                                   augmentation_step_list = None,
                                   config_path= None)
 
     dataset = HNC_Dataset(data_folder, metadata_file, preprocessor, augmentor)
 
-    dataset.get_peak_distribution()
-    dataset.get_cosmic_ray_counts_distribution()
+    for i in range(5150):
+        ## get a random spectrum
+        #idx = random.randint(0, dataset.__len__() - 1)
+        example_spectrum = dataset.__getitem__(i)
+
+    # dataset.get_peak_distribution()
+    # dataset.get_cosmic_ray_counts_distribution()
+
     print("Done")

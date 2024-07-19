@@ -7,36 +7,43 @@ from sklearn.manifold import TSNE
 import torch
 import csv
 
-class EmbeddingViewer():
-    def __init__(self, embeddings, label_dict_list, map=None):
+class EmbeddingViewer:
+    def __init__(self, embeddings=None, label_dict_list=None, embeddings_file_path=None, metadata_file_path=None, map=None):
         if map is None:
-            self.map = {0:'green', 1:'gold', 2:'orangered', 3:'red', 4:'purple', # staging
+            self.map = {0:'mediumslateblue', 1:'gold', 2:'gold', 3:'orangered', 4:'orangered', # staging gold mediumslateblue
                         'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
                         'White':'xkcd:salmon', # race
-                        'plasma':"P", 'saliva':">",
+                        'plasma':"x", 'saliva':">",# ">", "x"
                         'default_color':'teal', 'default_marker':'*'} #  'plasma':"circle", 'saliva':"cross"
         else:
             self.map = map
-        self.embeddings = embeddings
-        self.labels = EmbeddingViewer.reorganize_dicts(label_dict_list)
+        
+        if embeddings_file_path and metadata_file_path:
+            self.embeddings, self.labels = self.load_files_for_tf_embedding_projector(embeddings_file_path, metadata_file_path)
+        elif embeddings is not None and label_dict_list is not None:
+            self.embeddings = embeddings
+            self.labels = EmbeddingViewer.reorganize_dicts(label_dict_list)
+        else:
+            raise ValueError("Provide either (embeddings and label_dict_list) or (embedding_file_name and metadata_file_name)")
 
-
-    def map_label(self, labels, type):
+    @staticmethod
+    def map_label(labels, map, type):
         if type == 'to_color':
-            default_label = self.map['default_color']
+            default_label = map['default_color']
         elif type == 'to_marker':
-            default_label = self.map['default_marker']
+            default_label = map['default_marker']
         else:
             raise ValueError("Invalid type. Choose 'to_color' or 'to_marker'")
         
         mapped_labels = []
         for label in labels:
-            if label in self.map:
-                mapped_labels.append(self.map[label])
+            if label in map:
+                mapped_labels.append(map[label])
             else:
                 mapped_labels.append(default_label)
         return mapped_labels
 
+    @staticmethod
     def compute_tsne(embeddings, dim=3, **kwargs):
         tsne = TSNE(n_components=dim, **kwargs)
         embeddings_tsne = tsne.fit_transform(embeddings)
@@ -49,7 +56,6 @@ class EmbeddingViewer():
                 embedding_str = '\t'.join(map(str, embedding))
                 f.write(embedding_str + '\n')
 
-        
         metadata_file_name = os.path.join(os.getcwd(), "output_plots", metadata_file_name + ".tsv")
         with open(metadata_file_name, 'w', newline='\n') as tsvfile:
             tsv_writer = csv.writer(tsvfile, delimiter='\t')
@@ -57,6 +63,7 @@ class EmbeddingViewer():
             for row in zip(*self.labels.values()):
                 tsv_writer.writerow(row)
     
+    @staticmethod
     def break_up_dictionary_list(input_list):
         def break_up_dictionary(input_dict):
             num_entries = len(input_dict['patient_id'])
@@ -82,6 +89,7 @@ class EmbeddingViewer():
             output_list.extend(break_up_dictionary(d))
         return output_list
 
+    @staticmethod
     def reorganize_dicts(list_of_label_dicts):
         reorganized_label_dict = {}
         for d in list_of_label_dicts:
@@ -105,37 +113,71 @@ class EmbeddingViewer():
         embeddingsdf['x'] = embeddings_2d[:, 0]
         embeddingsdf['y'] = embeddings_2d[:, 1]
 
-        colors = EmbeddingViewer.map_label(self, labels=self.labels[label_name_for_color], type='to_color')
-        markers = EmbeddingViewer.map_label(self, labels=self.labels[label_name_for_marker], type='to_marker')
+        colors = EmbeddingViewer.map_label(self.labels[label_name_for_color], self.map, type='to_color')
+        markers = EmbeddingViewer.map_label(self.labels[label_name_for_marker], self.map, type='to_marker')
 
-        fig, ax = plt.subplots(figsize=(10, 8))
+        fig, ax = plt.subplots(figsize=(14, 11))
 
         # Scatter points, set alpha low to make points translucent
         for i in range(len(embeddingsdf.x)):
-            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
-        plt.title(title)
-        plt.xlabel('Component 1')
-        plt.ylabel('Component 2')
+            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i], alpha=0.8, s=250)#marker=markers[i],
+        # plt.title(title)
+        # plt.xlabel('Component 1')
+        # plt.ylabel('Component 2')
+        # remove the frame
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        # change the color of the remaining spines to white
+        ax.spines['bottom'].set_color('white')
+        ax.spines['bottom'].set_linewidth(3)
+        ax.spines['left'].set_color('white')
+        ax.spines['left'].set_linewidth(3)
+        # change the color of the ticks to white
+        ax.xaxis.label.set_color('white')
+        ax.yaxis.label.set_color('white')
+        ax.tick_params(axis='x', which= 'major',colors='white', labelsize=25)
+        ax.tick_params(axis='y', which= 'major',colors='white', labelsize=25)
+        ax.title.set_color('white')
+
+        # tight layout
+        plt.tight_layout()
+
+        #set the background color to black
+        fig.patch.set_facecolor('white')
         save_path = os.path.join(os.getcwd(), "output_plots", title + ".png")
         plt.savefig(save_path, transparent=True)
 
-
     def tsne3d(self, embeddings_3d, labels_for_color, labels_for_marker, title='t-SNE 3D Visualization'):
+        map = {0:'green', 1:'gold', 2:'orangered', 3:'red', 4:'purple', # staging
+                'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
+                'White':'xkcd:salmon', # race
+                'plasma':"cross", 'saliva':"circle",
+                'default_color':'teal', 'default_marker':'*'} #  'plasma':"circle", 'saliva':"cross"
 
-        colors = EmbeddingViewer.map_label(self, labels=labels_for_color, type='to_color')
-        markers = EmbeddingViewer.map_label(self, labels=labels_for_marker, type='to_marker')
+        colors = EmbeddingViewer.map_label(labels_for_color, map, type='to_color')
+        markers = EmbeddingViewer.map_label(labels_for_marker, map, type='to_marker')
+
     
         embeddings_3d = EmbeddingViewer.compute_tsne(embeddings_3d, dim=3)
-        fig = go.Scatter3d(embeddings_3d[:, 0], embeddings_3d[:, 1], embeddings_3d[:, 2], mode='markers', marker=dict(color=colors, size=5, symbol=markers))
-                
+        fig = go.Figure(data=go.Scatter3d(x=embeddings_3d[:, 0], y=embeddings_3d[:, 1], z=embeddings_3d[:, 2], 
+                                          mode='markers', marker=dict(color=colors, size=10, symbol=markers)))
+        
+        # set the size of the plot
+        fig.update_layout(width=800, height=800)
+
         fig.update_layout(
             title=title,
+            paper_bgcolor='rgba(1,1,1,1)',
+            plot_bgcolor='rgba(0,0,0,0)',
             scene=dict(
-                xaxis=dict(showgrid=False),
-                yaxis=dict(showgrid=False),
-                zaxis=dict(showgrid=False),
+                xaxis=dict(showgrid=False, backgroundcolor='rgba(0,0,0,0)'),
+                yaxis=dict(showgrid=False, backgroundcolor='rgba(0,0,0,0)'),
+                zaxis=dict(showgrid=False, backgroundcolor='rgba(0,0,0,0)'),
                 bgcolor='rgba(0,0,0,0)'
             ))
+        
+        # display the plot
+        # save the plot
         fig.write_html(os.path.join(os.getcwd(), "output_plots", title + ".html"))
 
     def tsne2d_by_patient(self, title='t-SNE 2D Visualization by Patient'):
@@ -144,41 +186,42 @@ class EmbeddingViewer():
         embeddingsdf['x'] = embeddings_2d[:, 0]
         embeddingsdf['y'] = embeddings_2d[:, 1]
 
-        colors = EmbeddingViewer.map_label(self, labels=self.labels['patient_id'], type='to_color')
-        markers = EmbeddingViewer.map_label(self, labels=self.labels['sample_type'], type='to_marker')
+        colors = EmbeddingViewer.map_label(self.labels['patient_id'], self.map, type='to_color')
+        markers = EmbeddingViewer.map_label(self.labels['sample_type'], self.map, type='to_marker')
 
         fig, ax = plt.subplots(figsize=(10, 8))
 
         # Scatter points, set alpha low to make points translucent
         for i in range(len(embeddingsdf.x)):
-            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i] ,alpha=0.5)
+            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i], alpha=0.5)
         plt.title(title)
         plt.xlabel('Component 1')
         plt.ylabel('Component 2')
         save_path = os.path.join(os.getcwd(), "output_plots", title + ".png")
         plt.savefig(save_path)
 
-
-def load_files_for_tf_embedding_projector(embedding_file_name='embeddings', metadata_file_name='metadata'):
-    
-    # Load embeddings
-    embeddings = []
-    with open(embedding_file_name, 'r') as f:
-        for line in f:
-            embedding = list(map(float, line.strip().split('\t')))
-            embeddings.append(embedding)
-    embeddings = np.array(embeddings)
-    
-    # Load metadata
-    metadata_df = pd.read_csv(metadata_file_name, delimiter='\t')
-    labels = metadata_df.to_dict(orient='list')
-    
-    return embeddings, labels
+    @staticmethod
+    def load_files_for_tf_embedding_projector(embedding_file_path='embeddings', metadata_file_path='metadata'):
+        # Load embeddings
+        embeddings = []
+        with open(embedding_file_path, 'r') as f:
+            for line in f:
+                embedding = list(map(float, line.strip().split('\t')))
+                embeddings.append(embedding)
+        embeddings = np.array(embeddings)
+        
+        # Load metadata
+        metadata_df = pd.read_csv(metadata_file_path, delimiter='\t')
+        labels = metadata_df.to_dict(orient='list')
+        
+        return embeddings, labels
 
 
 if __name__ == '__main__':
     embedding_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/tensorflow_embedding/embeddings.tsv")
     metadata_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/tensorflow_embedding/labels.tsv")
-    embeddings, label_dict_list = load_files_for_tf_embedding_projector(embedding_file_name=embedding_file_path, metadata_file_name=metadata_file_path)
-    embedding_viewer = EmbeddingViewer(embeddings, label_dict_list)
+    embedding_viewer = EmbeddingViewer(embeddings_file_path = embedding_file_path, metadata_file_path = metadata_file_path)
     embedding_viewer.tsne2d()
+    #embedding_viewer.tsne2d(label_name_for_color='sample_type', label_name_for_marker='staging', title="sample_type")
+    #embedding_viewer.tsne2d_by_patient()
+    #embedding_viewer.tsne3d(embeddings_3d=embedding_viewer.embeddings, labels_for_color=embedding_viewer.labels['staging'], labels_for_marker=embedding_viewer.labels['sample_type'])
