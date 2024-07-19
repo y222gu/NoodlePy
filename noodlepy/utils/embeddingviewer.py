@@ -8,12 +8,14 @@ import torch
 import csv
 
 class EmbeddingViewer:
-    def __init__(self, embeddings=None, label_dict_list=None, embeddings_file_path=None, metadata_file_path=None, map=None):
+    def __init__(self, embeddings=None, label_dict_list=None, embeddings_file_path=None, metadata_file_path=None, map=None, exp_name = "test"):
+
+        self.exp_name = exp_name
         if map is None:
             self.map = {0:'mediumslateblue', 1:'gold', 2:'gold', 3:'orangered', 4:'orangered', # staging gold mediumslateblue
                         'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
                         'White':'xkcd:salmon', # race
-                        'plasma':"x", 'saliva':">",# ">", "x"
+                        'plasma':"P", 'saliva':">",# ">", "x"
                         'default_color':'teal', 'default_marker':'*'} #  'plasma':"circle", 'saliva':"cross"
         else:
             self.map = map
@@ -49,14 +51,14 @@ class EmbeddingViewer:
         embeddings_tsne = tsne.fit_transform(embeddings)
         return embeddings_tsne
     
-    def save_files_for_tf_embedding_projector(self, embedding_file_name='embeddings', metadata_file_name='metadata'):
-        embedding_file_name = os.path.join(os.getcwd(), "output_plots", embedding_file_name + ".tsv")        
+    def save_files_for_tf_embedding_projector(self):
+        embedding_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_embedding" + ".tsv")        
         with open(embedding_file_name, 'w') as f:
             for embedding in self.embeddings:
                 embedding_str = '\t'.join(map(str, embedding))
                 f.write(embedding_str + '\n')
 
-        metadata_file_name = os.path.join(os.getcwd(), "output_plots", metadata_file_name + ".tsv")
+        metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_metadata" + ".tsv")
         with open(metadata_file_name, 'w', newline='\n') as tsvfile:
             tsv_writer = csv.writer(tsvfile, delimiter='\t')
             tsv_writer.writerow(self.labels.keys())
@@ -101,13 +103,15 @@ class EmbeddingViewer:
                 reorganized_label_dict[key].extend(value)
         return reorganized_label_dict
     
-    def tsne2d(self, label_name_for_color='staging', label_name_for_marker='sample_type', title="2d_tsne_plot"):
+    def tsne2d(self, label_name_for_color='staging', label_name_for_marker='sample_type'):
         embeddings_2d = EmbeddingViewer.compute_tsne(self.embeddings, dim=2)
-        embedding_file_name = os.path.join(os.getcwd(), "output_plots", title+"_2d.tsv")        
-        with open(embedding_file_name, 'w') as f:
-            for embedding in embeddings_2d:
-                embedding_str = '\t'.join(map(str, embedding))
-                f.write(embedding_str + '\n')
+
+        ## Save the 2d embedding file
+        # embedding_file_name = os.path.join(os.getcwd(), "output_plots", exp_name +"_2d_embedding.tsv")        
+        # with open(embedding_file_name, 'w') as f:
+        #     for embedding in embeddings_2d:
+        #         embedding_str = '\t'.join(map(str, embedding))
+        #         f.write(embedding_str + '\n')
 
         embeddingsdf = pd.DataFrame()
         embeddingsdf['x'] = embeddings_2d[:, 0]
@@ -144,10 +148,10 @@ class EmbeddingViewer:
 
         #set the background color to black
         fig.patch.set_facecolor('white')
-        save_path = os.path.join(os.getcwd(), "output_plots", title + ".png")
+        save_path = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_2d_tsne_plot" + ".png")
         plt.savefig(save_path, transparent=True)
 
-    def tsne3d(self, embeddings_3d, labels_for_color, labels_for_marker, title='t-SNE 3D Visualization'):
+    def tsne3d(self, embeddings_3d, labels_for_color, labels_for_marker):
         map = {0:'green', 1:'gold', 2:'orangered', 3:'red', 4:'purple', # staging
                 'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
                 'White':'xkcd:salmon', # race
@@ -166,7 +170,7 @@ class EmbeddingViewer:
         fig.update_layout(width=800, height=800)
 
         fig.update_layout(
-            title=title,
+            title=self.exp_name + "_3D_embedding",
             paper_bgcolor='rgba(1,1,1,1)',
             plot_bgcolor='rgba(0,0,0,0)',
             scene=dict(
@@ -178,7 +182,7 @@ class EmbeddingViewer:
         
         # display the plot
         # save the plot
-        fig.write_html(os.path.join(os.getcwd(), "output_plots", title + ".html"))
+        fig.write_html(os.path.join(os.getcwd(), "output_plots", self.exp_name + "_3D_embedding" + ".html"))
 
     def tsne2d_by_patient(self, title='t-SNE 2D Visualization by Patient'):
         embeddings_2d = EmbeddingViewer.compute_tsne(self.embeddings, dim=2)
