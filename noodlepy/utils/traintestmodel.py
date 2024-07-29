@@ -48,7 +48,7 @@ def train_model(model, train_dataloader, training_cfg):
     print("Finished Training")
     return model
 
-def test_model(model, test_dataloader, label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None):
+def test_model(model, test_dataloader, label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None, exp_name = "test"):
     print("Visualizing inference...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embeddings = []
@@ -65,6 +65,6 @@ def test_model(model, test_dataloader, label_name_for_color='staging', label_nam
     embeddings = torch.cat(embeddings, dim=0)
     embeddings = embeddings.cpu().numpy()
 
-    viewer = EmbeddingViewer(embeddings, label_dict_list, map=map_for_color_and_marker)
-    viewer.tsne2d(label_name_for_color=label_name_for_color, label_name_for_marker=label_name_for_marker, title="2d_tsne_plot")
-    viewer.save_files_for_tf_embedding_projector(embedding_file_name='embeddings', metadata_file_name='metadata')
+    viewer = EmbeddingViewer(embeddings, label_dict_list, map=map_for_color_and_marker, exp_name=exp_name)
+    viewer.tsne2d(label_name_for_color=label_name_for_color, label_name_for_marker=label_name_for_marker)
+    viewer.save_files_for_tf_embedding_projector()

@@ -15,9 +15,7 @@ if __name__ == "__main__":
 
     wandb.login()
     wandb.init(
-        # Set the project where this run will be logged
         project="SimSiam", 
-        # We pass a run name (otherwise it’ll be randomly assigned, like sunshine-lollypop-10)
         name=f"mixed_plasma_saliva_HNC", 
         # Track hyperparameters and run metadata
         config={
@@ -77,14 +75,21 @@ if __name__ == "__main__":
     generator=generator
     )
 
-    model = train_model(model, train_dataloaders, training_cfg)
+    ##### NAME OF THE MODEL
+    exp_name = "augment_without_amplication"
 
-    # ## save the model
-    torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", "model_OC.pth"))
+    ##### TRAIN THE MODEL
+    # model = train_model(model, train_dataloaders, training_cfg)
 
-   # load the saved model
-    # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "model_HNC.pth")))
+    ##### SAVE THE MODEL
+    torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", exp_name + "_model_OC.pth"))
 
+    ##### LOAD A SAVED MODEL
+    model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", exp_name + "_model_OC_.pth")))
+
+    ##### RESET THE COLOR MAP FOR DATASET
     map_for_color_and_marker = {'C': 'b', 'OC': 'r', 'EVs': 'x', 'serum': 'o', 'desalted1x': 'p', 'original': 'x', 'none': 'o', 'default_color':'teal', 'default_marker':'*'}
 
-    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = map_for_color_and_marker)
+    ##### TEST A MODEL
+    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = map_for_color_and_marker, exp_name = exp_name)
+   

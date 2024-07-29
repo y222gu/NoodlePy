@@ -185,7 +185,13 @@ class Spectrum:
         spike_locations = np.random.randint(0, len(self.raman_shift_cm), cosmic_ray_pars["spike_number"])
 
         for spike_location in spike_locations:
-            self.intensity[spike_location] = abs(self.intensity[spike_location])* cosmic_ray_pars["spike_amplitude"]
+            temp_cosmic_ray_intensity = abs(self.intensity[spike_location])* cosmic_ray_pars["spike_amplitude"]
+
+            if temp_cosmic_ray_intensity > max(self.intensity)* 1.2:
+                cosmic_ray_intensity = max(self.intensity)* 1.2
+            else:
+                cosmic_ray_intensity = temp_cosmic_ray_intensity
+            self.intensity[spike_location] = cosmic_ray_intensity
 
         # print(f'{cosmic_ray_pars["spike_number"]} number of cosmic rays are added to the spectrum...')
         return self
@@ -226,6 +232,7 @@ class Spectrum:
         self.intensity = self.intensity + baseline_intensity * baseline_pars["baseline_amplifying_factor"]
 
         # print(f'A random baseline is added to the spectrum...')
+        self.intensity = self.intensity + baseline_pars["baseline_offset"]
         
         return self
 
@@ -242,7 +249,7 @@ class Spectrum:
         self.raman_shift_cm = self.raman_shift_cm + wavenumber_shift
         return self
 
-    def amplify_spectrum(self, spectrum_amplifying_factor: float):
+    def amplify_spectrum(self, amplifying_pars: dict):
         """
         Amplify the spectrum.
 
@@ -252,7 +259,7 @@ class Spectrum:
         Returns:
         Spectrum: The amplified spectrum object.
         """
-        self.intensity = self.intensity * spectrum_amplifying_factor
+        self.intensity = self.intensity * amplifying_pars["spectrum_amplifying_factor"]
         return self
 
     def convolve_with_gaussian(self, gaussian_std: float):

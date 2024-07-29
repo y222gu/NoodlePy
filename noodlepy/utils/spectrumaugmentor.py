@@ -52,7 +52,7 @@ class SpectrumAugmentor:
             if 'normalization' in i_augmentation_par_dictionary.keys():
                 augmented_spectrum.normalize_spectrum(i_augmentation_par_dictionary["normalization"])
 
-            if 'spectrum_amplifying_factor' in i_augmentation_par_dictionary.keys():
+            if 'amplification' in i_augmentation_par_dictionary.keys():
                 augmented_spectrum.amplify_spectrum(i_augmentation_par_dictionary["amplification"])
 
             if 'horizontal_shift' in i_augmentation_par_dictionary.keys():
@@ -79,6 +79,7 @@ class SpectrumAugmentor:
             if 'cosmic_ray' in i_augmentation_par_dictionary.keys():
                 augmented_spectrum.add_cosmic_rays(**i_augmentation_par_dictionary['cosmic_ray'])
 
+            # augmented_spectrum.display('augmented spectrum' + str(i+1))
             augmented_spectrum_list.append(augmented_spectrum)
         
             # plot the augmented spectrum
@@ -95,6 +96,12 @@ class SpectrumAugmentor:
         """
         number_of_random_steps = np.random.randint(1,len(augmentation_step_list))
         random_augmentation_steps = np.random.choice((augmentation_step_list),number_of_random_steps,replace=False)
+        if "amplification" in augmentation_step_list:
+            if "amplification" not in random_augmentation_steps:
+                random_augmentation_steps = np.append(random_augmentation_steps, "amplification")
+        if "baseline" in augmentation_step_list:
+            if "baseline" not in random_augmentation_steps:
+                random_augmentation_steps = np.append(random_augmentation_steps, "baseline")
         return random_augmentation_steps
 
 
@@ -174,6 +181,9 @@ class SpectrumAugmentor:
             baseline_amplifying_factor = np.random.uniform(
             **self.config["baseline"]["baseline_amplifying_factor"])
 
+            baseline_offset = np.random.uniform(
+            **self.config["baseline"]["baseline_offset"])
+
             poly_orders = np.random.randint(
                         **self.config["baseline"]["poly_orders"])
             
@@ -185,6 +195,7 @@ class SpectrumAugmentor:
             augmentation_par_dictionary["baseline"] = {
             "baseline_type": baseline_type,
             "baseline_amplifying_factor": baseline_amplifying_factor,
+            "baseline_offset": baseline_offset,
             "poly_orders": poly_orders,
             "poly_coefficients": poly_coefficients
             }
