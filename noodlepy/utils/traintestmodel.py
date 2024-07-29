@@ -1,5 +1,5 @@
 import torch
-from lightly.loss import NegativeCosineSimilarity
+from lightly.loss import NegativeCosineSimilarity, NTXentLoss
 import wandb
 import math
 from noodlepy.utils.embeddingviewer import EmbeddingViewer
@@ -9,6 +9,7 @@ def train_model(model, train_dataloader, training_cfg):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     criterion = NegativeCosineSimilarity()
+    # criterion = NTXentLoss() 
     optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
 
         # training
