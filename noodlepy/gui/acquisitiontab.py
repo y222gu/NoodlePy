@@ -34,7 +34,6 @@ class AcquisitionGUI(ttk.Frame):
         # sample_detection_frame = SampleDetectionModule(main_frame)
         # sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
-
 class StageControlerModule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
