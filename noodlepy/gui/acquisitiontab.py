@@ -31,6 +31,7 @@ class AcquisitionGUI(ttk.Frame):
         live_view_frame = LiveViewModule(main_frame)
         live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
+
         # sample_detection_frame = SampleDetectionModule(main_frame)
         # sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 

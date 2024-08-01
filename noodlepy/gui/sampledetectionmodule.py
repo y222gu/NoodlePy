@@ -10,11 +10,11 @@ from matplotlib.figure import Figure
 class SampleDetectionModule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        image_path = '/Users/yifeigu/Documents/Carney_Lab/DiddyKong/outputs/img1.png'
+        image_path = r'C:\Users\yifei\Documents\NoodlePy\img1.png'
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.image = image
-        self.sam = sam_model_registry["vit_b"](checkpoint="/Users/yifeigu/Downloads/sam_vit_b_01ec64.pth")
+        self.sam = sam_model_registry["vit_b"](checkpoint=r"C:\Users\yifei\Documents\NoodlePy\sam_vit_b_01ec64.pth")
         self.create_widgets()
 
     def create_widgets(self):
