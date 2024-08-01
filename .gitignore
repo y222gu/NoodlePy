@@ -13,4 +13,3 @@ noodlepyvenv/
 wandb/
 *.html
 *.log
-*.png
