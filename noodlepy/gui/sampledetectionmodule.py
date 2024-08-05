@@ -10,11 +10,12 @@ from matplotlib.figure import Figure
 class SampleDetectionModule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        image_path = r'C:\Users\yifei\Documents\NoodlePy\img1.png'
+        image_path = r'/Users/yifeigu/Documents/Carney_Lab/NoodlePy/captured_frame_1.png'
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.image = image
-        self.sam = sam_model_registry["vit_b"](checkpoint=r"C:\Users\yifei\Documents\NoodlePy\sam_vit_b_01ec64.pth")
+        self.sam = sam_model_registry["vit_b"](checkpoint=r"/Users/yifeigu/Documents/Carney_Lab/NoodlePy/noodlepy/utils/sam_vit_b_01ec64.pth")
+        # self.sam.to('cuda')
         self.create_widgets()
 
     def create_widgets(self):
@@ -50,9 +51,9 @@ class SampleDetectionModule(ttk.Frame):
         plt.show()
 
     def point_prompt_mask_generate(self):
-        input_point = np.array([[400, 400], [1200, 400], [400, 700]])
-        input_label = np.array([1, 1, 0])
-        generator = SamPredictor(model=self.sam)
+        input_point = np.array([[650, 600]])
+        input_label = np.array([1])
+        generator = SamPredictor(self.sam)
         generator.set_image(self.image)
         masks, scores, logits = generator.predict(
             point_coords=input_point,
@@ -60,6 +61,8 @@ class SampleDetectionModule(ttk.Frame):
             multimask_output=False,
         )
         for i, (mask, score) in enumerate(zip(masks, scores)):
+            # reverse mask
+            # mask = 1 - mask
             plt.imshow(self.image)
             SampleDetectionModule.show_mask(mask, plt.gca())
             SampleDetectionModule.show_points(input_point, input_label, plt.gca())
@@ -68,7 +71,7 @@ class SampleDetectionModule(ttk.Frame):
   
     def box_prompt_mask_generate(self, x_low=950, y_low=180, x_high=1400, y_high=620):
         input_box = np.array([x_low, y_low, x_high, y_high])
-        generator = SamPredictor(model=self.sam)
+        generator = SamPredictor(self.sam)
         generator.set_image(self.image)
         masks, scores, logits = generator.predict(
             point_coords=None,

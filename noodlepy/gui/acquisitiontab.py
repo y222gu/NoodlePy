@@ -31,9 +31,8 @@ class AcquisitionGUI(ttk.Frame):
         live_view_frame = LiveViewModule(main_frame)
         live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
-
-        # sample_detection_frame = SampleDetectionModule(main_frame)
-        # sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
+        sample_detection_frame = SampleDetectionModule(main_frame)
+        sample_detection_frame.grid(row=0, column=3, columnspan=2, sticky="nsew", padx=5, pady=5)
 
 class StageControlerModule(ttk.Frame):
     def __init__(self, parent):
@@ -111,7 +110,6 @@ class StageControlerModule(ttk.Frame):
         ttk.Label(movement_frame, text="3000 mm/s").grid(row=3, column=4, padx=5, pady=5)
         self.speed_slider.bind("<ButtonRelease-1>", lambda e: self.update_speed())
 
-
         # Frame for direction buttons
         direction_frame = ttk.Frame(movement_frame, padding=3)
         direction_frame.grid(row=4, column=0, columnspan=10, pady=3, padx=3)
@@ -183,7 +181,6 @@ class StageControlerModule(ttk.Frame):
         self.go_to_first_sample_button.grid(row=0, column=3, padx=5, pady=5)
         self.go_to_lowest_point_button = ttk.Button(register_frame, text="Go", command=self.go_to_lowest_point, bootstyle="success", width=6)
         self.go_to_lowest_point_button.grid(row=1, column=3, padx=5, pady=5)
-
 
     def find_printer_com_ports():
         ports = serial.tools.list_ports.comports()
