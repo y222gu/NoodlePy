@@ -6,6 +6,8 @@ import threading
 import queue
 import ttkbootstrap as ttk
 import numpy as np
+from noodlepy.gui.sampledetectionmodule import EdgeDetector
+import os
 
 try:
     # if on Windows, use the provided setup script to add the DLLs folder to the PATH
@@ -118,36 +120,59 @@ class LiveViewModule(tk.Frame):
 
     def create_widgets(self):
         main_frame = ttk.Labelframe(self, text="Live View")
-        main_frame.grid(row=0, column=0, sticky='nsew')
+        main_frame.grid(row=0, column=0, columnspan=3, sticky='nsew')
 
         self.camera_widget = LiveViewCanvas(parent=main_frame, image_queue=self.image_acquisition_thread.get_output_queue())
+        self.camera_widget.grid(row=0, column=0,columnspan=3, sticky='nsew')
         
-        capture_button = ttk.Button(main_frame, text="Capture Frame", command=self.capture_frame)
-        capture_button.grid(row=1, column=0, sticky='nsew')
+        capture_button = ttk.Button(main_frame, text="Capture Frame", command=self.capture_frame, padding=5, style='success')
+        capture_button.grid(row=1, column=1, sticky='nsew')
 
-        self.captured_image = Image.new("RGB", (640, 480), "black")
-        self.captured_image_label = ttk.Label(main_frame, image=ImageTk.PhotoImage(self.captured_image))
-        self.captured_image_label.grid(row=3, column=0, sticky='nsew')
+        # initialize captured image to grey image
+        self.captured_image = Image.new('RGB', (1440, 1080), 'black')
+        captured_image_to_display = ImageTk.PhotoImage(self.captured_image)
+        self.captured_image_label = ttk.Label(main_frame, image=captured_image_to_display, text="No Frame Captured", padding=5, anchor='center')
+        # set the size of the label to match the size of the captured image
+        self.captured_image_label.grid(row=3, column=0, columnspan=3, sticky='nsew')
 
-        self.edge_detection_button = ttk.Button(main_frame, text="Edge Detection", command=self.edge_detection, padding=5, state=DISABLED)
-        self.edge_detection_button.grid(row=2, column=0, sticky='nsew')
+        self.edge_detection_auto_button = ttk.Button(main_frame, text="Auto Detection", command=lambda: self.edge_detection('auto'), padding=5, state=DISABLED, style='success')
+        self.edge_detection_auto_button.grid(row=2, column=0, sticky='ew')
 
-    def edge_detection(self):
+        self.edge_detection_point_button = ttk.Button(main_frame, text="Point Detection", command=lambda: self.edge_detection('point'), padding=5, state=DISABLED, style='success')
+        self.edge_detection_point_button.grid(row=2, column=1, sticky='ew')
+
+        self.edge_detection_box_button = ttk.Button(main_frame, text="Box Detection", command=lambda: self.edge_detection('box'), padding=5, state=DISABLED, style='success')
+        self.edge_detection_box_button.grid(row=2, column=2, sticky='ew')
+
+
+    def edge_detection(self, detection_type):
+        edgedetector = EdgeDetector(self.captured_image)
+
+        if detection_type == "auto":
+            masked_image = edgedetector.auto_mask_generate()
+        elif detection_type == "point":
+            masked_image =edgedetector.point_prompt_mask_generate()
+        elif detection_type == "box":   
+            masked_image = edgedetector.box_prompt_mask_generate()
         print("Edge detection button clicked")
 
-
-
+        self.masked_image = masked_image
+        masked_image_to_display = ImageTk.PhotoImage(masked_image)
+        self.captured_image_label.configure(image=masked_image_to_display)
 
     def capture_frame(self):
         try:
             self.captured_image = self.image_acquisition_thread.get_output_queue().get(timeout = 2)
+            image_path = os.path.join(os.getcwd(), "output_plots", "captured_frame.png")
             self.captured_image.save("captured_frame.png")
-            self.captured_image = ImageTk.PhotoImage(self.captured_image)
             # Wait for 2 seconds for a frame
             print("Frame captured")
             # update the label with the captured image
-            self.captured_image_label.configure(image=self.captured_image)
-            self.edge_detection_button.configure(state=NORMAL)
+            captured_image_to_display = ImageTk.PhotoImage(self.captured_image)
+            self.captured_image_label.configure(image=captured_image_to_display)
+            self.edge_detection_auto_button.configure(state=NORMAL)
+            self.edge_detection_point_button.configure(state=NORMAL)
+            self.edge_detection_box_button.configure(state=NORMAL)
 
         except queue.Empty:
             print("No frame available to capture")

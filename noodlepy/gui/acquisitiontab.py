@@ -12,6 +12,7 @@ import serial
 import cv2
 from matplotlib import pyplot as plt
 import serial.tools.list_ports
+from noodlepy.gui.sampledetectionmodule import SampleDetectionModule
 class AcquisitionGUI(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -29,10 +30,10 @@ class AcquisitionGUI(ttk.Frame):
         autofocus_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
         live_view_frame = LiveViewModule(main_frame)
-        live_view_frame.grid(row=0, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
+        live_view_frame.grid(row=0, column=2, columnspan=3, sticky="nsew", padx=5, pady=5)
 
-        sample_detection_frame = SampleDetectionModule(main_frame)
-        sample_detection_frame.grid(row=0, column=3, columnspan=2, sticky="nsew", padx=5, pady=5)
+        # sample_detection_frame = SampleDetectionModule(main_frame)
+        # sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
 
 class StageControlerModule(ttk.Frame):
     def __init__(self, parent):
@@ -554,11 +555,6 @@ class AutoFocusModule(ttk.Frame):
         # For example, you might save the plots as images:
         # fig.savefig("autofocus_results.png")
 
-
-class SampleDetectionModule(ttk.Frame):
-    def __init__(self, parent):
-        super().__init__(parent)
-        self.create_widgets()
 
 if __name__ == '__main__':
     root = ttk.Window()
