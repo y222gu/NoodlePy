@@ -12,16 +12,16 @@ class EmbeddingViewer:
 
         self.exp_name = exp_name
         if map is None:
-            self.map = {0:'mediumslateblue', 1:'gold', 2:'gold', 3:'orangered', 4:'orangered', # staging gold mediumslateblue
+            self.map = {0:'lightskyblue', 1:'#deb209', 2:'#deb209', 3:'#e97132', 4:'#e97132', # staging gold mediumslateblue purple #a484df
                         'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
                         'White':'xkcd:salmon', # race
-                        'plasma':"P", 'saliva':">",# ">", "x"
+                        'plasma':"#de8749", 'saliva':"#8a75da",# ">", "x" 'plasma':"#de8749", 'saliva':"#8a75da"
                         'default_color':'teal', 'default_marker':'*'} #  'plasma':"circle", 'saliva':"cross"
         else:
             self.map = map
         
         if embeddings_file_path and metadata_file_path:
-            self.embeddings, self.labels = self.load_files_for_tf_embedding_projector(embeddings_file_path, metadata_file_path)
+            self.embeddings, self.labels = self.load_embeddings_from_file(embeddings_file_path, metadata_file_path)
         elif embeddings is not None and label_dict_list is not None:
             self.embeddings = embeddings
             self.labels = EmbeddingViewer.reorganize_dicts(label_dict_list)
@@ -124,7 +124,7 @@ class EmbeddingViewer:
 
         # Scatter points, set alpha low to make points translucent
         for i in range(len(embeddingsdf.x)):
-            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=markers[i], alpha=0.8, s=250)#marker=markers[i],
+            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=">", alpha=1, s=250)#marker=markers[i],
         # plt.title(title)
         # plt.xlabel('Component 1')
         # plt.ylabel('Component 2')
@@ -148,7 +148,7 @@ class EmbeddingViewer:
 
         #set the background color to black
         fig.patch.set_facecolor('white')
-        save_path = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_2d_tsne_plot" + ".png")
+        save_path = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_2d_tsne_plot" + ".svg")
         plt.savefig(save_path, transparent=True)
 
     def tsne3d(self, embeddings_3d, labels_for_color, labels_for_marker):
@@ -205,7 +205,7 @@ class EmbeddingViewer:
         plt.savefig(save_path)
 
     @staticmethod
-    def load_files_for_tf_embedding_projector(embedding_file_path='embeddings', metadata_file_path='metadata'):
+    def load_embeddings_from_file(embedding_file_path='embeddings', metadata_file_path='metadata'):
         # Load embeddings
         embeddings = []
         with open(embedding_file_path, 'r') as f:
@@ -224,8 +224,8 @@ class EmbeddingViewer:
 if __name__ == '__main__':
     embedding_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/tensorflow_embedding/embeddings.tsv")
     metadata_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/tensorflow_embedding/labels.tsv")
-    embedding_viewer = EmbeddingViewer(embeddings_file_path = embedding_file_path, metadata_file_path = metadata_file_path)
+    embedding_viewer = EmbeddingViewer(embeddings_file_path = embedding_file_path, metadata_file_path = metadata_file_path, exp_name = "staging_svg")
     embedding_viewer.tsne2d()
-    #embedding_viewer.tsne2d(label_name_for_color='sample_type', label_name_for_marker='staging', title="sample_type")
+    #embedding_viewer.tsne2d(label_name_for_color='sample_type', label_name_for_marker='staging')
     #embedding_viewer.tsne2d_by_patient()
     #embedding_viewer.tsne3d(embeddings_3d=embedding_viewer.embeddings, labels_for_color=embedding_viewer.labels['staging'], labels_for_marker=embedding_viewer.labels['sample_type'])

@@ -38,15 +38,15 @@ if __name__ == "__main__":
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
     train_preprocessor = SpectrumPreprocessor(cropping=True,
-                                        baseline_correction=True,
-                                        remove_cosmic_rays= True,
-                                        normalization=True,
-                                        smoothing=True)
+                                        baseline_correction=False,
+                                        remove_cosmic_rays= False,
+                                        normalization=False,
+                                        smoothing=False)
     train_augmentor = SpectrumAugmentor(ramdom_augmentations=True,
                                   augmentation_step_list = None,
                                   config_path= None)
     
-    train_dataset = HNC_Dataset(train_dataset_path, annotation_file_path, preprocessor=train_preprocessor, augmentor=train_augmentor)
+    train_dataset = HNC_Dataset(train_dataset_path, annotation_file_path, preprocessor=train_preprocessor, augmentor=None)
 
     train_dataloaders = DataLoader(
         train_dataset,
@@ -59,12 +59,12 @@ if __name__ == "__main__":
     )
  
     test_preprocessor = SpectrumPreprocessor(cropping=True,
-                                        baseline_correction=True,
-                                        remove_cosmic_rays= True,
-                                        normalization=True,
-                                        smoothing=True)
+                                        baseline_correction=False,
+                                        remove_cosmic_rays= False,
+                                        normalization=False,
+                                        smoothing=False)
     test_augmentor = SpectrumAugmentor(ramdom_augmentations=True)
-    test_dataset = HNC_Dataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor, augmentor=test_augmentor)
+    test_dataset = HNC_Dataset(test_dataset_path, annotation_file_path, preprocessor=test_preprocessor, augmentor=None)
     test_dataloaders = DataLoader(
     test_dataset,
     batch_size=training_cfg.batch_size,
@@ -76,16 +76,16 @@ if __name__ == "__main__":
     )
 
     ##### NAME OF THE MODEL
-    exp_name = "augment_without_amplication"
+    exp_name = "train_on_raw"
 
     ##### TRAIN THE MODEL
     # model = train_model(model, train_dataloaders, training_cfg)
 
     ##### SAVE THE MODEL
-    torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", exp_name + "_model_HNC.pth"))
+    # torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", exp_name + "_model_HNC.pth"))
 
     ##### LOAD A SAVED MODEL
-    model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", exp_name + "_model_HNC_.pth")))
+    model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", exp_name + "_model_HNC.pth")))
 
     ##### TEST A MODEL
     test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None, exp_name = exp_name)

@@ -7,16 +7,20 @@ import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from matplotlib.figure import Figure
 import os
+import PIL
 
 class EdgeDetector():
-    def __init__(self, image_path = None):
-        if image_path is None:
-            image_path = os.path.join(os.getcwd(), "output_plots","captured_frame.png")
+    def __init__(self, image):
+        # image = np.array(image)
+        # image = cv2.cvtColor(image, cv2.COLOR_RGB2BGR)
+
+        image_path = os.path.join(os.getcwd(), "captured_frame_1.png")
         image = cv2.imread(image_path)
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
         self.image = image
         self.sam = sam_model_registry["vit_b"](checkpoint=r"C:\Users\yifei\Documents\NoodlePy\sam_vit_b_01ec64.pth")
-        # self.sam.to('cuda')
+        self.sam.to('cuda')
 
     def auto_mask_generate(self):
         generator = SamAutomaticMaskGenerator(model=self.sam)
@@ -27,7 +31,7 @@ class EdgeDetector():
         axes[2].imshow(self.image)
         self.show_anns(masks, axes[2])
         # save the figure
-        plt.savefig(os.path.join(os.getcwd(), "output_plots", "masked_image.png"))
+        plt.savefig(os.path.join(os.getcwd(), "masked_image.png"))
         plt.close(fig)
 
     def point_prompt_mask_generate(self, x=650, y=600, label=1):
@@ -45,8 +49,10 @@ class EdgeDetector():
         self.show_mask(masks[0], ax)
         self.show_points(input_point, input_label, ax)
         ax.set_title(f"Mask 1, Score: {scores[0]:.3f}", fontsize=18)
+        PIL.Image.frombytes('RGB', fig.canvas.get_width_height(),fig.canvas.tostring_rgb())
+
         # save the figure
-        plt.savefig(os.path.join(os.getcwd(), "output_plots", "masked_image.png"))
+        plt.savefig(os.path.join(os.getcwd(), "masked_image.png"))
         plt.close(fig)
 
     def box_prompt_mask_generate(self, x_low=950, y_low=180, x_high=1400, y_high=620):
@@ -65,7 +71,7 @@ class EdgeDetector():
         self.show_box(input_box, ax)
         ax.set_title(f"Mask 1, Score: {scores[0]:.3f}", fontsize=18)
         # save the figure
-        plt.savefig(os.path.join(os.getcwd(), "output_plots", "masked_image.png"))
+        plt.savefig(os.path.join(os.getcwd(), "masked_image.png"))
 
     @staticmethod
     def show_anns(anns, ax=None):

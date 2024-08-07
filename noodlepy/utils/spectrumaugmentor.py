@@ -96,12 +96,14 @@ class SpectrumAugmentor:
         """
         number_of_random_steps = np.random.randint(1,len(augmentation_step_list))
         random_augmentation_steps = np.random.choice((augmentation_step_list),number_of_random_steps,replace=False)
-        if "amplification" in augmentation_step_list:
-            if "amplification" not in random_augmentation_steps:
-                random_augmentation_steps = np.append(random_augmentation_steps, "amplification")
-        if "baseline" in augmentation_step_list:
-            if "baseline" not in random_augmentation_steps:
-                random_augmentation_steps = np.append(random_augmentation_steps, "baseline")
+        
+        ##### FORCE THE AMPLIFICATION AND BASELINE OPTIONS
+        # if "amplification" in augmentation_step_list:
+        #     if "amplification" not in random_augmentation_steps:
+        #         random_augmentation_steps = np.append(random_augmentation_steps, "amplification")
+        # if "baseline" in augmentation_step_list:
+        #     if "baseline" not in random_augmentation_steps:
+        #         random_augmentation_steps = np.append(random_augmentation_steps, "baseline")
         return random_augmentation_steps
 
 

@@ -66,8 +66,6 @@ class HNC_Dataset(Dataset):
             preprocessed_spectrum = preprocessor.preprocess(chosen_spectrum)
         else:
             preprocessed_spectrum = chosen_spectrum
-        
-        # preprocessed_spectrum.display("preprocessed_spectrum")
 
 
         if self.augmentor is not None:
@@ -101,10 +99,10 @@ class HNC_Dataset(Dataset):
         # ax[2].legend(loc='upper left', fontsize=20, facecolor='none', edgecolor='lightskyblue', labelcolor='white')
         # ax[3].legend(loc='upper left', fontsize=20, facecolor='none', edgecolor='tab:blue', labelcolor='white')
 
-        # ax[0].set_ylim(2500, 6250)
-        # ax[1].set_ylim(-0.1, 1.1)
-        # ax[2].set_ylim(2500, 6250)
-        # ax[3].set_ylim(2500, 6250)
+        # ax[0].set_ylim(2800, 4100) #2500, 6250
+        # ax[1].set_ylim(-0.1, 1.3)
+        # ax[2].set_ylim(-0.1, 1.3)
+        # ax[3].set_ylim(-0.1, 1.3)
 
         # for ax in fig.get_axes():
         #     ax.label_outer(remove_inner_ticks= True)
@@ -128,7 +126,7 @@ class HNC_Dataset(Dataset):
         # plt.xlabel("Raman Shift (cm^-1)", fontsize=25)
         # plt.subplots_adjust(hspace=0)
         # plt.tight_layout()
-        # path_for_figure = os.path.join(os.getcwd(), "output_plots", "example_spectra_from_the_training_set.png")
+        # path_for_figure = os.path.join(os.getcwd(), "output_plots", "example_spectra_from_the_training_set.svg")
         # plt.savefig(path_for_figure, transparent=True)
 
         return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata
@@ -264,7 +262,7 @@ if __name__ == "__main__":
 
     dataset = HNC_Dataset(data_folder, metadata_file, preprocessor, augmentor)
 
-    for i in range(5150):
+    for i in range(1):
         ## get a random spectrum
         #idx = random.randint(0, dataset.__len__() - 1)
         example_spectrum = dataset.__getitem__(i)

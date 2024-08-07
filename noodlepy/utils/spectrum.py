@@ -231,8 +231,7 @@ class Spectrum:
 
         self.intensity = self.intensity + baseline_intensity * baseline_pars["baseline_amplifying_factor"]
 
-        # print(f'A random baseline is added to the spectrum...')
-        self.intensity = self.intensity + baseline_pars["baseline_offset"]
+        # self.intensity = self.intensity + baseline_pars["baseline_offset"]
         
         return self
 
