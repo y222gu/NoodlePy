@@ -12,7 +12,7 @@ import serial
 import cv2
 from matplotlib import pyplot as plt
 import serial.tools.list_ports
-from noodlepy.gui.sampledetectionmodule import SampleDetectionModule
+
 class AcquisitionGUI(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
@@ -22,6 +22,9 @@ class AcquisitionGUI(ttk.Frame):
                 
         main_frame = ttk.Frame(self)
         main_frame.grid(row=0, column=0, sticky="nsew")
+        main_frame.columnconfigure(0, weight=2)
+        main_frame.columnconfigure(1, weight=2)
+        main_frame.columnconfigure(2, weight=1)
 
         stage_control_frame = StageControlerModule(main_frame)
         stage_control_frame.grid(row = 0, column= 0, sticky="nsew", padx=5, pady=5)
@@ -30,10 +33,7 @@ class AcquisitionGUI(ttk.Frame):
         autofocus_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
 
         live_view_frame = LiveViewModule(main_frame)
-        live_view_frame.grid(row=0, column=2, columnspan=3, sticky="nsew", padx=5, pady=5)
-
-        # sample_detection_frame = SampleDetectionModule(main_frame)
-        # sample_detection_frame.grid(row=1, column=2, columnspan=2, sticky="nsew", padx=5, pady=5)
+        live_view_frame.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
 
 class StageControlerModule(ttk.Frame):
     def __init__(self, parent):
@@ -464,26 +464,23 @@ class AutoFocusModule(ttk.Frame):
         main_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
 
         # Create the figure and axes
-        fig, axes = plt.subplots(2, 1, figsize=(2, 2))
+        fig, axes = plt.subplots(1, 2, figsize=(4, 2))
         self.ax1, self.ax2= axes.flatten()
 
         self.ax1.set_xlabel('Z-axis position',fontsize=5)
         self.ax1.set_ylabel('Entropy', fontsize=5)
         self.ax1.set_title('Entropy minimization', fontsize=5)
-        self.ax1.tick_params(axis='both', which='major', labelsize=4)
-        self.ax1.tick_params(axis='both', which='minor', labelsize=4)
-        self.ax1.spines['top'].set_visible(False)
-        self.ax1.spines['right'].set_visible(False)
-        self.ax1.grid(True)
 
         self.ax2.set_xlabel('Z-axis position', fontsize=5)
         self.ax2.set_ylabel('Intensity', fontsize=5)
         self.ax2.set_title('Focus', fontsize=5)
-        self.ax2.tick_params(axis='both', which='major', labelsize=4)
-        self.ax2.tick_params(axis='both', which='minor', labelsize=4)
-        self.ax2.spines['top'].set_visible(False)
-        self.ax2.spines['right'].set_visible(False)
-        self.ax2.grid(True)
+
+        for ax in axes.flatten():
+            ax.tick_params(axis='both', which='major', labelsize=4)
+            ax.tick_params(axis='both', which='minor', labelsize=4)
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.label_outer(remove_inner_ticks= True)
 
         plt.tight_layout(pad=0.5)
 

@@ -6,11 +6,10 @@ import threading
 import queue
 import ttkbootstrap as ttk
 import numpy as np
-from noodlepy.gui.sampledetectionmodule import EdgeDetector
+from noodlepy.gui.edgedetector import EdgeDetector
 import os
 
 try:
-    # if on Windows, use the provided setup script to add the DLLs folder to the PATH
     from noodlepy.utils.windows_setup import configure_path
     print("Configuring path...")
     configure_path()
@@ -24,23 +23,17 @@ from thorlabs_tsi_sdk.tl_mono_to_color_processor import MonoToColorProcessorSDK
 
 class LiveViewCanvas(tk.Canvas):
     def __init__(self, parent, image_queue, width, height):
-        # type: (typing.Any, queue.Queue) -> LiveViewCanvas
         self.image_queue = image_queue
         self._image_width = width
         self._image_height = height
         self._image = None
         self.tk_image = None
-        tk.Canvas.__init__(self, parent)
+        tk.Canvas.__init__(self, parent, width=width, height=height)
         self.grid(row=0, column=0, sticky='nsew')
-        # set the size of the canvas to match the incoming image size
-        # self.bind("<Configure>", self._resize)
         self._get_image()
 
     def _resize(self, event=None):
         if self._image:
-            # new_width = self.winfo_width()
-            # new_height = self.winfo_height()
-            # resized_image = self._image.resize((new_width, new_height), Image.LANCZOS)
             resized_image = self._image.resize((self._image_width, self._image_height), Image.LANCZOS)
             self.tk_image = ImageTk.PhotoImage(resized_image)
             self.create_image(0, 0, image=self.tk_image, anchor='nw')
@@ -49,24 +42,20 @@ class LiveViewCanvas(tk.Canvas):
         try:
             self._image = self.image_queue.get_nowait()
             self._resize()
-            # self._image = ImageTk.PhotoImage(master=self, image=self._image)
-
         except queue.Empty:
             pass
         self.after(10, self._get_image)
 
+
 class ImageAcquisitionThread(threading.Thread):
     def __init__(self, camera):
-        # type: (TLCamera) -> ImageAcquisitionThread
         super(ImageAcquisitionThread, self).__init__()
         camera.exposure_time_us = 40000
         self._camera = camera
         self._previous_timestamp = 0
         self._is_color = False
         self._bit_depth = camera.bit_depth
-        
-        # print("bit_depth is: ", self._bit_depth)  # 10
-        self._camera.image_poll_timeout_ms = 0  # Do not want to block for long periods of time
+        self._camera.image_poll_timeout_ms = 0
         self._image_queue = queue.Queue(maxsize=2)
         self._stop_event = threading.Event()
 
@@ -77,10 +66,7 @@ class ImageAcquisitionThread(threading.Thread):
         self._stop_event.set()
 
     def _get_image(self, frame):
-        # type: (Frame) -> Image
-        # no coloring, just scale down image to 8 bpp and place into PIL Image object
         scaled_image = frame.image_buffer >> (self._bit_depth - 8)
-
         image8bit = np.asarray(scaled_image, np.uint8)
         processed_image = image8bit.squeeze()
         return Image.fromarray(processed_image)
@@ -93,10 +79,9 @@ class ImageAcquisitionThread(threading.Thread):
                     pil_image = self._get_image(frame)
                     self._image_queue.put_nowait(pil_image)
             except queue.Full:
-                # No point in keeping this image around when the queue is full, let's skip to the next one
                 pass
             except Exception as error:
-                print("Encountered error: {error}, image acquisition will stop.".format(error=error))
+                print(f"Encountered error: {error}, image acquisition will stop.")
                 break
         print("Image acquisition has stopped")
 
@@ -106,6 +91,11 @@ class LiveViewModule(tk.Frame):
         super().__init__(parent)
         self.width = width
         self.height = height
+
+        self.camera_icon = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","camera_icon.png"))
+        self.camera_icon = self.camera_icon.resize((30, 30))
+        self.camera_icon = ImageTk.PhotoImage(self.camera_icon)
+
         self.sdk = TLCameraSDK()
         camera_list = self.sdk.discover_available_cameras()
         if not camera_list:
@@ -123,31 +113,27 @@ class LiveViewModule(tk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-        main_frame = ttk.Labelframe(self, text="Live View")
-        main_frame.grid(row=0, column=0, columnspan=3, sticky='nsew')
+        live_frame = ttk.Labelframe(self, text="Live View", width=self.width)
+        live_frame.grid(row=0, column=0, sticky='nsew')
+        self.camera_widget = LiveViewCanvas(parent=live_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
+        self.camera_widget.grid(row=0, column=0, sticky='nsew')
+        capture_button = ttk.Button(live_frame, image = self.camera_icon, command=self.capture_frame, padding=5, style='success')
+        capture_button.grid(row=1, column=0, columnspan=2, sticky='ew')
 
-        self.camera_widget = LiveViewCanvas(parent=main_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
-        self.camera_widget.grid(row=0, column=0,columnspan=3, sticky='nsew')
-        
-        capture_button = ttk.Button(main_frame, text="Capture Frame", command=self.capture_frame, padding=5, style='success')
-        capture_button.grid(row=1, column=1, sticky='nsew')
-
-        # initialize captured image to grey image in numpy array and convert to PIL image
+        capture_frame = ttk.Labelframe(self, text="Captured Frame", width=self.width)
+        capture_frame.grid(row=1, column=0, sticky='nsew')
         self.initial_image = Image.fromarray(np.zeros((self.height, self.width), dtype=np.uint8))
         self.image_to_display = ImageTk.PhotoImage(self.initial_image)
-        self.captured_image_label = ttk.Label(main_frame, text="No Frame Captured", image = self.image_to_display, padding=5, compound='center', foreground='white')
-        self.captured_image_label.grid(row=3, column=0, columnspan=3, sticky='nsew')
+        self.captured_image_label = ttk.Label(capture_frame, text="No Frame Captured", image= self.image_to_display, compound='center', foreground='white')
+        self.captured_image_label.grid(row=0, column=0, sticky='ew')
         self.captured_image_label.image = self.image_to_display
 
-        self.edge_detection_auto_button = ttk.Button(main_frame, text="Auto Detection", command=lambda: self.edge_detection('auto'), padding=5, state=DISABLED, style='success')
-        self.edge_detection_auto_button.grid(row=2, column=0, sticky='ew')
-
-        self.edge_detection_point_button = ttk.Button(main_frame, text="Point Detection", command=lambda: self.edge_detection('point'), padding=5, state=DISABLED, style='success')
-        self.edge_detection_point_button.grid(row=2, column=1, sticky='ew')
-
-        self.edge_detection_box_button = ttk.Button(main_frame, text="Box Detection", command=lambda: self.edge_detection('box'), padding=5, state=DISABLED, style='success')
-        self.edge_detection_box_button.grid(row=2, column=2, sticky='ew')
-
+        self.edge_detection_auto_button = ttk.Button(capture_frame, text="Auto Detection", command=lambda: self.edge_detection('auto'), state=DISABLED, style='success')
+        self.edge_detection_auto_button.grid(row=1, column=0, sticky='ew', pady=5, padx=5)
+        self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='success')
+        self.edge_detection_point_button.grid(row=2, column=0, sticky='ew', pady=5, padx=5)
+        self.edge_detection_box_button = ttk.Button(capture_frame, text="Box Detection", command=lambda: self.edge_detection('box'), state=DISABLED, style='success')
+        self.edge_detection_box_button.grid(row=3, column=0, sticky='ew', pady=5, padx=5)
 
     def edge_detection(self, detection_type):
         edgedetector = EdgeDetector(self.captured_image)
@@ -168,16 +154,10 @@ class LiveViewModule(tk.Frame):
     def capture_frame(self):
         try:
             self.captured_image = self.image_acquisition_thread.get_output_queue().get(timeout = 2)
-            # image_path = os.path.join(os.getcwd(), "output_plots", "captured_frame.png")
-            # self.captured_image.save("captured_frame.png")
-            # Wait for 2 seconds for a frame
             print("Frame captured")
-            # resize the image
             resized_image = self.captured_image.resize((self.width, self.height), Image.LANCZOS)
-            # update the label with the captured image
             self.image_to_display = ImageTk.PhotoImage(resized_image)
             self.captured_image_label.configure(image=self.image_to_display)
-            # remove the text from the label
             self.captured_image_label.configure(text="")
             self.captured_image_label.image = self.image_to_display
             self.edge_detection_auto_button.configure(state=NORMAL)
@@ -197,11 +177,11 @@ class LiveViewModule(tk.Frame):
         self.sdk.dispose()
         self.master.destroy()
 
+
 if __name__ == "__main__":
     root = ttk.Window()
     root.style.theme_use('superhero')
     live_view_frame = LiveViewModule(root)
-    live_view_frame.pack(fill='both', expand=True)
+    live_view_frame.grid(row=0, column=0, sticky='nsew')
     root.protocol("WM_DELETE_WINDOW", live_view_frame.on_closing)
     root.mainloop()
-
