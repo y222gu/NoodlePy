@@ -6,34 +6,36 @@ import tkinter as tk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 from noodlepy.gui.liveviewmodule import LiveViewModule
+from noodlepy.gui.wasatchmodule import Wasatchmodule
 import os
 import time
 import serial
 import cv2
 from matplotlib import pyplot as plt
 import serial.tools.list_ports
-
 class AcquisitionGUI(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.create_widgets()
 
     def create_widgets(self):
-                
-        main_frame = ttk.Frame(self)
-        main_frame.grid(row=0, column=0, sticky="nsew")
-        main_frame.columnconfigure(0, weight=2)
-        main_frame.columnconfigure(1, weight=2)
-        main_frame.columnconfigure(2, weight=1)
 
-        stage_control_frame = StageControlerModule(main_frame)
-        stage_control_frame.grid(row = 0, column= 0, sticky="nsew", padx=5, pady=5)
+        # Create the stage control frame and pack it to the left
+        stage_control_frame = StageControlerModule(self)
+        stage_control_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
 
-        autofocus_frame = AutoFocusModule(main_frame)
-        autofocus_frame.grid(row=0, column=1, sticky="nsew", padx=5, pady=5)
+        # Create the autofocus frame and pack it to the left of the remaining space
+        autofocus_frame = AutoFocusModule(self)
+        autofocus_frame.grid(row=0, column=1, sticky="nsew")
 
-        live_view_frame = LiveViewModule(main_frame)
-        live_view_frame.grid(row=0, column=2, sticky="nsew", padx=5, pady=5)
+        # Create the live spectrum frame and pack it below the autofocus frame
+        live_spectrum_frame = Wasatchmodule(self)
+        live_spectrum_frame.grid(row=1, column=1, sticky="nsew")
+
+        # Create the live view frame and pack it to the rightmost space
+        live_view_frame = LiveViewModule(self)
+        live_view_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
+
 
 class StageControlerModule(ttk.Frame):
     def __init__(self, parent):
@@ -50,9 +52,10 @@ class StageControlerModule(ttk.Frame):
     def create_widgets(self):
 
         main_frame = ttk.Labelframe(self, text='Stage Control', padding=5)
-        main_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
+        main_frame.grid(row=0, column=0, columnspan=5, sticky="nsew", padx=5, pady=5)
+
         top_frame = ttk.Frame(main_frame)
-        top_frame.grid(row=0, column=0, columnspan=5, sticky="ew", padx=5, pady=5)
+        top_frame.grid(row=0, column=0, columnspan=5, sticky="nsew", padx=5, pady=5)
         self.connect_button = ttk.Button(top_frame, text="Connect", command=self.connect_device, bootstyle="secondary")
         self.connect_button.grid(row=0, column=0, padx=5, pady=5, sticky='nsew')
         self.connect_button.config(width=10)
@@ -461,19 +464,19 @@ class AutoFocusModule(ttk.Frame):
     def create_widgets(self):
 
         main_frame = ttk.Labelframe(self, text='Auto Focus', padding=5)
-        main_frame.grid(row=0, column=0, columnspan=3, sticky="ew", padx=5, pady=5)
+        main_frame.grid(row=0, column=0, columnspan=3, sticky="nsew", padx=5, pady=5)
 
         # Create the figure and axes
-        fig, axes = plt.subplots(1, 2, figsize=(4, 2))
+        fig, axes = plt.subplots(1, 2, figsize=(3, 1))
         self.ax1, self.ax2= axes.flatten()
 
-        self.ax1.set_xlabel('Z-axis position',fontsize=5)
-        self.ax1.set_ylabel('Entropy', fontsize=5)
-        self.ax1.set_title('Entropy minimization', fontsize=5)
+        self.ax1.set_xlabel('Z-axis position',fontsize=6)
+        self.ax1.set_ylabel('Entropy', fontsize=6)
+        self.ax1.set_title('Entropy minimization', fontsize=6)
 
-        self.ax2.set_xlabel('Z-axis position', fontsize=5)
-        self.ax2.set_ylabel('Intensity', fontsize=5)
-        self.ax2.set_title('Focus', fontsize=5)
+        self.ax2.set_xlabel('Z-axis position', fontsize=6)
+        self.ax2.set_ylabel('Intensity', fontsize=6)
+        self.ax2.set_title('Focus', fontsize=6)
 
         for ax in axes.flatten():
             ax.tick_params(axis='both', which='major', labelsize=4)
@@ -557,5 +560,5 @@ if __name__ == '__main__':
     root = ttk.Window()
     root.style.theme_use('superhero')
     app = AcquisitionGUI(root)
-    app.pack()
+    app.grid(row=0, column=0, sticky="nsew")
     root.mainloop()

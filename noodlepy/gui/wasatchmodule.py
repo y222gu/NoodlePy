@@ -8,6 +8,8 @@ import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 from PIL import Image, ImageTk
 from tkinter import StringVar
+import io
+from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 from wasatch.WasatchBus    import WasatchBus
 from wasatch.WasatchDevice import WasatchDevice
@@ -24,6 +26,7 @@ class WasatchController():
     def __init__(self, integ_time_ms, laser_power_mW):
         self.integ_time_ms = integ_time_ms
         self.laser_power_mW = laser_power_mW
+        self.connect()
 
     def connect(self): # -> bool 
         bus = WasatchBus(use_sim=False)
@@ -71,7 +74,7 @@ class WasatchController():
         self.fid.set_integration_time_ms(time_ms)
 
     def set_laser_power(self, power_mW):
-        self.fid.set_laser_power_mW
+        self.fid.set_laser_power_mW(power_mW)
 
     def optimize_working_distance(self):
         print(f"setting integration time to {self.integ_time_ms}ms")
@@ -101,14 +104,27 @@ class WasatchController():
         peak_tolerance_cm   = 5                 # allow peaks to move by as much as 5cm⁻¹
         tempfile            = "spectrum.csv"    # for debugging
 
+        # set integration time and laser power
+        print(f"setting integration time to {self.integ_time_ms}ms")
+        self.fid.set_integration_time_ms(self.integ_time_ms)
+
+        print(f"setting laser power to {self.laser_power_mW}mW")
+        self.fid.set_laser_power_mW(self.laser_power_mW)
+
+        # make sure the laser is on
+        print("Enabling laser")
+        self.fid.set_laser_enable(True)
+
+        # wait for the laser to warm up
+        print(f"Waiting {LASER_WARMUP_SEC}sec for laser to warmup (required for MML)")
+        time.sleep(LASER_WARMUP_SEC)
+
         print("Taking sample spectrum")
         measurement = self.get_spectrum()
-        if measurement is None:
-            print("failed to take sample")
-            return False
-        
-        plt.plot(measurement)
-        plt.show()
+
+        # turn off the laser
+        print("Disabling laser")
+
 
         peak_pixels = scipy.signal.find_peaks(measurement, height=1500)[0]
         print(f"peak pixels:      {peak_pixels}")
@@ -123,7 +139,7 @@ class WasatchController():
                 break
 
         if peak_pixel is None:
-            print(f"Failed to find {expected_peak}cm⁻¹ peak in sample: adjust working distance")
+            print(f"Failed to find {expected_peak}cm⁻¹ peak in sample")
             return False
 
         # see if we've achieved the required intensity
@@ -205,54 +221,130 @@ class WasatchController():
 class Wasatchmodule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
+        self.initial_integ_time_ms = 100
+        self.initial_laser_power_mW = 400
+        self.wasatchcontroller = None
         self.create_widgets()
 
     def create_widgets(self):
-        self.laser_power_label = ttk.Label(self, text="Laser Power (mW)")
-        self.laser_power_label.grid(row=0, column=0)
+        self.spectrum_frame = ttk.Labelframe(self, text="Live Spectrum", padding=5)
+        self.spectrum_frame.grid(row=0, column=0, columnspan=4, sticky='nsew', padx=5)
+
+        self.laser_power_label = ttk.Label(self.spectrum_frame, text="Power (mW)", width=5)
+        self.laser_power_label.grid(row=1, column=0, sticky='ew')
 
         self.laser_power_var = StringVar()
-        self.laser_power_var.set("400")
-        self.laser_power_entry = ttk.Entry(self, textvariable=self.laser_power_var)
-        self.laser_power_entry.grid(row=0, column=1)
+        self.laser_power_var.set(self.initial_laser_power_mW)
+        self.laser_power_entry = ttk.Entry(self.spectrum_frame, textvariable=self.laser_power_var, width=5)
+        self.laser_power_entry.grid(row=2, column=0, sticky='ew', pady=5, padx=5)
 
-        self.integ_time_label = ttk.Label(self, text="Integration Time (ms)")
-        self.integ_time_label.grid(row=1, column=0)
+        self.integ_time_label = ttk.Label(self.spectrum_frame, text="Expo. Time (ms)", width=5)
+        self.integ_time_label.grid(row=1, column=1, sticky='ew')
 
         self.integ_time_var = StringVar()
-        self.integ_time_var.set("100")
-        self.integ_time_entry = ttk.Entry(self, textvariable=self.integ_time_var)
-        self.integ_time_entry.grid(row=1, column=1)
+        self.integ_time_var.set(self.initial_integ_time_ms)
+        self.integ_time_entry = ttk.Entry(self.spectrum_frame, textvariable=self.integ_time_var, width=5)
+        self.integ_time_entry.grid(row=2, column=1, sticky='ew', pady=5, padx=5)
 
-        self.start_button = ttk.Button(self, text="Start", command=self.start, style='success')
-        self.start_button.grid(row=2, column=0)
+        # self.settings_button = ttk.Button(self.spectrum_frame, text="Set", command=self.update_settings, bootstyle ='success')
+        # self.settings_button.grid(row=3, column=0, columnspan = 2, sticky='ew', pady=5, padx=5)
 
-        self.stop_button = ttk.Button(self, text="Debug", command=self.debug)
-        self.stop_button.grid(row=2, column=1)
+        self.start_button = ttk.Button(self.spectrum_frame, text="Start", command=self.start, bootstyle ='success', width=5)
+        self.start_button.grid(row=1, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
+
+        self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='success-outline')
+        self.capture_button.grid(row=2, column=3, sticky='ew', pady=5, padx=5)
+
+        self.stop_button = ttk.Button(self.spectrum_frame, text="Debug", command=self.debug, bootstyle ='success-outline')
+        self.stop_button.grid(row=1, column=3, sticky='ew', pady=5, padx=5)
 
         # live display of spectrum
-        self.spectrum_canvas = ttk.Canvas(self, width=400, height=400)
-        self.spectrum_canvas.grid(row=3, columnspan=2)
+        self.spectrum_canvas = ttk.Canvas(self.spectrum_frame)
+        self.spectrum_canvas.grid(row=0, column=0, columnspan=4, sticky='nsew', pady=5, padx=5)
+
+        # draw a blank plot to start
+        self.fig, self.ax = plt.subplots(figsize=(4, 2))
+        self.line, = self.ax.plot([], [])
+        self.line.set_linewidth(0.8)
+        self.ax.set_xlabel("Wavelength (nm)", fontsize=6)
+        self.ax.set_ylabel("Intensity (counts)", fontsize=6)
+        self.ax.set_title("Raman Spectrum", fontsize=6)
+        # font size of the axis labels
+        self.ax.tick_params(axis='both', which='major', labelsize=4)
+        self.ax.tick_params(axis='both', which='minor', labelsize=4)
+        self.ax.spines['right'].set_visible(False)
+        self.ax.spines['top'].set_visible(False)
+        plt.tight_layout(pad=0.5)
+        self.canvas = FigureCanvasTkAgg(self.fig, master=self.spectrum_canvas)
+        self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=4, sticky='nsew')
+
+        # # draw a line to separate the spectrum from the controls
+        # ttk.Separator(self.spectrum_frame, orient='horizontal').grid(row=1, column=0, columnspan=4, sticky='ew')
 
     def start(self):
-        self.start_button.config(text="Stop", command=self.stop, style='danger')
+        self.start_button.config(text="Stop", command=self.stop, bootstyle ='danger')
 
+        if self.wasatchcontroller is None:
+            laser_power_mW = int(self.laser_power_var.get())
+            integ_time_ms = int(self.integ_time_var.get())
+            self.wasatchcontroller = WasatchController(integ_time_ms, laser_power_mW)
+            if not self.wasatchcontroller.connect():
+                sys.exit(1)
+
+        self.wasatchcontroller.turn_laser_on()
+
+        # Set up the plot once
+        if not hasattr(self, 'fig'):
+            self.canvas = FigureCanvasTkAgg(self.fig, master=self.spectrum_canvas)
+            self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=3, sticky='nsew')
+
+        # Start updating the spectrum
+        self.update_spectrum()
+
+    def update_spectrum(self):
+        spectrum = self.wasatchcontroller.get_spectrum()
+
+        # Update the plot data instead of recreating the plot
+        self.line.set_data(range(len(spectrum)), spectrum)
+        self.ax.relim()
+        self.ax.autoscale_view()
+
+        self.canvas.draw()
+
+        # Schedule the next update and store the ID
+        self.update_id = self.after(1, self.update_spectrum)
+
+    def stop(self):
+        self.start_button.config(text="Start", command=self.start, bootstyle='success')
+
+        # Stop updating the spectrum canvas using the stored ID
+        if hasattr(self, 'update_id'):
+            self.after_cancel(self.update_id)
+
+        # Turn off the laser but keep the spectrometer connected
+        self.wasatchcontroller.turn_laser_off()
+
+    def update_settings(self):
         laser_power_mW = int(self.laser_power_var.get())
         integ_time_ms = int(self.integ_time_var.get())
-        wasatchcontroller = WasatchController(integ_time_ms, laser_power_mW)
-        if not wasatchcontroller.connect():
-            sys.exit(1)
-
-        # update the spectrum canvas
-        spectrum = wasatchcontroller.get_spectrum()
-        plt.plot(spectrum)
-        plt.show()
+        self.wasatchcontroller.set_integration_time(integ_time_ms)
+        self.wasatchcontroller.set_laser_power(laser_power_mW)
 
     def debug(self):
         laser_power_mW = int(self.laser_power_var.get())
         integ_time_ms = int(self.integ_time_var.get())
-        wasatchcontroller = WasatchController(integ_time_ms, laser_power_mW)
-        if not wasatchcontroller.connect():
+        self.wasatchcontroller.set_integration_time(integ_time_ms)
+        self.wasatchcontroller.set_laser_power(laser_power_mW)
+        if not self.wasatchcontroller.connect():
             sys.exit(1)
 
-        wasatchcontroller.debug_with_polystyrene()
+        self.wasatchcontroller.debug_with_polystyrene()
+
+
+if __name__ == "__main__":
+
+    root = ttk.Window()
+    root.style.theme_use('superhero')
+    app = Wasatchmodule(root)
+    app.pack()
+    root.mainloop()
