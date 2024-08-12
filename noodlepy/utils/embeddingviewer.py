@@ -44,6 +44,28 @@ class EmbeddingViewer:
             else:
                 mapped_labels.append(default_label)
         return mapped_labels
+    
+    @staticmethod
+    def map_label_location(labels):
+        # Indices to step through colormap
+        color_values = np.linspace(0.0, 1.0, 50)
+        colormap = plt.cm.get_cmap('plasma')
+        map = colormap(color_values)
+        # find the unique values in the labels
+        unique_labels = list(set(labels))
+        # sort the unique values from smallest to largest
+        unique_labels.sort()
+
+        # create a dictionary to map the unique values to a color
+        color_map = {}
+        for i, label in enumerate(unique_labels):
+            color_map[label] = map[i]
+
+        mapped_labels = []
+        for label in labels:
+            mapped_labels.append(color_map[label])
+        return mapped_labels
+    
 
     @staticmethod
     def compute_tsne(embeddings, dim=3, **kwargs):
@@ -117,7 +139,11 @@ class EmbeddingViewer:
         embeddingsdf['x'] = embeddings_2d[:, 0]
         embeddingsdf['y'] = embeddings_2d[:, 1]
 
-        colors = EmbeddingViewer.map_label(self.labels[label_name_for_color], self.map, type='to_color')
+        if label_name_for_color == 'location':
+            colors = EmbeddingViewer.map_label_location(self.labels[label_name_for_color])
+        else:
+            colors = EmbeddingViewer.map_label(self.labels[label_name_for_color], self.map, type='to_color')
+        
         markers = EmbeddingViewer.map_label(self.labels[label_name_for_marker], self.map, type='to_marker')
 
         fig, ax = plt.subplots(figsize=(14, 11))
