@@ -1,5 +1,5 @@
-from noodlepy.utils.class_Spectrum import Spectrum
-from noodlepy.utils.class_SpectrumPreprocessor import SpectrumPreprocessor
+from noodlepy.utils.spectrum import Spectrum
+from noodlepy.utils.spectrumpreprocessor import SpectrumPreprocessor
 import os
 import pandas as pd
 import numpy as np
@@ -87,65 +87,28 @@ def load_files_to_spectrum_objects(data_folder:str,
                 spectrum = Spectrum(wavelength_nm=wavelength_nm,
                                     intensity=intensity,
                                     metadata=metadata,)
-                print(len(intensity))
-                print(len(wavelength_nm))
-                print(metadata)
-
                 spectrum_objects.append(spectrum)
         return spectrum_objects
 
-def preprocess_and_save_to_file(db, folder_to_save:str):
-        preprocessor = SpectrumPreprocessor(cropping= True,
-                baseline_correction = True,
-                remove_cosmic_rays = True,
-                normalization = True,
-                smoothing = True)
-        # save spectrum objects of with the sample patient_id to a file with name as patient_id_sample_type_staging.txt
-        for spectrum in db:
-            preprocessed_spectrum = preprocessor.preprocess(spectrum)
-            print('preprocessed_spectrum')
-            print(len(preprocessed_spectrum.intensity))
-            print(len(preprocessed_spectrum.raman_shift_cm))
-            print(preprocessed_spectrum.metadata)
-
-            patient_id = spectrum.metadata['patient_id']
-            sample_type = spectrum.metadata['sample_type']
-            staging = spectrum.metadata['staging']
-            file_name = f"{patient_id}_{sample_type}_{staging}.txt"
-            file_path = os.path.join(folder_to_save, str(sample_type), str(staging), file_name)
-            # append the raman shift and intensity to the file without rewrite the file
-            if not os.path.exists(os.path.dirname(file_path)):
-                os.makedirs(os.path.dirname(file_path))
-
-            with open(file_path, 'a') as f:
-                for i in range(len(preprocessed_spectrum.raman_shift_cm)):
-                    f.write(f"{preprocessed_spectrum.raman_shift_cm[i]},{preprocessed_spectrum.intensity[i]}\n") 
-
-        print(f"Preprocessed spectra saved to {folder_to_save}")
-
-
-def only_keep_patient_with_multiple_sample_types(db):
-    """
-    Remove patients with only one sample type
-    """
-    patient_ids = [spectrum.metadata['patient_id'] for spectrum in db]
-    patient_ids_unique = np.unique(patient_ids)
-    patient_ids_with_multiple_sample_types = []
-    for patient_id in patient_ids_unique:
-        sample_types = np.unique([spectrum.metadata['sample_type'] for spectrum in db if spectrum.metadata['patient_id'] == patient_id])
-        if len(sample_types) > 1:
-            patient_ids_with_multiple_sample_types.append(patient_id)
-    db = [spectrum for spectrum in db if spectrum.metadata['patient_id'] in patient_ids_with_multiple_sample_types]
-    return db
+def preprocess_and_save_to_file(db, save_file_to_path:str):
+        preprocessor = SpectrumPreprocessor(cropping=True, baseline_correction=True, remove_cosmic_rays=True, normalization=True, smoothing=True)
+        with open(save_file_to_path, 'w') as f:
+            for spectrum in db:
+                spectrum = preprocessor.pre_process(spectrum)
+                # save wavelength and intensity to file with name as patient_id_sample_type_spectrum_id_staging.txt
+                file_name = f"{spectrum.metadata['patient_id']}_{spectrum.metadata['sample_type']}_{spectrum.metadata['spectrum_id']}_{spectrum.metadata['staging']}.txt"
+                f.write(f"{file_name}\n")
+                f.write(f"{spectrum.wavelength_nm}\n")
+                f.write(f"{spectrum.intensity}\n")
+                f.write("\n")
 
 def main():
     current_directory = os.getcwd()
-    data_file_path = os.path.join(current_directory,"noodlepy","data","Raman_DB","plasma_saliva_mixed","all")
-    annotation_file_path = os.path.join(current_directory, "noodlepy","data","Biofluid_list_annotated_v4.xlsx")
-    folder_to_save = os.path.join(current_directory,"noodlepy","data","Raman_DB","cleaned")
+    data_file_path = os.path.join(current_directory, "NoodlePy","noodlepy","data","Raman_DB","plasma_saliva_mixed","all")
+    annotation_file_path = os.path.join(current_directory, "NoodlePy","noodlepy","data","Biofluid_list_annotated_v4.xlsx")
+    file_path_to_save = os.path.join(current_directory,"data","raman_data","cleaned_spectra")
     db = load_files(data_file_path, annotation_file_path)
-    db = only_keep_patient_with_multiple_sample_types(db)
-    preprocess_and_save_to_file(db, folder_to_save)
+    preprocess_and_save_to_file(db, file_path_to_save)
 
 if __name__ == "__main__":
     main()

@@ -32,8 +32,8 @@ augmentation:
 
   amplification: # spectrum_amplifying_factor
     spectrum_amplifying_factor: 
-      low: 20
-      high: 40  # Uniform
+      low: 1
+      high: 3  # Uniform
 
   shot_noise: # photon shot noise
     noise_type: poisson
@@ -89,6 +89,9 @@ augmentation:
     baseline_amplifying_factor: 
       low: 1
       high: 3 # Uniform
+    baseline_offset:
+      low: 300
+      high: 800
     poly_orders: 
       low: 1
       high: 3
