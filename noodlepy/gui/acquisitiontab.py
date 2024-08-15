@@ -32,9 +32,9 @@ class AcquisitionGUI(ttk.Frame):
         live_spectrum_frame = Wasatchmodule(self)
         live_spectrum_frame.grid(row=1, column=1, sticky="nsew")
 
-        # Create the live view frame and pack it to the rightmost space
-        live_view_frame = LiveViewModule(self)
-        live_view_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
+        # # Create the live view frame and pack it to the rightmost space
+        # live_view_frame = LiveViewModule(self)
+        # live_view_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
 
 
 class StageControlerModule(ttk.Frame):
@@ -470,22 +470,30 @@ class AutoFocusModule(ttk.Frame):
         fig, axes = plt.subplots(1, 2, figsize=(3, 1))
         self.ax1, self.ax2= axes.flatten()
 
-        self.ax1.set_xlabel('Z-axis position',fontsize=6)
-        self.ax1.set_ylabel('Entropy', fontsize=6)
-        self.ax1.set_title('Entropy minimization', fontsize=6)
+        self.ax1.set_xlabel('Z-axis position',fontsize=6, color='white')
+        self.ax1.set_ylabel('Entropy', fontsize=6, color='white')
+        self.ax1.set_title('Entropy minimization', fontsize=6, color='white')
 
-        self.ax2.set_xlabel('Z-axis position', fontsize=6)
-        self.ax2.set_ylabel('Intensity', fontsize=6)
-        self.ax2.set_title('Focus', fontsize=6)
+        self.ax2.set_xlabel('Z-axis position', fontsize=6, color='white')
+        self.ax2.set_ylabel('Intensity', fontsize=6, color='white')
+        self.ax2.set_title('Focus', fontsize=6, color='white')
 
         for ax in axes.flatten():
             ax.tick_params(axis='both', which='major', labelsize=4)
             ax.tick_params(axis='both', which='minor', labelsize=4)
+            ax.tick_params(axis='x', colors='white')
+            ax.tick_params(axis='y', colors='white')
             ax.spines['top'].set_visible(False)
             ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_color('white')
+            ax.spines['left'].set_color('white')
             ax.label_outer(remove_inner_ticks= True)
+            ax.set_facecolor("none")
+            ax.xaxis.label.set_color('white')
+            ax.yaxis.label.set_color('white')
 
         plt.tight_layout(pad=0.5)
+        fig.patch.set_alpha(0)
 
         # Create a canvas widget for the figure
         self.canvas = FigureCanvasTkAgg(fig, master=main_frame)

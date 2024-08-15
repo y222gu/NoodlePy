@@ -15,12 +15,6 @@ from wasatch.WasatchBus    import WasatchBus
 from wasatch.WasatchDevice import WasatchDevice
 from wasatch.RealUSBDevice import RealUSBDevice
 
-LASER_WARMUP_SEC    = 6
-EXPECTED_PEAK       = 1006.22             # clear Petri-dish (cm⁻¹)
-EXPECTED_COUNTS     = 1800 
-PEAK_TOLERANCE_CM   = 5                 # allow peaks to move by as much as 5cm⁻¹
-TEMPFILE            = "spectrum.csv"    # for debugging
-
 class WasatchController():
 
     def __init__(self, integ_time_ms, laser_power_mW):
@@ -69,32 +63,16 @@ class WasatchController():
     def turn_laser_off(self):
         self.fid.set_laser_enable(False)
 
-
     def set_integration_time(self, time_ms):
         self.fid.set_integration_time_ms(time_ms)
 
     def set_laser_power(self, power_mW):
         self.fid.set_laser_power_mW(power_mW)
 
-    def optimize_working_distance(self):
-        print(f"setting integration time to {self.integ_time_ms}ms")
-        self.fid.set_integration_time_ms(self.integ_time_ms)
-
-        print(f"setting laser power to {self.laser_power_mW}mW")
-        self.fid.set_laser_power_mW(self.laser_power_mW)
-
-        done = False
-        while not done:
-            done = self.test_working_distance()
-
     def get_spectrum(self):
         response = self.fid.get_line()
         if response and response.data:
             spectrum = response.data.spectrum
-
-            # debugging
-            with open(TEMPFILE, "w") as outfile:
-                outfile.write("\n".join([f"{x:0.2f}" for x in spectrum]))
 
             return np.asarray(spectrum)
 
@@ -102,32 +80,12 @@ class WasatchController():
         expected_peak       = 1006.22             # clear Petri-dishZ (cm⁻¹)
         expected_counts     = 1800 
         peak_tolerance_cm   = 5                 # allow peaks to move by as much as 5cm⁻¹
-        tempfile            = "spectrum.csv"    # for debugging
-
-        # set integration time and laser power
-        print(f"setting integration time to {self.integ_time_ms}ms")
-        self.fid.set_integration_time_ms(self.integ_time_ms)
-
-        print(f"setting laser power to {self.laser_power_mW}mW")
-        self.fid.set_laser_power_mW(self.laser_power_mW)
-
-        # make sure the laser is on
-        print("Enabling laser")
-        self.fid.set_laser_enable(True)
-
-        # wait for the laser to warm up
-        print(f"Waiting {LASER_WARMUP_SEC}sec for laser to warmup (required for MML)")
-        time.sleep(LASER_WARMUP_SEC)
 
         print("Taking sample spectrum")
         measurement = self.get_spectrum()
 
-        # turn off the laser
-        print("Disabling laser")
-
-
-        peak_pixels = scipy.signal.find_peaks(measurement, height=1500)[0]
-        print(f"peak pixels:      {peak_pixels}")
+        peak_pixels = scipy.signal.find_peaks(measurement, height=700)[0]
+        print(f"peak pixels:{peak_pixels}")
 
         # see if our "calibration peak" is in the list
         peak_pixel = None
@@ -145,206 +103,199 @@ class WasatchController():
         # see if we've achieved the required intensity
         counts = measurement[peak_pixel]
         if counts < expected_counts:
-            print(f"Failed {expected_peak}cm⁻¹ peak counts too low ({counts} < {expected_counts}): adjust working distance")
+            print(f"Failed. {expected_peak}cm⁻¹ peak counts too low ({counts} < {expected_counts}): adjust working distance")
             return False
         
         print(f"Success! {expected_peak}cm⁻¹ peak found with {counts} counts.")
         return True
-
-
-    def test_working_distance(self): # -> bool 
-        print("-" * 50)
-        print("Please insert calibration sample and press <Enter> (ctrl-C to exit)...", end='')
-        try:
-            input()
-        except:
-            print("Program exiting")
-            sys.exit(1)
-
-        print("Reading dark spectrum")
-        dark = self.get_spectrum()
-        if dark is None:
-            print("failed to take dark")
-            return False
-
-        print("Enabling laser")
-        self.fid.set_laser_enable(True)
-
-        print(f"Waiting {LASER_WARMUP_SEC}sec for laser to warmup (required for MML)")
-        time.sleep(LASER_WARMUP_SEC)
-
-        print("Taking sample spectrum")
-        sample = self.get_spectrum()
-        if sample is None:
-            print("failed to take sample")
-            return False
-
-        print("Disabling laser")
-        self.fid.set_laser_enable(False)
-
-        # generate dark-corrected measurement
-        measurement = sample - dark
-        print(f"dark:        {dark}...")
-        print(f"sample:      {sample}...")
-        print(f"measurement: {measurement}...")
-        plt.plot(measurement)
-        plt.show()
-
-        # find pixel indices of peaks in the dark-corrected measurement
-        # (tune find_peaks arguments as applicable to your setup)
-        peak_pixels = scipy.signal.find_peaks(measurement, height=1500)[0]
-        print(f"peak pixels:      {peak_pixels}")
-
-        # see if our "calibration peak" is in the list
-        peak_pixel = None
-        for pixel in peak_pixels:
-            peak_cm = self.settings.wavenumbers[pixel]
-            if abs(EXPECTED_PEAK - peak_cm) <= PEAK_TOLERANCE_CM:
-                print(f"found expected {EXPECTED_PEAK}cm⁻¹ at pixel {pixel} ({peak_cm:0.2f}cm⁻¹)")
-                peak_pixel = pixel
-                break
-
-        if peak_pixel is None:
-            print(f"Failed to find {EXPECTED_PEAK}cm⁻¹ peak in sample: adjust working distance")
-            return False
-
-        # see if we've achieved the required intensity
-        counts = measurement[peak_pixel]
-        if counts < EXPECTED_COUNTS:
-            print(f"Failed {EXPECTED_PEAK}cm⁻¹ peak counts too low ({counts} < {EXPECTED_COUNTS}): adjust working distance")
-            return False
-        
-        print(f"Success! {EXPECTED_PEAK}cm⁻¹ peak found with {counts} counts.")
-        return True
-
 
 class Wasatchmodule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
         self.initial_integ_time_ms = 100
         self.initial_laser_power_mW = 400
-        self.wasatchcontroller = None
+        self.units = "wavelength"
         self.create_widgets()
+        self.wasatchcontroller = WasatchController(self.initial_integ_time_ms, self.initial_laser_power_mW)
+        if self.wasatchcontroller.connect():
+            self.update_spectrum()
+        else:
+            print('Failed to connect to Wasatch spectrometer. Check connection')
 
     def create_widgets(self):
         self.spectrum_frame = ttk.Labelframe(self, text="Live Spectrum", padding=5)
         self.spectrum_frame.grid(row=0, column=0, columnspan=4, sticky='nsew', padx=5)
 
         self.laser_power_label = ttk.Label(self.spectrum_frame, text="Power (mW)", width=5)
-        self.laser_power_label.grid(row=1, column=0, sticky='ew')
-
+        self.laser_power_label.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
         self.laser_power_var = StringVar()
         self.laser_power_var.set(self.initial_laser_power_mW)
-        self.laser_power_entry = ttk.Entry(self.spectrum_frame, textvariable=self.laser_power_var, width=5)
-        self.laser_power_entry.grid(row=2, column=0, sticky='ew', pady=5, padx=5)
+        self.laser_power_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.laser_power_var, from_=0, to=450, increment=20, width=5, justify='center')
+        self.laser_power_spinbox.grid(row=2, column=0, sticky='ew', pady=5, padx=5)
+        self.laser_power_spinbox.bind("<FocusOut>", self.update_settings)
+        self.laser_power_spinbox.bind("<Return>", self.update_settings)
 
         self.integ_time_label = ttk.Label(self.spectrum_frame, text="Expo. Time (ms)", width=5)
-        self.integ_time_label.grid(row=1, column=1, sticky='ew')
-
+        self.integ_time_label.grid(row=1, column=1, sticky='nsew', pady=5, padx=5)
         self.integ_time_var = StringVar()
         self.integ_time_var.set(self.initial_integ_time_ms)
-        self.integ_time_entry = ttk.Entry(self.spectrum_frame, textvariable=self.integ_time_var, width=5)
-        self.integ_time_entry.grid(row=2, column=1, sticky='ew', pady=5, padx=5)
+        self.integ_time_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.integ_time_var, from_=1, to=10000, increment=5, width=5, justify='center')
+        self.integ_time_spinbox.grid(row=2, column=1, sticky='ew', pady=5, padx=5)
+        self.integ_time_spinbox.bind("<FocusOut>", self.update_settings)
+        self.integ_time_spinbox.bind("<Return>", self.update_settings)
 
-        # self.settings_button = ttk.Button(self.spectrum_frame, text="Set", command=self.update_settings, bootstyle ='success')
-        # self.settings_button.grid(row=3, column=0, columnspan = 2, sticky='ew', pady=5, padx=5)
-
-        self.start_button = ttk.Button(self.spectrum_frame, text="Start", command=self.start, bootstyle ='success', width=5)
+        self.start_button = ttk.Button(self.spectrum_frame, text="Laser On", command=self.start, bootstyle ='success', width=5)
         self.start_button.grid(row=1, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
 
-        self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='success-outline')
+        self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='success-outline', command=self.capture)
         self.capture_button.grid(row=2, column=3, sticky='ew', pady=5, padx=5)
 
-        self.stop_button = ttk.Button(self.spectrum_frame, text="Debug", command=self.debug, bootstyle ='success-outline')
+        self.stop_button = ttk.Button(self.spectrum_frame, text="Ref. Polystyrene", command=self.reference, bootstyle ='success-outline')
         self.stop_button.grid(row=1, column=3, sticky='ew', pady=5, padx=5)
 
         # live display of spectrum
         self.spectrum_canvas = ttk.Canvas(self.spectrum_frame)
         self.spectrum_canvas.grid(row=0, column=0, columnspan=4, sticky='nsew', pady=5, padx=5)
 
+        # a rounded toggle button to switch units
+        self.toggle_var = ttk.BooleanVar(value=False)
+        self.toggle_btn = ttk.Checkbutton(self.spectrum_frame, variable=self.toggle_var, text="To cm⁻¹", bootstyle="success-round-toggle", command=self.update_units)
+        self.toggle_btn.grid(row=0, column=3, sticky='en', pady=5, padx=5)
+
         # draw a blank plot to start
         self.fig, self.ax = plt.subplots(figsize=(4, 2))
         self.line, = self.ax.plot([], [])
         self.line.set_linewidth(0.8)
-        self.ax.set_xlabel("Wavelength (nm)", fontsize=6)
-        self.ax.set_ylabel("Intensity (counts)", fontsize=6)
-        self.ax.set_title("Raman Spectrum", fontsize=6)
+
+        if self.units == "wavelength":
+            self.ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
+        elif self.units == "wavenumber":
+            self.ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
+        else:
+            print("Invalid units")
+
+        self.ax.set_ylabel("Intensity (counts)", fontsize=6, color='white')
+        self.ax.set_title("Raman Spectrum", fontsize=6, color='white')
         # font size of the axis labels
         self.ax.tick_params(axis='both', which='major', labelsize=4)
         self.ax.tick_params(axis='both', which='minor', labelsize=4)
+        self.ax.tick_params(axis='x', colors='white')
+        self.ax.tick_params(axis='y', colors='white')
+        self.ax.spines['bottom'].set_color('white')
+        self.ax.spines['left'].set_color('white')
         self.ax.spines['right'].set_visible(False)
         self.ax.spines['top'].set_visible(False)
+        self.ax.set_facecolor("none")
+        self.ax.xaxis.label.set_color('white')
+        self.ax.yaxis.label.set_color('white')
         plt.tight_layout(pad=0.5)
+        self.fig.patch.set_alpha(0)
         self.canvas = FigureCanvasTkAgg(self.fig, master=self.spectrum_canvas)
         self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=4, sticky='nsew')
 
-        # # draw a line to separate the spectrum from the controls
-        # ttk.Separator(self.spectrum_frame, orient='horizontal').grid(row=1, column=0, columnspan=4, sticky='ew')
 
     def start(self):
-        self.start_button.config(text="Stop", command=self.stop, bootstyle ='danger')
-
         if self.wasatchcontroller is None:
             laser_power_mW = int(self.laser_power_var.get())
             integ_time_ms = int(self.integ_time_var.get())
             self.wasatchcontroller = WasatchController(integ_time_ms, laser_power_mW)
             if not self.wasatchcontroller.connect():
-                sys.exit(1)
-
+                print("Failed to connect to Wasatch spectrometer. Check connection and try again.")
+                return
         self.wasatchcontroller.turn_laser_on()
+        self.start_button.config(text="Laser Off", command=self.stop, bootstyle ='danger')
 
-        # Set up the plot once
-        if not hasattr(self, 'fig'):
-            self.canvas = FigureCanvasTkAgg(self.fig, master=self.spectrum_canvas)
-            self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=3, sticky='nsew')
-
-        # Start updating the spectrum
-        self.update_spectrum()
+    def stop(self):
+        self.start_button.config(text="Laser On", command=self.start, bootstyle='success')
+        self.wasatchcontroller.turn_laser_off()
 
     def update_spectrum(self):
         spectrum = self.wasatchcontroller.get_spectrum()
 
-        # Update the plot data instead of recreating the plot
-        self.line.set_data(range(len(spectrum)), spectrum)
+        if self.units == "wavelength":
+            x_axis = self.wasatchcontroller.settings.wavelengths
+        else:
+            x_axis = self.wasatchcontroller.settings.wavenumbers
+
+        self.line.set_data(x_axis, spectrum)
         self.ax.relim()
         self.ax.autoscale_view()
-
         self.canvas.draw()
 
+        if int(self.integ_time_var.get()) > 0:
+            call_time = int(self.integ_time_var.get())
+        else:
+            call_time = 1
         # Schedule the next update and store the ID
         self.update_id = self.after(1, self.update_spectrum)
 
-    def stop(self):
-        self.start_button.config(text="Start", command=self.start, bootstyle='success')
-
-        # Stop updating the spectrum canvas using the stored ID
-        if hasattr(self, 'update_id'):
-            self.after_cancel(self.update_id)
-
-        # Turn off the laser but keep the spectrometer connected
-        self.wasatchcontroller.turn_laser_off()
-
-    def update_settings(self):
+    def update_settings(self, event):
         laser_power_mW = int(self.laser_power_var.get())
         integ_time_ms = int(self.integ_time_var.get())
         self.wasatchcontroller.set_integration_time(integ_time_ms)
         self.wasatchcontroller.set_laser_power(laser_power_mW)
 
-    def debug(self):
-        laser_power_mW = int(self.laser_power_var.get())
-        integ_time_ms = int(self.integ_time_var.get())
-        self.wasatchcontroller.set_integration_time(integ_time_ms)
-        self.wasatchcontroller.set_laser_power(laser_power_mW)
-        if not self.wasatchcontroller.connect():
-            sys.exit(1)
+    def update_units(self):
+        if self.toggle_var.get():
+            self.units = "wavenumber"
+            self.ax.set_xlabel("Wavenumber(cm⁻¹)", fontsize=6, color='white')
 
+        else:
+            self.units = "wavelength"
+            self.ax.set_xlabel("Wavelength(nm)", fontsize=6, color='white')
+
+    def reference(self):
         self.wasatchcontroller.debug_with_polystyrene()
 
+    def capture(self):
+        spectrum = self.wasatchcontroller.get_spectrum()
+        if self.units == "wavelength":
+            x_axis = self.wasatchcontroller.settings.wavelengths
+        else:
+            x_axis = self.wasatchcontroller.settings.wavenumbers
+            
+        new_window = ttk.Toplevel()
+        new_window.title("Captured Raman Spectrum")
+
+        captured_fig = plt.figure()
+        captured_fig, captured_ax = plt.subplots(figsize=(4, 2))
+        captured_line, =  captured_ax.plot(x_axis, spectrum)
+        captured_line.set_linewidth(0.8)
+
+        if self.units == "wavelength":
+            captured_ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
+        elif self.units == "wavenumber":
+            captured_ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
+
+        captured_ax.set_ylabel("Intensity (counts)", fontsize=6, color='white')
+        captured_ax.set_title("Raman Spectrum", fontsize=6, color='white')
+        captured_ax.tick_params(axis='both', which='major', labelsize=4)
+        captured_ax.tick_params(axis='both', which='minor', labelsize=4)
+        captured_ax.tick_params(axis='x', colors='white')
+        captured_ax.tick_params(axis='y', colors='white')
+        captured_ax.spines['bottom'].set_color('white')
+        captured_ax.spines['left'].set_color('white')
+        captured_ax.spines['right'].set_visible(False)
+        captured_ax.spines['top'].set_visible(False)
+        captured_ax.set_facecolor("none")
+        captured_ax.xaxis.label.set_color('white')
+        captured_ax.yaxis.label.set_color('white')
+        plt.tight_layout(pad=0.5)
+        captured_fig.patch.set_alpha(0)
+        canvas = FigureCanvasTkAgg(captured_fig, master=new_window)
+        canvas.draw()
+        canvas.get_tk_widget().pack(side=ttk.TOP, fill=ttk.BOTH, expand=1)
+        captured_fig.savefig("Captured_spectrum.png", dpi=300)
+
+        # save the spectrum as a text file
+        with open("Captured_spectrum.txt", "w") as outfile:
+            for i in range(len(x_axis)):
+                outfile.write(f"{x_axis[i]:0.2f}, {spectrum[i]}\n")
 
 if __name__ == "__main__":
 
     root = ttk.Window()
     root.style.theme_use('superhero')
     app = Wasatchmodule(root)
-    app.pack()
+    app.grid(row=0, column=0, sticky='nsew')
     root.mainloop()
