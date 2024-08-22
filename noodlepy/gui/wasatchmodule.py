@@ -85,7 +85,7 @@ class WasatchController():
         measurement = self.get_spectrum()
 
         peak_pixels = scipy.signal.find_peaks(measurement, height=700)[0]
-        print(f"peak pixels:{peak_pixels}")
+        # print(f"peak pixels:{peak_pixels}")
 
         # see if our "calibration peak" is in the list
         peak_pixel = None

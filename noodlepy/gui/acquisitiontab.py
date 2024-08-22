@@ -19,7 +19,6 @@ class AcquisitionGUI(ttk.Frame):
         self.create_widgets()
 
     def create_widgets(self):
-
         # Create the stage control frame and pack it to the left
         stage_control_frame = StageControlerModule(self)
         stage_control_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
@@ -28,13 +27,13 @@ class AcquisitionGUI(ttk.Frame):
         autofocus_frame = AutoFocusModule(self)
         autofocus_frame.grid(row=0, column=1, sticky="nsew")
 
-        # Create the live spectrum frame and pack it below the autofocus frame
+        # # Create the live spectrum frame and pack it below the autofocus frame
         live_spectrum_frame = Wasatchmodule(self)
         live_spectrum_frame.grid(row=1, column=1, sticky="nsew")
 
         # # Create the live view frame and pack it to the rightmost space
-        # live_view_frame = LiveViewModule(self)
-        # live_view_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
+        live_view_frame = LiveViewModule(self)
+        live_view_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
 
 
 class StageControlerModule(ttk.Frame):
