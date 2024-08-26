@@ -6,6 +6,7 @@ import os
 from PIL import Image
 import io
 import torch
+import cv2 as cv
 
 class EdgeDetector():
     def __init__(self, image):
@@ -17,7 +18,7 @@ class EdgeDetector():
         # image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         self.image = image
-        self.sam = sam_model_registry["vit_b"](checkpoint=r"C:\Users\yifei\Documents\NoodlePy\sam_vit_b_01ec64.pth")
+        self.sam = sam_model_registry["vit_b"](checkpoint=r"/mnt/c/Users/Yifei/Documents/NoodlePy/sam_vit_b_01ec64.pth")
         if torch.cuda.is_available():
             self.sam.to('cuda')
 
@@ -52,11 +53,11 @@ class EdgeDetector():
             point_labels=input_label,
             multimask_output=False,
         )
-
+        self.best_mask = masks[0]
         px = 1/plt.rcParams['figure.dpi']  # pixel in inches
         fig, ax = plt.subplots(figsize=(288*px, 216*px))
         ax.imshow(self.image)
-        self.show_mask(masks[0], ax)
+        self.show_mask(self.best_mask, ax)
         self.show_points(input_point, input_label, ax)
         ax.axis('off')
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -98,6 +99,78 @@ class EdgeDetector():
         plt.close(fig)
         return pil_image
 
+    def generate_sampling_points(self, num_points=10, shape='grid'):
+
+        h, w = self.best_mask.shape[-2:]
+        mask = self.best_mask.reshape(h, w)
+        mask = mask > 0.5
+        mask = mask.astype(np.uint8)
+        mask = cv2.resize(mask, (self.image.shape[1], self.image.shape[0]), interpolation=cv2.INTER_NEAREST)
+
+        y, x = np.where(mask == 1)
+        # find the center of the mask
+        x_center = np.mean(x)
+        y_center = np.mean(y)
+
+        if shape == 'grid':
+            x = np.linspace(x.min(), x.max(), int(np.sqrt(num_points)))
+            y = np.linspace(y.min(), y.max(), int(np.sqrt(num_points)))
+            x, y = np.meshgrid(x, y)
+            x, y = x.flatten(), y.flatten()
+
+        elif shape == 'random':
+            indices = np.random.choice(len(x), num_points, replace=False)
+            x, y = x[indices], y[indices]
+
+        elif shape == 'edge':
+            mask_edge = cv2.Canny(mask, 0, 1)
+            edge_coords = np.argwhere(mask_edge > 0)
+            indices = np.linspace(0, len(edge_coords) - 1, num_points).astype(int)
+            y, x = edge_coords[indices].T
+
+        elif shape == 'rings':
+            edge_coords = self.find_edge_of_eroded_mask(mask, erosion_size=30, erosion_shape=cv.MORPH_RECT)
+            indices = np.linspace(0, len(edge_coords) - 1, num_points).astype(int)
+            y, x = edge_coords[indices].T
+
+
+        px = 1/plt.rcParams['figure.dpi']  # pixel in inches
+        fig, ax = plt.subplots(figsize=(288*px, 216*px))
+        ax.imshow(self.image)
+        self.show_points(np.stack([x, y], axis=1), np.ones(len(x)), ax)
+        ax.axis('off')
+        plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
+        buf = io.BytesIO()
+        plt.savefig(buf, format='png')
+        buf.seek(0)
+        pil_image = Image.open(buf)
+        plt.close(fig)
+
+        return x, y
+
+    @staticmethod
+    def find_edge_of_eroded_mask(mask, erosion_size=10, erosion_shape=cv.MORPH_RECT):
+        """
+        Finds the edge coordinates of an eroded mask.
+        
+        Parameters:
+            mask (np.ndarray): A binary matrix (2D numpy array) where the area of interest is labeled with 1.
+            erosion_size (int): Size of the erosion kernel. Default is 3.
+            erosion_shape (int): Shape of the erosion kernel. Options are cv.MORPH_RECT, cv.MORPH_CROSS, and cv.MORPH_ELLIPSE.
+                                Default is cv.MORPH_RECT.
+        
+        Returns:
+            edge_coords (np.ndarray): Coordinates of the edges in the eroded mask.
+        """
+        mask = np.where(mask > 0, 1, 0).astype(np.uint8)
+        element = cv.getStructuringElement(erosion_shape, (2 * erosion_size + 1, 2 * erosion_size + 1),
+                                        (erosion_size, erosion_size))
+        eroded_mask = cv.erode(mask, element)
+        edges = cv.Canny(eroded_mask, 0, 1)
+        edge_coords = np.argwhere(edges > 0)
+        return edge_coords
+
+
     @staticmethod
     def show_anns(anns, ax=None):
         if len(anns) == 0:
@@ -115,7 +188,7 @@ class EdgeDetector():
             ax.imshow(np.dstack((img, m * 0.5)))
 
     @staticmethod
-    def show_points(coords, labels, ax, marker_size=375):
+    def show_points(coords, labels, ax, marker_size=100):
         pos_points = coords[labels == 1]
         neg_points = coords[labels == 0]
         ax.scatter(pos_points[:, 0], pos_points[:, 1], color='green', marker='*', s=marker_size, edgecolor='white', linewidth=1.25)
@@ -136,3 +209,18 @@ class EdgeDetector():
         h, w = mask.shape[-2:]
         mask_image = mask.reshape(h, w, 1) * color.reshape(1, 1, -1)
         ax.imshow(mask_image)
+
+
+
+if __name__ == "__main__":
+    image_path = os.path.join(os.getcwd(),"output_plots", "captured_frame_1.png")
+    image = cv2.imread(image_path)
+    image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    edge_detector = EdgeDetector(image)
+    pil_image = edge_detector.point_prompt_mask_generate()
+    pil_image.show()
+    pil_image.save("masked_image.png")
+    print("Mask generated successfully!")
+
+    edge_detector.generate_sampling_points(shape='rings', num_points=50)
