@@ -144,13 +144,13 @@ class Wasatchmodule(ttk.Frame):
         self.integ_time_spinbox.bind("<FocusOut>", self.update_settings)
         self.integ_time_spinbox.bind("<Return>", self.update_settings)
 
-        self.start_button = ttk.Button(self.spectrum_frame, text="Laser On", command=self.start, bootstyle ='success', width=5)
+        self.start_button = ttk.Button(self.spectrum_frame, text="Laser On", command=self.start, bootstyle ='info-outline', width=5)
         self.start_button.grid(row=1, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
 
-        self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='success-outline', command=self.capture)
+        self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='info-outline', command=self.capture)
         self.capture_button.grid(row=2, column=3, sticky='ew', pady=5, padx=5)
 
-        self.stop_button = ttk.Button(self.spectrum_frame, text="Ref. Polystyrene", command=self.reference, bootstyle ='success-outline')
+        self.stop_button = ttk.Button(self.spectrum_frame, text="Ref. Polystyrene", command=self.reference, bootstyle ='info-outline')
         self.stop_button.grid(row=1, column=3, sticky='ew', pady=5, padx=5)
 
         # live display of spectrum
@@ -159,13 +159,15 @@ class Wasatchmodule(ttk.Frame):
 
         # a rounded toggle button to switch units
         self.toggle_var = ttk.BooleanVar(value=False)
-        self.toggle_btn = ttk.Checkbutton(self.spectrum_frame, variable=self.toggle_var, text="To cm⁻¹", bootstyle="success-round-toggle", command=self.update_units)
+        self.toggle_btn = ttk.Checkbutton(self.spectrum_frame, variable=self.toggle_var, text="To cm⁻¹", bootstyle="info-round-toggle", command=self.update_units)
         self.toggle_btn.grid(row=0, column=3, sticky='en', pady=5, padx=5)
 
         # draw a blank plot to start
         self.fig, self.ax = plt.subplots(figsize=(4, 2))
         self.line, = self.ax.plot([], [])
         self.line.set_linewidth(0.8)
+        # set the line color to #00FFFF
+        self.line.set_color('#5bc0de')
 
         if self.units == "wavelength":
             self.ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
@@ -203,10 +205,10 @@ class Wasatchmodule(ttk.Frame):
                 print("Failed to connect to Wasatch spectrometer. Check connection and try again.")
                 return
         self.wasatchcontroller.turn_laser_on()
-        self.start_button.config(text="Laser Off", command=self.stop, bootstyle ='danger')
+        self.start_button.config(text="Laser Off", command=self.stop, bootstyle ='info')
 
     def stop(self):
-        self.start_button.config(text="Laser On", command=self.start, bootstyle='success')
+        self.start_button.config(text="Laser On", command=self.start, bootstyle='info-outline')
         self.wasatchcontroller.turn_laser_off()
 
     def update_spectrum(self):

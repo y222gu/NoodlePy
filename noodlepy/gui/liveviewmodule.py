@@ -8,6 +8,8 @@ import ttkbootstrap as ttk
 import numpy as np
 from noodlepy.gui.edgedetector import EdgeDetector
 import os
+from threading import Thread
+
 
 try:
     from noodlepy.utils.windows_setup import configure_path
@@ -117,7 +119,7 @@ class LiveViewModule(tk.Frame):
         live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
         self.camera_widget = LiveViewCanvas(parent=live_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
         self.camera_widget.grid(row=0, column=0, sticky='nsew')
-        capture_button = ttk.Button(live_frame, image = self.camera_icon, command=self.capture_frame, padding=5, style='success')
+        capture_button = ttk.Button(live_frame, image = self.camera_icon, command=self.capture_frame, padding=5, style='info')
         capture_button.grid(row=1, column=0, columnspan=2, sticky='ew')
 
         capture_frame = ttk.Labelframe(self, text="Captured Frame", width=self.width, padding=5)
@@ -128,11 +130,11 @@ class LiveViewModule(tk.Frame):
         self.captured_image_label.grid(row=0, column=0, sticky='nsew')
         self.captured_image_label.image = self.image_to_display
 
-        self.edge_detection_auto_button = ttk.Button(capture_frame, text="Auto Detection", command=lambda: self.edge_detection('auto'), state=DISABLED, style='success')
+        self.edge_detection_auto_button = ttk.Button(capture_frame, text="Auto Detection", command=lambda: self.edge_detection('auto'), state=DISABLED, style='info-outline')
         self.edge_detection_auto_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
-        self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='success')
+        self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='info-outline')
         self.edge_detection_point_button.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
-        self.edge_detection_box_button = ttk.Button(capture_frame, text="Box Detection", command=lambda: self.edge_detection('box'), state=DISABLED, style='success')
+        self.edge_detection_box_button = ttk.Button(capture_frame, text="Box Detection", command=lambda: self.edge_detection('box'), state=DISABLED, style='info-outline')
         self.edge_detection_box_button.grid(row=3, column=0, sticky='nsew', pady=5, padx=5)
 
     def edge_detection(self, detection_type):
