@@ -115,7 +115,8 @@ class LiveViewModule(tk.Frame):
     def create_widgets(self):
         live_frame = ttk.Labelframe(self, text="Live View", width=self.width, padding=5)
         live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
-        self.camera_widget = LiveViewCanvas(parent=live_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
+        # self.camera_widget = LiveViewCanvas(parent=live_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
+        self.camera_widget = tk.Canvas(live_frame, width=self.width, height=self.height)
         self.camera_widget.grid(row=0, column=0, sticky='nsew')
         capture_button = ttk.Button(live_frame, image = self.camera_icon, command=self.capture_frame, padding=5, style='success')
         capture_button.grid(row=1, column=0, columnspan=2, sticky='ew')
@@ -128,28 +129,91 @@ class LiveViewModule(tk.Frame):
         self.captured_image_label.grid(row=0, column=0, sticky='nsew')
         self.captured_image_label.image = self.image_to_display
 
-        self.edge_detection_auto_button = ttk.Button(capture_frame, text="Auto Detection", command=lambda: self.edge_detection('auto'), state=DISABLED, style='success')
-        self.edge_detection_auto_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
         self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='success')
-        self.edge_detection_point_button.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
-        self.edge_detection_box_button = ttk.Button(capture_frame, text="Box Detection", command=lambda: self.edge_detection('box'), state=DISABLED, style='success')
-        self.edge_detection_box_button.grid(row=3, column=0, sticky='nsew', pady=5, padx=5)
+        self.edge_detection_point_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
+
+        # three tabs for selecting the sampling method
+        self.sampling_method_var = tk.StringVar()
+        self.sampling_method_var.set("Random")
+        sampling_method_frame = ttk.Labelframe(capture_frame, text="Sampling Method", padding=5)
+        sampling_method_frame.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
+        sampling_method_frame.columnconfigure(0, weight=1)
+        sampling_method_frame.columnconfigure(1, weight=1)
+        sampling_method_frame.columnconfigure(2, weight=1)
+        random_radio = ttk.Radiobutton(sampling_method_frame, text="Random", variable=self.sampling_method_var, value="Random", command=self.on_sampling_method_selected)
+        random_radio.grid(row=0, column=0, sticky='nesw', padx=5, pady=5)
+        grid_radio = ttk.Radiobutton(sampling_method_frame, text="Grid", variable=self.sampling_method_var, value="Grid", command=self.on_sampling_method_selected)
+        grid_radio.grid(row=0, column=1, sticky='nesw', padx=5, pady=5)
+        rings_radio = ttk.Radiobutton(sampling_method_frame, text="Rings", variable=self.sampling_method_var, value="Rings", command=self.on_sampling_method_selected)
+        rings_radio.grid(row=0, column=2, sticky='nesw', padx=5, pady=5)
+
+        self.create_sampling_profile_buttons= ttk.Button(sampling_method_frame, text="Create", command=self.create_sampling_points, state=DISABLED, style='success')
+        self.create_sampling_profile_buttons.grid(row=0, column=3, sticky='ew', pady=5, padx=5)
+        
+        # entry for the number of sampling points
+        self.number_of_sampling_points_label = ttk.Label(sampling_method_frame, text="# of Points")
+        self.number_of_sampling_points_label.grid(row=1, column=0, sticky='nesw', padx=5)
+        self.number_of_sampling_points_entry = ttk.Entry(sampling_method_frame, width=5)
+        self.number_of_sampling_points_entry.grid(row=2, column=0, sticky='ew', padx=5)
+        self.number_of_sampling_points_entry.insert(0, "10")
+
+        # entry for the number of rings
+        self.rings_number_label = ttk.Label(sampling_method_frame, text="# of Rings")
+        self.rings_number_label.grid(row=1, column=1, sticky='nesw', padx=5)
+        self.rings_number_entry = ttk.Entry(sampling_method_frame, width=5)
+        self.rings_number_entry.grid(row=2, column=1, sticky='ew', padx=5)
+        self.rings_number_entry.insert(0, "3")
+
+        # entry for the number of rows and columns for the grid
+        self.row_number_label = ttk.Label(sampling_method_frame, text="Rows")
+        self.row_number_label.grid(row=1, column=2, sticky='nesw', padx=5)
+        self.row_number_entry = ttk.Entry(sampling_method_frame, width=5)
+        self.row_number_entry.grid(row=2, column=2, sticky='ew', padx=5)
+        self.row_number_entry.insert(0, "3")
+
+        self.column_number_label = ttk.Label(sampling_method_frame, text="Columns")
+        self.column_number_label.grid(row=1, column=3, sticky='nesw', padx=5)
+        self.column_number_entry = ttk.Entry(sampling_method_frame, width=5)
+        self.column_number_entry.grid(row=2, column=3, sticky='ew', padx=5)
+        self.column_number_entry.insert(0, "3")
+
 
     def edge_detection(self, detection_type):
-        edgedetector = EdgeDetector(self.captured_image)
+        self.edgedetector = EdgeDetector(self.captured_image)
 
         if detection_type == "auto":
-            masked_image = edgedetector.auto_mask_generate()
+            masked_image = self.edgedetector.auto_mask_generate()
         elif detection_type == "point":
-            masked_image =edgedetector.point_prompt_mask_generate()
+            masked_image =self.edgedetector.point_prompt_mask_generate()
         elif detection_type == "box":   
-            masked_image = edgedetector.box_prompt_mask_generate()
+            masked_image = self.edgedetector.box_prompt_mask_generate()
         print("Edge detection button clicked")
 
         self.masked_image = masked_image
         self.image_to_display = ImageTk.PhotoImage(self.masked_image)
         self.captured_image_label.configure(image=self.image_to_display)
         self.captured_image_label.image = self.image_to_display
+
+
+    def on_sampling_method_selected(self, event):
+        selected_method = self.sampling_method_var.get()
+        if selected_method == "Random":
+            self.row_number_entry.configure(state=DISABLED)
+            self.column_number_entry.configure(state=DISABLED)
+            self.number_of_sampling_points_entry.configure(state=NORMAL)
+            self.rings_number_entry.configure(state=DISABLED)
+            num_points = self.number_of_sampling_points_entry.get()
+            self.edgedetector.generate_sampling_points(shape='random', num_points= num_points)
+
+        elif selected_method == "Grid":
+            self.create_sampling_points_grid()
+        elif selected_method == "Rings":
+            self.create_sampling_points_rings()
+
+    def create_sampling_points(self, shape, num_points):
+        self.edgedetector.generate_sampling_points(shape, num_points)
+        print("Sampling points generated")
+
 
     def capture_frame(self):
         try:
