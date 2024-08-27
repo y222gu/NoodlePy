@@ -117,8 +117,7 @@ class LiveViewModule(tk.Frame):
     def create_widgets(self):
         live_frame = ttk.Labelframe(self, text="Live View", width=self.width, padding=5)
         live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
-        # self.camera_widget = LiveViewCanvas(parent=live_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
-        self.camera_widget = tk.Canvas(live_frame, width=self.width, height=self.height)
+        self.camera_widget = LiveViewCanvas(parent=live_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
         self.camera_widget.grid(row=0, column=0, sticky='nsew')
         capture_button = ttk.Button(live_frame, image = self.camera_icon, command=self.capture_frame, padding=5, style='info')
         capture_button.grid(row=1, column=0, columnspan=2, sticky='ew')
@@ -131,15 +130,7 @@ class LiveViewModule(tk.Frame):
         self.captured_image_label.grid(row=0, column=0, sticky='nsew')
         self.captured_image_label.image = self.image_to_display
 
-<<<<<<< HEAD
-        self.edge_detection_auto_button = ttk.Button(capture_frame, text="Auto Detection", command=lambda: self.edge_detection('auto'), state=DISABLED, style='info-outline')
-        self.edge_detection_auto_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
-        self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='info-outline')
-        self.edge_detection_point_button.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
-        self.edge_detection_box_button = ttk.Button(capture_frame, text="Box Detection", command=lambda: self.edge_detection('box'), state=DISABLED, style='info-outline')
-        self.edge_detection_box_button.grid(row=3, column=0, sticky='nsew', pady=5, padx=5)
-=======
-        self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='success')
+        self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='info')
         self.edge_detection_point_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
 
         # three tabs for selecting the sampling method
@@ -150,22 +141,23 @@ class LiveViewModule(tk.Frame):
         sampling_method_frame.columnconfigure(0, weight=1)
         sampling_method_frame.columnconfigure(1, weight=1)
         sampling_method_frame.columnconfigure(2, weight=1)
-        random_radio = ttk.Radiobutton(sampling_method_frame, text="Random", variable=self.sampling_method_var, value="Random", command=self.on_sampling_method_selected)
-        random_radio.grid(row=0, column=0, sticky='nesw', padx=5, pady=5)
-        grid_radio = ttk.Radiobutton(sampling_method_frame, text="Grid", variable=self.sampling_method_var, value="Grid", command=self.on_sampling_method_selected)
-        grid_radio.grid(row=0, column=1, sticky='nesw', padx=5, pady=5)
-        rings_radio = ttk.Radiobutton(sampling_method_frame, text="Rings", variable=self.sampling_method_var, value="Rings", command=self.on_sampling_method_selected)
-        rings_radio.grid(row=0, column=2, sticky='nesw', padx=5, pady=5)
+        self.random_radio = ttk.Radiobutton(sampling_method_frame, text="Random", variable=self.sampling_method_var, value="Random", command=lambda: self.on_sampling_method_selected('Random'), style='info', state=DISABLED)
+        self.random_radio.grid(row=0, column=0, sticky='nesw', padx=5, pady=5)
+        self.rings_radio = ttk.Radiobutton(sampling_method_frame, text="Rings", variable=self.sampling_method_var, value="Rings", command=lambda: self.on_sampling_method_selected('Rings'), style='info', state=DISABLED)
+        self.rings_radio.grid(row=0, column=1, sticky='nesw', padx=5, pady=5)
+        self.grid_radio = ttk.Radiobutton(sampling_method_frame, text="Grid", variable=self.sampling_method_var, value="Grid", command=lambda: self.on_sampling_method_selected('Grid'), style='info', state=DISABLED)
+        self.grid_radio.grid(row=0, column=2, sticky='nesw', padx=5, pady=5)
 
-        self.create_sampling_profile_buttons= ttk.Button(sampling_method_frame, text="Create", command=self.create_sampling_points, state=DISABLED, style='success')
-        self.create_sampling_profile_buttons.grid(row=0, column=3, sticky='ew', pady=5, padx=5)
+        self.create_sampling_profile_buttons= ttk.Button(sampling_method_frame, text="Create", command=self.on_create_button_clicked, state=DISABLED, style='info')
+        self.create_sampling_profile_buttons.grid(row=3, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
         
         # entry for the number of sampling points
         self.number_of_sampling_points_label = ttk.Label(sampling_method_frame, text="# of Points")
         self.number_of_sampling_points_label.grid(row=1, column=0, sticky='nesw', padx=5)
         self.number_of_sampling_points_entry = ttk.Entry(sampling_method_frame, width=5)
         self.number_of_sampling_points_entry.grid(row=2, column=0, sticky='ew', padx=5)
-        self.number_of_sampling_points_entry.insert(0, "10")
+        self.number_of_sampling_points_entry.insert(0, "80")
+        self.number_of_sampling_points_entry.configure(state=DISABLED)
 
         # entry for the number of rings
         self.rings_number_label = ttk.Label(sampling_method_frame, text="# of Rings")
@@ -173,21 +165,31 @@ class LiveViewModule(tk.Frame):
         self.rings_number_entry = ttk.Entry(sampling_method_frame, width=5)
         self.rings_number_entry.grid(row=2, column=1, sticky='ew', padx=5)
         self.rings_number_entry.insert(0, "3")
+        self.rings_number_entry.configure(state=DISABLED)
+
+        # entry for the interval between rings
+        self.interval_label = ttk.Label(sampling_method_frame, text="Interval")
+        self.interval_label.grid(row=1, column=2, sticky='nesw', padx=5)
+        self.interval_entry = ttk.Entry(sampling_method_frame, width=5)
+        self.interval_entry.grid(row=2, column=2, sticky='ew', padx=5, pady=5)
+        self.interval_entry.insert(0, "30")
+        self.interval_entry.configure(state=DISABLED)
 
         # entry for the number of rows and columns for the grid
         self.row_number_label = ttk.Label(sampling_method_frame, text="Rows")
-        self.row_number_label.grid(row=1, column=2, sticky='nesw', padx=5)
+        self.row_number_label.grid(row=3, column=0, sticky='nesw', padx=5)
         self.row_number_entry = ttk.Entry(sampling_method_frame, width=5)
-        self.row_number_entry.grid(row=2, column=2, sticky='ew', padx=5)
-        self.row_number_entry.insert(0, "3")
+        self.row_number_entry.grid(row=4, column=0, sticky='ew', padx=5)
+        self.row_number_entry.insert(0, "5")
+        self.row_number_entry.configure(state=DISABLED)
 
         self.column_number_label = ttk.Label(sampling_method_frame, text="Columns")
-        self.column_number_label.grid(row=1, column=3, sticky='nesw', padx=5)
+        self.column_number_label.grid(row=3, column=1, sticky='nesw', padx=5)
         self.column_number_entry = ttk.Entry(sampling_method_frame, width=5)
-        self.column_number_entry.grid(row=2, column=3, sticky='ew', padx=5)
-        self.column_number_entry.insert(0, "3")
+        self.column_number_entry.grid(row=4, column=1, sticky='ew', padx=5)
+        self.column_number_entry.insert(0, "5")
+        self.column_number_entry.configure(state=DISABLED)
 
->>>>>>> 6c5f9c1644102233a29eab2e0823d8a2bbc6f2ec
 
     def edge_detection(self, detection_type):
         self.edgedetector = EdgeDetector(self.captured_image)
@@ -205,6 +207,13 @@ class LiveViewModule(tk.Frame):
         self.captured_image_label.configure(image=self.image_to_display)
         self.captured_image_label.image = self.image_to_display
 
+        self.create_sampling_profile_buttons.configure(state=NORMAL)
+        self.random_radio.configure(state=NORMAL)
+        self.rings_radio.configure(state=NORMAL)
+        self.grid_radio.configure(state=NORMAL)
+        self.sampling_method_var.set("Random")
+        self.number_of_sampling_points_entry.configure(state=NORMAL)
+
 
     def on_sampling_method_selected(self, event):
         selected_method = self.sampling_method_var.get()
@@ -213,16 +222,42 @@ class LiveViewModule(tk.Frame):
             self.column_number_entry.configure(state=DISABLED)
             self.number_of_sampling_points_entry.configure(state=NORMAL)
             self.rings_number_entry.configure(state=DISABLED)
-            num_points = self.number_of_sampling_points_entry.get()
-            self.edgedetector.generate_sampling_points(shape='random', num_points= num_points)
+            self.interval_entry.configure(state=DISABLED)
 
         elif selected_method == "Grid":
-            self.create_sampling_points_grid()
-        elif selected_method == "Rings":
-            self.create_sampling_points_rings()
+            self.row_number_entry.configure(state=NORMAL)
+            self.column_number_entry.configure(state=NORMAL)
+            self.number_of_sampling_points_entry.configure(state=DISABLED)
+            self.rings_number_entry.configure(state=DISABLED)
+            self.interval_entry.configure(state=DISABLED)
 
-    def create_sampling_points(self, shape, num_points):
-        self.edgedetector.generate_sampling_points(shape, num_points)
+        elif selected_method == "Rings":
+            self.row_number_entry.configure(state=DISABLED)
+            self.column_number_entry.configure(state=DISABLED)
+            self.number_of_sampling_points_entry.configure(state=NORMAL)
+            self.rings_number_entry.configure(state=NORMAL)
+            self.interval_entry.configure(state=NORMAL)
+
+
+    def on_create_button_clicked(self):
+        selected_method = self.sampling_method_var.get()
+        if selected_method == "Random":
+            num_points = int(self.number_of_sampling_points_entry.get())
+            sampled_mask_image, x, y = self.edgedetector.generate_sampling_points(shape='random', num_points=num_points)
+        elif selected_method == "Grid":
+            row_number = int(self.row_number_entry.get())
+            col_number = int(self.column_number_entry.get())
+            sampled_mask_image, x, y = self.edgedetector.generate_sampling_points(shape='grid', row_number=row_number, col_number=col_number)
+        elif selected_method == "Rings":
+            num_points = int(self.number_of_sampling_points_entry.get())
+            num_rings = int(self.rings_number_entry.get())
+            interval = int(self.interval_entry.get())
+            sampled_mask_image, x, y = self.edgedetector.generate_sampling_points(shape='rings', num_points=num_points, num_rings=num_rings, interval=interval)
+
+        self.sampled_mask_image = sampled_mask_image
+        self.image_to_display = ImageTk.PhotoImage(self.sampled_mask_image)
+        self.captured_image_label.configure(image=self.image_to_display)
+        self.captured_image_label.image = self.image_to_display
         print("Sampling points generated")
 
 
@@ -235,9 +270,7 @@ class LiveViewModule(tk.Frame):
             self.captured_image_label.configure(image=self.image_to_display)
             self.captured_image_label.configure(text="")
             self.captured_image_label.image = self.image_to_display
-            self.edge_detection_auto_button.configure(state=NORMAL)
             self.edge_detection_point_button.configure(state=NORMAL)
-            self.edge_detection_box_button.configure(state=NORMAL)
 
         except queue.Empty:
             print("No frame available to capture")
