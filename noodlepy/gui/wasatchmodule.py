@@ -121,7 +121,7 @@ class Wasatchmodule(ttk.Frame):
 
     def create_widgets(self):
         self.spectrum_frame = ttk.Labelframe(self, text="Live Spectrum", padding=5)
-        self.spectrum_frame.grid(row=0, column=0, columnspan=4, sticky='nsew', padx=5)
+        self.spectrum_frame.grid(row=0, column=0, columnspan=4, sticky='nsew', padx=5, pady=5)
 
         self.laser_power_label = ttk.Label(self.spectrum_frame, text="Power (mW)", width=5)
         self.laser_power_label.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
@@ -174,10 +174,10 @@ class Wasatchmodule(ttk.Frame):
             print("Invalid units")
 
         self.ax.set_ylabel("Intensity (counts)", fontsize=6, color='white')
-        self.ax.set_title("Raman Spectrum", fontsize=6, color='white')
+        self.ax.set_title("Raman Spectrum", fontsize=8, color='white')
         # font size of the axis labels
-        self.ax.tick_params(axis='both', which='major', labelsize=4)
-        self.ax.tick_params(axis='both', which='minor', labelsize=4)
+        self.ax.tick_params(axis='both', which='major', labelsize=6)
+        self.ax.tick_params(axis='both', which='minor', labelsize=6)
         self.ax.tick_params(axis='x', colors='white')
         self.ax.tick_params(axis='y', colors='white')
         self.ax.spines['bottom'].set_color('white')
@@ -260,6 +260,7 @@ class Wasatchmodule(ttk.Frame):
         captured_fig, captured_ax = plt.subplots(figsize=(4, 2))
         captured_line, =  captured_ax.plot(x_axis, spectrum)
         captured_line.set_linewidth(0.8)
+        captured_line.set_color('#5bc0de')
 
         if self.units == "wavelength":
             captured_ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
@@ -267,9 +268,9 @@ class Wasatchmodule(ttk.Frame):
             captured_ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
 
         captured_ax.set_ylabel("Intensity (counts)", fontsize=6, color='white')
-        captured_ax.set_title("Raman Spectrum", fontsize=6, color='white')
-        captured_ax.tick_params(axis='both', which='major', labelsize=4)
-        captured_ax.tick_params(axis='both', which='minor', labelsize=4)
+        captured_ax.set_title("Raman Spectrum", fontsize=8, color='white')
+        captured_ax.tick_params(axis='both', which='major', labelsize=6)
+        captured_ax.tick_params(axis='both', which='minor', labelsize=6)
         captured_ax.tick_params(axis='x', colors='white')
         captured_ax.tick_params(axis='y', colors='white')
         captured_ax.spines['bottom'].set_color('white')

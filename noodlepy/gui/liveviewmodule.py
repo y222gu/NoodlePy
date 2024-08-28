@@ -1,6 +1,6 @@
 import tkinter as tk
 from ttkbootstrap.constants import *
-from PIL import Image, ImageTk
+from PIL import Image, ImageTk, ImageDraw
 import typing
 import threading
 import queue
@@ -9,6 +9,7 @@ import numpy as np
 from noodlepy.gui.edgedetector import EdgeDetector
 import os
 from threading import Thread
+
 
 
 try:
@@ -79,7 +80,13 @@ class ImageAcquisitionThread(threading.Thread):
                 frame = self._camera.get_pending_frame_or_null()
                 if frame is not None:
                     pil_image = self._get_image(frame)
-                    self._image_queue.put_nowait(pil_image)
+                    # # draw middle dashlines on the pil_image and put it in the queue
+                    # draw = ImageDraw.Draw(pil_image)
+                    # draw.line((0, pil_image.height/2, pil_image.width, pil_image.height/2), fill='black', width=5)
+                    # draw.line((pil_image.width/2, 0, pil_image.width/2, pil_image.height), fill='black', width=5)
+                    # del draw
+                    self._image_queue.put(pil_image)
+
             except queue.Full:
                 pass
             except Exception as error:
@@ -163,7 +170,7 @@ class LiveViewModule(tk.Frame):
         self.rings_number_label = ttk.Label(sampling_method_frame, text="# of Rings")
         self.rings_number_label.grid(row=1, column=1, sticky='nesw', padx=5)
         self.rings_number_entry = ttk.Entry(sampling_method_frame, width=5)
-        self.rings_number_entry.grid(row=2, column=1, sticky='ew', padx=5)
+        self.rings_number_entry.grid(row=2, column=1, sticky='ew', padx=5, pady=5)
         self.rings_number_entry.insert(0, "3")
         self.rings_number_entry.configure(state=DISABLED)
 
@@ -179,14 +186,14 @@ class LiveViewModule(tk.Frame):
         self.row_number_label = ttk.Label(sampling_method_frame, text="Rows")
         self.row_number_label.grid(row=3, column=0, sticky='nesw', padx=5)
         self.row_number_entry = ttk.Entry(sampling_method_frame, width=5)
-        self.row_number_entry.grid(row=4, column=0, sticky='ew', padx=5)
+        self.row_number_entry.grid(row=4, column=0, sticky='ew', padx=5, pady=5)
         self.row_number_entry.insert(0, "5")
         self.row_number_entry.configure(state=DISABLED)
 
         self.column_number_label = ttk.Label(sampling_method_frame, text="Columns")
         self.column_number_label.grid(row=3, column=1, sticky='nesw', padx=5)
         self.column_number_entry = ttk.Entry(sampling_method_frame, width=5)
-        self.column_number_entry.grid(row=4, column=1, sticky='ew', padx=5)
+        self.column_number_entry.grid(row=4, column=1, sticky='ew', padx=5, pady=5)
         self.column_number_entry.insert(0, "5")
         self.column_number_entry.configure(state=DISABLED)
 

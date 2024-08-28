@@ -146,6 +146,7 @@ class EdgeDetector():
         px = 1/plt.rcParams['figure.dpi']  # pixel in inches
         fig, ax = plt.subplots(figsize=(288*px, 216*px))
         ax.imshow(self.image)
+        self.show_mask(self.best_mask, ax)
         self.show_points(np.stack([x, y], axis=1), np.ones(len(x)), ax, '.', marker_size=20)
         ax.axis('off')
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
@@ -200,7 +201,7 @@ class EdgeDetector():
     def show_points(coords, labels, ax, marker, marker_size=100):
         pos_points = coords[labels == 1]
         neg_points = coords[labels == 0]
-        ax.scatter(pos_points[:, 0], pos_points[:, 1], color='#5bc0de', marker=marker, s=marker_size, linewidth=1.25)
+        ax.scatter(pos_points[:, 0], pos_points[:, 1], color='#f39c12', marker=marker, s=marker_size, linewidth=1.25)
         ax.scatter(neg_points[:, 0], neg_points[:, 1], color='red', marker=marker, s=marker_size, linewidth=1.25)
 
     @staticmethod
