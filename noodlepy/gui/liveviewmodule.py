@@ -10,8 +10,6 @@ from noodlepy.gui.edgedetector import EdgeDetector
 import os
 from threading import Thread
 
-
-
 try:
     from noodlepy.utils.windows_setup import configure_path
     print("Configuring path...")

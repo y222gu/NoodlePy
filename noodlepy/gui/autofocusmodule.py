@@ -1,5 +1,6 @@
 import tkinter as tk
 from tkinter import ttk
+import ttkbootstrap as ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 
@@ -13,36 +14,8 @@ class AutoFocusModule(ttk.Frame):
         main_frame = ttk.Labelframe(self, text='Auto Focus', padding=5)
         main_frame.grid(row=0, column=0, columnspan=5, sticky="nsew", padx=5, pady=5)
 
-        # Create the figure and axes
-        fig, axes = plt.subplots(1, 2, figsize=(4, 2))
-        self.ax1, self.ax2= axes.flatten()
-
-        self.ax1.set_xlabel('Z-axis position',fontsize=6, color='white')
-        self.ax1.set_ylabel('Entropy', fontsize=6, color='white')
-        self.ax1.set_title('Entropy', fontsize=8, color='white')
-
-        self.ax2.set_xlabel('Z-axis position', fontsize=6, color='white')
-        self.ax2.set_ylabel('Intensity', fontsize=6, color='white')
-        self.ax2.set_title('Focus', fontsize=8, color='white')
-
-        for ax in axes.flatten():
-            ax.tick_params(axis='both', which='major', labelsize=6)
-            ax.tick_params(axis='both', which='minor', labelsize=6)
-            ax.tick_params(axis='x', colors='white')
-            ax.tick_params(axis='y', colors='white')
-            ax.spines['top'].set_visible(False)
-            ax.spines['right'].set_visible(False)
-            ax.spines['bottom'].set_color('white')
-            ax.spines['left'].set_color('white')
-            ax.set_facecolor("none")
-            ax.xaxis.label.set_color('white')
-            ax.yaxis.label.set_color('white')
-
-        plt.tight_layout(pad=0.5)
-        fig.patch.set_alpha(0)
-
-        # Create a canvas widget for the figure
-        self.canvas = FigureCanvasTkAgg(fig, master=main_frame)
+        self.fig, self.axes = self.initialize_figure()
+        self.canvas = FigureCanvasTkAgg(self.fig, master=main_frame)
         self.canvas.draw()
         self.canvas.get_tk_widget().grid(row=0, column=0, columnspan=5, rowspan=2, sticky="nsew", padx=5, pady=5)
 
@@ -70,6 +43,36 @@ class AutoFocusModule(ttk.Frame):
         button = ttk.Button(main_frame, text="Focus", command=self.autofocus, bootstyle="info", width=5)
         button.grid(row=2, column=4, rowspan=2, padx=5, pady=5, sticky="news")
 
+    def initialize_figure(self):
+                # Create the figure and axes
+        fig, axes = plt.subplots(1, 2, figsize=(4, 2))
+
+        axes[0].set_xlabel('Z-axis position',fontsize=6, color='white')
+        axes[0].set_ylabel('Entropy', fontsize=6, color='white')
+        axes[0].set_title('Entropy', fontsize=8, color='white')
+
+        axes[1].set_xlabel('Z-axis position', fontsize=6, color='white')
+        axes[1].set_ylabel('Intensity', fontsize=6, color='white')
+        axes[1].set_title('Focus', fontsize=8, color='white')
+
+        for ax in axes:
+            ax.tick_params(axis='both', which='major', labelsize=6)
+            ax.tick_params(axis='both', which='minor', labelsize=6)
+            ax.tick_params(axis='x', colors='white')
+            ax.tick_params(axis='y', colors='white')
+            ax.spines['top'].set_visible(False)
+            ax.spines['right'].set_visible(False)
+            ax.spines['bottom'].set_color('white')
+            ax.spines['left'].set_color('white')
+            ax.set_facecolor("none")
+            ax.xaxis.label.set_color('white')
+            ax.yaxis.label.set_color('white')
+
+        plt.tight_layout(pad=0.5)
+        fig.patch.set_alpha(0)
+        return fig, axes
+
+
     def autofocus(self):
         for i in range(10):
             print(f"Running autofocus iteration {i+1}")
@@ -77,8 +80,8 @@ class AutoFocusModule(ttk.Frame):
             wavelength = [400, 500, 600, 700]
             intensity = [0.1, 0.2, 0.3, 0.4]
 
-            self.ax1.plot(i, entropy, 'ro')
-            self.ax2.plot(wavelength, intensity, 'bo')
+            self.axes[0].plot(i, entropy, 'ro')
+            self.axes[1].plot(wavelength, intensity, 'bo')
             self.canvas.draw()
 
     def stop_autofocus(self):
@@ -88,3 +91,9 @@ class AutoFocusModule(ttk.Frame):
         print("Saving autofocus results")
 
 
+if __name__ == '__main__':
+    root = ttk.Window()
+    root.style.theme_use('noodlepy')
+    app = AutoFocusModule(root)
+    app.grid(row=0, column=0, sticky="nsew")
+    root.mainloop()
