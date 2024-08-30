@@ -7,6 +7,7 @@ from PIL import Image
 import io
 import torch
 import cv2 as cv
+from threading import Thread
 
 class EdgeDetector():
     def __init__(self, image):

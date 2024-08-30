@@ -196,7 +196,14 @@ class LiveViewModule(tk.Frame):
         self.column_number_entry.configure(state=DISABLED)
 
 
+    def run_in_thread(self, func, *args):
+        thread = Thread(target=func, args=args, daemon=True)
+        thread.start()
+
     def edge_detection(self, detection_type):
+        self.run_in_thread(self._edge_detection, detection_type)
+
+    def _edge_detection(self, detection_type):
         self.edgedetector = EdgeDetector(self.captured_image)
 
         if detection_type == "auto":
@@ -245,6 +252,9 @@ class LiveViewModule(tk.Frame):
 
 
     def on_create_button_clicked(self):
+        self.run_in_thread(self._on_create_button_clicked)
+
+    def _on_create_button_clicked(self):
         selected_method = self.sampling_method_var.get()
         if selected_method == "Random":
             num_points = int(self.number_of_sampling_points_entry.get())
@@ -265,8 +275,11 @@ class LiveViewModule(tk.Frame):
         self.captured_image_label.image = self.image_to_display
         print("Sampling points generated")
 
-
     def capture_frame(self):
+        self.run_in_thread(self._capture_frame)
+
+
+    def _capture_frame(self):
         try:
             self.captured_image = self.image_acquisition_thread.get_output_queue().get(timeout = 2)
             print("Frame captured")

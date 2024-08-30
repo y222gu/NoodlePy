@@ -20,7 +20,6 @@ class StageControlModule(ttk.Frame):
         self.img_medium_step = self.img_medium_step.resize((20, 20))
         self.img_large_step = self.img_large_step.resize((20, 20))
         self.ser = None
-        # self.lock = Lock()
         self.create_widgets()
         self.connect_device()
 
