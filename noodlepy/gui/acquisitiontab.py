@@ -229,9 +229,9 @@ class StageControlerModule(ttk.Frame):
             print("Please connect to the printer first")
             return
         if option == "UP SMALL":
-            gecode = f"G0 Z0.1 F{self.speed}\r\n"
+            gcode = f"G0 Z0.1 F{self.speed}\r\n"
             self.ser.write(str.encode("G91\r\n"))
-            self.ser.write(str.encode(gecode))
+            self.ser.write(str.encode(gcode))
             print("Moving up small")
         elif option == "UP MEDIUM":
             gcode = f"G0 Z1 F{self.speed}\r\n"
