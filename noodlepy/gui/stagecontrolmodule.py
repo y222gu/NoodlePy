@@ -9,19 +9,30 @@ from tkinter import StringVar
 import tkinter as tk
 import numpy as np
 from threading import Thread, Lock
+import tkinter.messagebox as messagebox
+from ctypes import CDLL, c_uint, c_double # for the MCL stage control
 
 class StageControlModule(ttk.Frame):
     def __init__(self, parent):
         super().__init__(parent)
-        self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png"))
-        self.img_medium_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","medium_step.png"))
-        self.img_large_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","large_step.png"))
-        self.img_small_step = self.img_small_step.resize((20, 20))
-        self.img_medium_step = self.img_medium_step.resize((20, 20))
-        self.img_large_step = self.img_large_step.resize((20, 20))
+
+        
+        self.initialize_MCL_nanopositioner()
+
+        self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png")).resize((20, 20))
+        self.img_medium_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","medium_step.png")).resize((20, 20))
+        self.img_large_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","large_step.png")).resize((20, 20))
+        self.circle_black = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","circle-black.png")).resize((20, 20))
         self.ser = None
         self.create_widgets()
         self.connect_device()
+        self.small_step_size_um = 0.06 #firmware seems to limit the smallest step size to 0.06 (60 um)
+        self.medium_step_size_um = 0.6
+        self.large_step_size_um = 6
+        self.small_step_size_z_um = 0.01
+        self.medium_step_size_z_um = 0.1
+        self.large_step_size_z_um = 1
+
 
     def create_widgets(self):
 
@@ -83,6 +94,9 @@ class StageControlModule(ttk.Frame):
         self.go_button = ttk.Button(movement_frame, text="Go", command=lambda: self.send_gcode("GO"),bootstyle="info")
         self.go_button.grid(row=2, column=4, padx=10, pady=5)
         self.go_button.config(width=6)
+        self.go_button = ttk.Button(movement_frame, text="Go to Laser", command=lambda: self.send_gcode("GL"),bootstyle="info")
+        self.go_button.grid(row=2, column=5, padx=10, pady=5)
+        self.go_button.config(width=10)
 
         # Speed slider
         self.slider_value = StringVar()
@@ -110,10 +124,14 @@ class StageControlModule(ttk.Frame):
         ttk.Label(direction_frame, text="X").grid(row=4, column=0, padx=3)
         ttk.Label(direction_frame, text="Z (up)").grid(row=0, column=10, pady=3)
         ttk.Label(direction_frame, text="Z (down)").grid(row=8, column=10, pady=3)
+        ttk.Label(direction_frame, text="NP Z (up)").grid(row=0, column=11, pady=3)
+        ttk.Label(direction_frame, text="NP Z (down)").grid(row=8, column=11, pady=3)
+        self.positionLabel = ttk.Label(direction_frame, text=f"Pos: F{self.position} um")
+        self.positionLabel.grid(row=9, column=11, pady=3)
         ttk.Label(direction_frame, text="").grid(row=2, column=9,columnspan=2, padx=50)
-        ttk.Label(direction_frame, text="10").grid(row=3, column=1, pady=3)
-        ttk.Label(direction_frame, text="1").grid(row=3, column=2, pady=3)
-        ttk.Label(direction_frame, text="0.1").grid(row=3, column=3,  pady=3)
+        ttk.Label(direction_frame, text="5").grid(row=3, column=1, pady=3)
+        ttk.Label(direction_frame, text="0.5").grid(row=3, column=2, pady=3)
+        ttk.Label(direction_frame, text="0.05").grid(row=3, column=3,  pady=3)
 
         self.img_up_low = ImageTk.PhotoImage(self.img_small_step.rotate(90))
         self.img_up_medium = ImageTk.PhotoImage(self.img_medium_step.rotate(-90))
@@ -141,11 +159,16 @@ class StageControlModule(ttk.Frame):
         ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("FRONT MEDIUM"), bootstyle="secondary").grid(row=6, column=4, pady=3)
         ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("FRONT LARGE"), bootstyle="dark").grid(row=7, column=4, pady=3)
         ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.send_gcode("UP SMALL"), bootstyle="light").grid(row=3, column=10, columnspan=2)
+        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.move_relative(-1), bootstyle="light").grid(row=3, column=11, columnspan=2)
+        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.move_relative(-5), bootstyle="secondary").grid(row=2, column=11, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.send_gcode("UP MEDIUM"), bootstyle="secondary").grid(row=2, column=10, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.send_gcode("UP LARGE"), bootstyle="dark").grid(row=1, column=10, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.send_gcode("DOWN SMALL"), bootstyle="light").grid(row=5, column=10, columnspan=2)
+        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.move_relative(1), bootstyle="light").grid(row=5, column=11, columnspan=2)
         ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("DOWN MEDIUM"), bootstyle="secondary").grid(row=6, column=10, columnspan=2, pady=3)
+        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.move_relative(5), bootstyle="secondary").grid(row=6, column=11, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("DOWN LARGE"), bootstyle="dark").grid(row=7, column=10, columnspan=2, pady=3)
+        ttk.Button(direction_frame, image=self.img_right_low, command=lambda: self.move_absolute()).grid(row=4, column=11, columnspan=2)
 
         sample_spot_register_frame = ttk.Labelframe(main_frame, text="Sample Grid", padding=5)
         sample_spot_register_frame.grid(row=2, column=0, columnspan=6, sticky="nsew", padx=5, pady=5)
@@ -172,6 +195,75 @@ class StageControlModule(ttk.Frame):
         self.y_number_entry.insert(0, "5")
         self.test_sample_spot_button = ttk.Button(sample_spot_register_frame, text="Test Sample Grid", command=self.test_sample_grid, bootstyle="info", state=DISABLED)
         self.test_sample_spot_button.grid(row=0, column=4, rowspan=2, sticky='nsew', padx=5, pady=5)
+
+    def initialize_MCL_nanopositioner(self):
+        
+        # Load the DLL for the MCL stage control
+        self.mcldll = CDLL("C:/Users/yifei/Documents/NoodlePy/noodlepy/dlls/Madlib.dll")
+        self.mcldll.MCL_ReleaseHandle.restype = None
+        self.mcldll.MCL_SingleReadN.restype = c_double
+        
+        # Initialize variables
+        self.handle = self.mcldll.MCL_InitHandle()
+        if self.handle == 0:
+            raise RuntimeError("Failed to initialize MCL handle  (is it plugged in?)")
+        print("MCL Handle = ", self.handle)
+
+        self.axis = c_uint(3)
+        self.position = c_double(0)
+          
+        # Move to a new position
+        error = self.mcldll.MCL_SingleWriteN(self.position, self.axis, self.handle)
+        print("Error = ", error)
+        
+        # Wait for nanopositioner to settle
+        time.sleep(0.025)
+        
+        # Read the new position
+        self.position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+        print("Position = ", self.position)
+
+    def move_relative(self, delta_z: float):
+        # Get the current position
+        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+     
+        # Calculate the new position
+        new_position = current_position + delta_z
+        new_position = max(0, min(new_position, 100)) # Ensure new_position stays within bounds [0, 100]
+        new_position_c_double = c_double(new_position)
+        
+        # Move to the new position
+        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
+        if error != 0:
+            raise RuntimeError(f"MCL Error: {error}")
+               
+        time.sleep(0.025) # Wait for nanopositioner to settle
+        
+        # Read the new position
+        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
+        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
+
+    def move_absolute(self, abs_z: float = 50):
+        # Get the current position
+        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+     
+        new_position = max(0, min(abs_z, 100)) # Ensure new_position stays within bounds [0, 100]
+        new_position_c_double = c_double(new_position)
+        
+        # Move to the new position
+        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
+        if error != 0:
+            raise RuntimeError(f"MCL Error: {error}")
+       
+        time.sleep(0.025) # Wait for nanopositioner to settle
+        
+        # Read the new position
+        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+
+        # Return the final position as a string
+        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
+        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
 
     def run_in_thread(self, func, *args):
         thread = Thread(target=func, args=args, daemon=True)
@@ -207,63 +299,63 @@ class StageControlModule(ttk.Frame):
             print("Please connect to the printer first")
             return
         if option == "UP SMALL":
-            self.go_by_xyz(z=0.1)
+            self.go_by_xyz(z=self.small_step_size_z_um)
             print("Moving up small")
         elif option == "UP MEDIUM":
-            self.go_by_xyz(z=1)
+            self.go_by_xyz(z=self.medium_step_size_z_um)
             print("Moving up medium")
         elif option == "UP LARGE":
-            self.go_by_xyz(z=10)
+            self.go_by_xyz(z=self.large_step_size_z_um)
             print("Moving up large")
 
         elif option == "DOWN SMALL":
-            self.go_by_xyz(z=-0.1)
+            self.go_by_xyz(z=-self.small_step_size_z_um)
             print("Moving down small")
         elif option == "DOWN MEDIUM":
-            self.go_by_xyz(z=-1)
+            self.go_by_xyz(z=-self.medium_step_size_z_um)
             print("Moving down medium")
         elif option == "DOWN LARGE":
-            self.go_by_xyz(z=-10)
+            self.go_by_xyz(z=-self.large_step_size_z_um)
             print("Moving down large")
 
         elif option == "LEFT SMALL":
-            self.go_by_xyz(x=-0.1)
+            self.go_by_xyz(x=-self.small_step_size_um)
             print("Moving left small")
         elif option == "LEFT MEDIUM":
-            self.go_by_xyz(x=-1)
+            self.go_by_xyz(x=-self.medium_step_size_um)
             print("Moving left medium")
         elif option == "LEFT LARGE":
-            self.go_by_xyz(x=-10)
+            self.go_by_xyz(x=-self.large_step_size_um)
             print("Moving left large")
 
         elif option == "RIGHT SMALL":
-            self.go_by_xyz(x=0.1)
+            self.go_by_xyz(x=self.small_step_size_um)
             print("Moving right small")
         elif option == "RIGHT MEDIUM":
-            self.go_by_xyz(x=1)
+            self.go_by_xyz(x=self.medium_step_size_um)
             print("Moving right medium")
         elif option == "RIGHT LARGE":
-            self.go_by_xyz(x=10)
+            self.go_by_xyz(x=self.large_step_size_um)
             print("Moving right large")
 
         elif option == "BACK SMALL":
-            self.go_by_xyz(y=0.1)
+            self.go_by_xyz(y=self.small_step_size_um)
             print("Moving back small")
         elif option == "BACK MEDIUM":
-            self.go_by_xyz(y=1)
+            self.go_by_xyz(y=self.medium_step_size_um)
             print("Moving back medium")
         elif option == "BACK LARGE":
-            self.go_by_xyz(y=10)
+            self.go_by_xyz(y=self.large_step_size_um)
             print("Moving back large")
 
         elif option == "FRONT SMALL":
-            self.go_by_xyz(y=-0.1)
+            self.go_by_xyz(y=-self.small_step_size_um)
             print("Moving front small")
         elif option == "FRONT MEDIUM":
-            self.go_by_xyz(y=-1)
+            self.go_by_xyz(y=-self.medium_step_size_um)
             print("Moving front medium")
         elif option == "FRONT LARGE":
-            self.go_by_xyz(y=-10)
+            self.go_by_xyz(y=-self.large_step_size_um)
             print("Moving front large")
         elif option == "GO":
             p2_x = self.p2_x_entry.get()
@@ -272,6 +364,32 @@ class StageControlModule(ttk.Frame):
 
             if p2_x and p2_y and p2_z:
                 self.go_to_xyz(x=p2_x, y=p2_y, z=p2_z)
+            else:
+                print("Please enter all the coordinates")
+                return
+        elif option == "GL":
+            # manual calibration from 08/31/2024
+            x_cal = 41.38
+            y_cal = -3.66
+            z_cal = -3
+            p2_x = str(float(self.p1_x_entry.cget("text"))+x_cal)
+            p2_y = str(float(self.p1_y_entry.cget("text"))+y_cal)
+            p2_z = str(float(self.p1_z_entry.cget("text"))+z_cal)
+
+            if p2_x and p2_y and p2_z:
+                label_text = self.p1_z_entry.cget("text") # Get the text from the label
+
+                try:
+                    current_z = float(label_text)
+                    safe_z = 30
+                    self.go_to_xyz(z=str(current_z+safe_z)) # move to a safe height
+                    self.go_to_xyz(x=p2_x, y=p2_y) # travel x-y
+                    self.go_to_xyz(z=p2_z) #descend to the correct height
+                except ValueError:
+                    # Handle the case where the text is not a valid float, e.g., "Nan"
+                    messagebox.showerror("Conversion Error", f"Cannot convert '{label_text}' to float.")
+
+                
             else:
                 print("Please enter all the coordinates")
                 return
