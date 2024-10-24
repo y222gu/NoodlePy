@@ -103,42 +103,62 @@ class LiveViewModule(tk.Frame):
         self.camera_icon = self.camera_icon.resize((30, 30))
         self.camera_icon = ImageTk.PhotoImage(self.camera_icon)
 
+        self.exchange_icon = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","exchange_icon.png"))
+        self.exchange_icon = self.exchange_icon.resize((30, 30))
+        self.exchange_icon = ImageTk.PhotoImage(self.exchange_icon)
+
         self.sdk = TLCameraSDK()
         camera_list = self.sdk.discover_available_cameras()
         if not camera_list:
             raise Exception("No cameras found")
-        self.camera = self.sdk.open_camera(camera_list[0])
-        self.image_acquisition_thread = ImageAcquisitionThread(self.camera)
+        
+        # make sure both cameras are connected
+        if '14938' not in camera_list or '14628' not in camera_list:
+            raise Exception("Make sure both cameras are connected")
+        
+        self.widefield_camera = self.sdk.open_camera('14938')
+        self.smallfield_camera = self.sdk.open_camera('14628')
+        self.widefield_camera_thread = ImageAcquisitionThread(self.widefield_camera)
+        self.smallfield_camera_thread = ImageAcquisitionThread(self.smallfield_camera)
 
         print("Setting camera parameters...")
-        self.camera.frames_per_trigger_zero_for_unlimited = 0
-        self.camera.arm(2)
-        self.camera.issue_software_trigger()
+        self.widefield_camera.frames_per_trigger_zero_for_unlimited = 0
+        self.widefield_camera.arm(2)
+        self.widefield_camera.issue_software_trigger()
+
+        self.smallfield_camera.frames_per_trigger_zero_for_unlimited = 0
+        self.smallfield_camera.arm(2)
+        self.smallfield_camera.issue_software_trigger()
 
         print("Starting image acquisition thread...")
-        self.image_acquisition_thread.start()
+        self.widefield_camera_thread.start()
+        self.smallfield_camera_thread.start()
+        self.active_camera_thread = self.widefield_camera_thread
         self.create_widgets()
 
+
     def create_widgets(self):
-        live_frame = ttk.Labelframe(self, text="Live View", width=self.width, padding=5)
-        live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
-        self.camera_widget = LiveViewCanvas(parent=live_frame, image_queue=self.image_acquisition_thread.get_output_queue(), width=self.width, height=self.height)
-        self.camera_widget.grid(row=0, column=0, sticky='nsew')
-        capture_button = ttk.Button(live_frame, image = self.camera_icon, command=self.capture_frame, padding=5, style='info')
-        capture_button.grid(row=1, column=0, columnspan=2, sticky='ew')
+        self.live_frame = ttk.Labelframe(self, text="Wide FOV", width=self.width, padding=5)
+        self.live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
+
+        self.camera_widget = LiveViewCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height)
+        self.camera_widget.grid(row=0, column=0, columnspan=2, sticky='nsew')
+        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.switch_view('TO_SMALL'), style='info')
+        self.switch_view_button.grid(row=1, column=0, columnspan=1, sticky='nsew', pady=5, padx=5)
+        capture_button = ttk.Button(self.live_frame, image=self.camera_icon, command= self.capture_frame, style='info')
+        capture_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
 
         capture_frame = ttk.Labelframe(self, text="Captured Frame", width=self.width, padding=5)
-        capture_frame.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
+        capture_frame.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
         self.initial_image = Image.fromarray(np.zeros((self.height, self.width), dtype=np.uint8))
         self.image_to_display = ImageTk.PhotoImage(self.initial_image)
         self.captured_image_label = ttk.Label(capture_frame, text="No Frame Captured", image= self.image_to_display, compound='center', foreground='white')
         self.captured_image_label.grid(row=0, column=0, sticky='nsew')
         self.captured_image_label.image = self.image_to_display
 
+        # three tabs for selecting the sampling method
         self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='info')
         self.edge_detection_point_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
-
-        # three tabs for selecting the sampling method
         self.sampling_method_var = tk.StringVar()
         self.sampling_method_var.set("Random")
         sampling_method_frame = ttk.Labelframe(capture_frame, text="Sampling Method", padding=5)
@@ -276,30 +296,49 @@ class LiveViewModule(tk.Frame):
         print("Sampling points generated")
 
     def capture_frame(self):
-        self.run_in_thread(self._capture_frame)
+        self.run_in_thread(self._capture_frame) 
 
 
     def _capture_frame(self):
         try:
-            self.captured_image = self.image_acquisition_thread.get_output_queue().get(timeout = 2)
-            print("Frame captured")
-            resized_image = self.captured_image.resize((self.width, self.height), Image.LANCZOS)
-            self.image_to_display = ImageTk.PhotoImage(resized_image)
-            self.captured_image_label.configure(image=self.image_to_display)
-            self.captured_image_label.configure(text="")
-            self.captured_image_label.image = self.image_to_display
-            self.edge_detection_point_button.configure(state=NORMAL)
+                self.captured_image = self.active_camera_thread.get_output_queue().get(timeout = 2)
+                print("Frame captured")
+                resized_image = self.captured_image.resize((self.width, self.height), Image.LANCZOS)
+                self.image_to_display = ImageTk.PhotoImage(resized_image)
+                self.captured_image_label.configure(image=self.image_to_display)
+                self.captured_image_label.configure(text="")
+                self.captured_image_label.image = self.image_to_display
+                self.edge_detection_point_button.configure(state=NORMAL)
 
         except queue.Empty:
             print("No frame available to capture")
         except Exception as e:
             print(f"Failed to capture frame: {e}")
 
+    def switch_view(self, view):
+        if view == 'TO_WIDE':
+            self.active_camera_thread = self.widefield_camera_thread
+            self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
+            self.switch_view_button.configure(text="Go To Small View")
+            self.switch_view_button.configure(command= lambda: self.switch_view('TO_SMALL'))
+            self.live_frame.configure(text="Wide FOV")
+        elif view == 'TO_SMALL':
+            self.active_camera_thread = self.smallfield_camera_thread
+            self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
+            self.switch_view_button.configure(text="Go To Wide View")
+            self.switch_view_button.configure(command= lambda: self.switch_view('TO_WIDE'))
+            self.live_frame.configure(text="Small FOV")
+
+
     def on_closing(self):
         print("Stopping image acquisition thread...")
-        self.image_acquisition_thread.stop()
-        self.image_acquisition_thread.join()
-        self.camera.dispose()
+        self.widefield_camera_thread.stop()
+        self.smallfield_camera_thread.stop()
+        self.widefield_camera_thread.join()
+        self.smallfield_camera_thread.join()
+        self.widefield_camera.dispose()
+        self.smallfield_camera.dispose()
+
         self.sdk.dispose()
         self.master.destroy()
 
