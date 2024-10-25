@@ -23,12 +23,13 @@ from thorlabs_tsi_sdk.tl_mono_to_color_processor import MonoToColorProcessorSDK
 
 
 class LiveViewCanvas(tk.Canvas):
-    def __init__(self, parent, image_queue, width, height):
+    def __init__(self, parent, image_queue, width, height, flip=False):
         self.image_queue = image_queue
         self._image_width = width
         self._image_height = height
         self._image = None
         self.tk_image = None
+        self.flip = flip
         tk.Canvas.__init__(self, parent, width=width, height=height)
         self.grid(row=0, column=0, sticky='nsew')
         self._get_image()
@@ -42,6 +43,9 @@ class LiveViewCanvas(tk.Canvas):
     def _get_image(self):
         try:
             self._image = self.image_queue.get_nowait()
+            # the image is mirrored, so we flip it
+            if self.flip:
+                self._image = self._image.transpose(Image.FLIP_LEFT_RIGHT)
             self._resize()
         except queue.Empty:
             pass
@@ -79,10 +83,10 @@ class ImageAcquisitionThread(threading.Thread):
                 if frame is not None:
                     pil_image = self._get_image(frame)
                     # # draw middle dashlines on the pil_image and put it in the queue
-                    # draw = ImageDraw.Draw(pil_image)
-                    # draw.line((0, pil_image.height/2, pil_image.width, pil_image.height/2), fill='black', width=5)
-                    # draw.line((pil_image.width/2, 0, pil_image.width/2, pil_image.height), fill='black', width=5)
-                    # del draw
+                    draw = ImageDraw.Draw(pil_image)
+                    draw.line((0, pil_image.height/2, pil_image.width, pil_image.height/2), fill='black', width=5)
+                    draw.line((pil_image.width/2, 0, pil_image.width/2, pil_image.height), fill='black', width=5)
+                    del draw
                     self._image_queue.put(pil_image)
 
             except queue.Full:
@@ -141,7 +145,7 @@ class LiveViewModule(tk.Frame):
         self.live_frame = ttk.Labelframe(self, text="Wide FOV", width=self.width, padding=5)
         self.live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
 
-        self.camera_widget = LiveViewCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height)
+        self.camera_widget = LiveViewCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height, flip=False)
         self.camera_widget.grid(row=0, column=0, columnspan=2, sticky='nsew')
         self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.switch_view('TO_SMALL'), style='info')
         self.switch_view_button.grid(row=1, column=0, columnspan=1, sticky='nsew', pady=5, padx=5)
@@ -319,12 +323,14 @@ class LiveViewModule(tk.Frame):
         if view == 'TO_WIDE':
             self.active_camera_thread = self.widefield_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
+            self.camera_widget.flip = False
             self.switch_view_button.configure(text="Go To Small View")
             self.switch_view_button.configure(command= lambda: self.switch_view('TO_SMALL'))
             self.live_frame.configure(text="Wide FOV")
         elif view == 'TO_SMALL':
             self.active_camera_thread = self.smallfield_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
+            self.camera_widget.flip = True
             self.switch_view_button.configure(text="Go To Wide View")
             self.switch_view_button.configure(command= lambda: self.switch_view('TO_WIDE'))
             self.live_frame.configure(text="Small FOV")
