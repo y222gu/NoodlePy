@@ -16,23 +16,32 @@ class AcquisitionGUI(ttk.Frame):
 
     def create_widgets(self):
 
-        stage_control_frame = StageControlModule(self)
-        stage_control_frame.grid(row=0, column=0, rowspan=3, sticky="nsew")
+        first_column = ttk.Frame(self)
+        first_column.grid(row=0, column=0, sticky="nsew")
 
-        middle_frame = ttk.Frame(self)
-        middle_frame.grid(row=0, column=1, rowspan=3, sticky="nsew")
+        middle_column = ttk.Frame(self)
+        middle_column.grid(row=0, column=1, rowspan=3, sticky="nsew")
         
-        autofocus_frame = AutoFocusModule(middle_frame)
-        autofocus_frame.grid(row=0, column=0, sticky="nsew")
+        last_column = ttk.Frame(self)
+        last_column.grid(row=0, column=2, sticky="nsew")
 
-        live_spectrum_frame = Wasatchmodule(middle_frame)
-        live_spectrum_frame.grid(row=1, column=0, sticky="nsew")
+        live_view_frame = LiveViewModule(first_column)
+        live_view_frame.grid(row=0, column=0, rowspan=2, sticky="nsew")
 
-        acquisition_protocol_frame = ProtocolModule(middle_frame)
-        acquisition_protocol_frame.grid(row=2, column=0, sticky="nsew")
+        stage_control_frame = StageControlModule(middle_column)
+        stage_control_frame.grid(row=0, column=0, rowspan=3, sticky="nsew")
+        live_view_frame.register('switch_view', stage_control_frame, stage_control_frame.stage_handle_switch_view)
 
-        live_view_frame = LiveViewModule(self)
-        live_view_frame.grid(row=0, column=2, rowspan=2, sticky="nsew")
+        live_spectrum_frame = Wasatchmodule(last_column)
+        live_spectrum_frame.grid(row=0, column=0, sticky="nsew")
+
+        autofocus_frame = AutoFocusModule(last_column)
+        autofocus_frame.grid(row=1, column=0, sticky="nsew")
+
+        # acquisition_protocol_frame = ProtocolModule(last_column)
+        # acquisition_protocol_frame.grid(row=1, column=0, sticky="nsew")
+
+
 
 if __name__ == '__main__':
     root = ttk.Window()

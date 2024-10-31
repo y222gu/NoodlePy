@@ -11,12 +11,13 @@ import numpy as np
 from threading import Thread, Lock
 import tkinter.messagebox as messagebox
 from ctypes import CDLL, c_uint, c_double # for the MCL stage control
-
-class StageControlModule(ttk.Frame):
+from noodlepy.gui.publisher_subscriber import Subscriber
+class StageControlModule(ttk.Frame, Subscriber):
     def __init__(self, parent):
         super().__init__(parent)
+        Subscriber.__init__(self)
+        # self.name = 'StageControlModule'
 
-        
         self.initialize_MCL_nanopositioner()
 
         self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png")).resize((20, 20))
@@ -170,31 +171,6 @@ class StageControlModule(ttk.Frame):
         ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("DOWN LARGE"), bootstyle="dark").grid(row=7, column=10, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_right_low, command=lambda: self.move_absolute()).grid(row=4, column=11, columnspan=2)
 
-        sample_spot_register_frame = ttk.Labelframe(main_frame, text="Sample Grid", padding=5)
-        sample_spot_register_frame.grid(row=2, column=0, columnspan=6, sticky="nsew", padx=5, pady=5)
-        self.x_interval_label = ttk.Label(sample_spot_register_frame, text="X interval:")
-        self.x_interval_label.grid(row=0, column=0, padx=5, pady=5)
-
-        self.y_interval_label = ttk.Label(sample_spot_register_frame, text="Y interval:")
-        self.y_interval_label.grid(row=1, column=0, padx=5, pady=5)
-        self.x_number_label = ttk.Label(sample_spot_register_frame, text="# in X:")
-        self.x_number_label.grid(row=0, column=2, padx=5, pady=5)
-        self.y_number_label = ttk.Label(sample_spot_register_frame, text="# in Y:")
-        self.y_number_label.grid(row=1, column=2, padx=5, pady=5)
-        self.x_interval_entry = ttk.Entry(sample_spot_register_frame, width=5)
-        self.x_interval_entry.grid(row=0, column=1, padx=5, pady=5)
-        self.x_interval_entry.insert(0, "4.5")
-        self.y_interval_entry = ttk.Entry(sample_spot_register_frame, width=5)
-        self.y_interval_entry.grid(row=1, column=1, padx=5, pady=5)
-        self.y_interval_entry.insert(0, "4.5")
-        self.x_number_entry = ttk.Entry(sample_spot_register_frame, width=5)
-        self.x_number_entry.grid(row=0, column=3, padx=5, pady=5)
-        self.x_number_entry.insert(0, "5")
-        self.y_number_entry = ttk.Entry(sample_spot_register_frame, width=5)
-        self.y_number_entry.grid(row=1, column=3, padx=5, pady=5)
-        self.y_number_entry.insert(0, "5")
-        self.test_sample_spot_button = ttk.Button(sample_spot_register_frame, text="Test Sample Grid", command=self.test_sample_grid, bootstyle="info", state=DISABLED)
-        self.test_sample_spot_button.grid(row=0, column=4, rowspan=2, sticky='nsew', padx=5, pady=5)
 
     def initialize_MCL_nanopositioner(self):
         
@@ -417,54 +393,10 @@ class StageControlModule(ttk.Frame):
         elif option == "ALL":
             self.ser.write(str.encode("G28 X Y Z\r\n"))
             self.ser.write(str.encode("G90\r\n"))
-            self.ser.write(str.encode("G0 X0 Y0 Z0 F3000\r\n"))
             self.get_current_position('XYZ')
         else:
             print("Invalid option")
             return
-        
-    def test_sample_grid(self):
-        self.run_in_thread(self._test_sample_grid)
-
-    def _test_sample_grid(self):
-
-        if not self.x_interval_entry.get() or not self.y_interval_entry.get() or not self.x_number_entry.get() or not self.y_number_entry.get():
-            print("Please enter all the parameters")
-            return
-        
-        x_interval = self.x_interval_entry.get()
-        y_interval = self.y_interval_entry.get()
-        x_number = self.x_number_entry.get()
-        y_number = self.y_number_entry.get()
-
-        if self.position_first_smaple is None:
-            print("Please register the first sample first")
-            return
-
-        if x_interval and y_interval and x_number and y_number:
-            first_x = float(self.position_first_smaple[0])
-            first_y = float(self.position_first_smaple[1])
-            first_z = float(self.position_first_smaple[2])
-
-            x = np.linspace(first_x, first_x + float(x_interval) * (int(x_number) - 1), int(x_number))
-            y = np.linspace(first_y - float(y_interval) * (int(y_number) - 1), first_y, int(y_number))
-            xx, yy = np.meshgrid(x, y)
-            # make y descending order
-            yy = np.flip(yy, axis=0)
-            xx = xx.flatten(order='F')
-            yy = yy.flatten(order='F')
-            # make 
-            zz = np.ones(xx.size) * first_z
-
-            print(f"A grid containing {xx.size} points will be tested")
-        else:
-            print("Please enter all the parameters")
-        for i in range(xx.size):
-            self.go_to_xyz(x=xx[i], y=yy[i], z=zz[i])
-            print(f"Moving to {xx[i]}, {yy[i]}, {zz[i]}")
-            time.sleep(1)
-        print("Test completed")
-
 
     def go_to_xyz(self, x=None, y=None, z=None):
         self.ser.write(str.encode("G90\r\n"))
@@ -606,6 +538,20 @@ class StageControlModule(ttk.Frame):
 
     def update_label(self, value):
         self.slider_value.set(f"{float(value):.2f} mm/s")
+
+    def stage_handle_switch_view(self, view):
+        if view == "TO_SMALL":
+            # send g code to move the stage to the right
+            print("Switching to small view")
+            self.go_by_xyz(x=-65.1, y=-5.94)
+
+        elif view == "TO_WIDE":
+            # send g code to move the stage to the left
+            print("Switching to wide view")
+            self.go_by_xyz(x=65.1, y=5.94)
+        
+        else:
+            print("Error Happened", view)
 
 if __name__ == '__main__':
     root = ttk.Window()

@@ -9,6 +9,8 @@ import numpy as np
 from noodlepy.gui.edgedetector import EdgeDetector
 import os
 from threading import Thread
+from noodlepy.gui.publisher_subscriber import Publisher
+import time
 
 try:
     from noodlepy.utils.windows_setup import configure_path
@@ -109,48 +111,74 @@ class ImageAcquisitionThread(threading.Thread):
         while not self._stop_event.is_set():
             try:
                 frame = self._camera.get_pending_frame_or_null()
+                # if frame is None:
+                #     continue
+
                 if frame is not None:
                     pil_image = self._get_image(frame)
-                    self._image_queue.put(pil_image)
+                    self._image_queue.put(pil_image, block=False)
 
             except queue.Full:
                 pass
             except Exception as error:
                 print(f"Encountered error: {error}, image acquisition will stop.")
                 break
-        
+
         print("Image acquisition has stopped")
 
-class CameraController:
-    """Manages camera initialization and acquisition threading."""
+class CameraManger():
     def __init__(self):
-        # finding all available cameras
-        self._sdk = TLCameraSDK()
-        self._camera_list = self._sdk.discover_available_cameras()
-        self._camera_id = None
-        self._camera = None
-        self._camera_id = camera_id
-        self._sdk = TLCameraSDK()
-        self._camera = self._sdk.open_camera(camera_id)
-        self._camera_thread = ImageAcquisitionThread(self._camera)
-        self._camera_thread.start()
+        self.sdk = TLCameraSDK()
+        self.camera_serial_number_list = self.sdk.discover_available_cameras()
+        self.cameras = {}
+        self.image_acquisition_threads = {}
+        self.image_queues = {}
+        self.active_camera_serial = None
+        self.active_image_thread = None
 
-    def get_image_queue(self):
-        return self._camera_thread.get_output_queue()
+    def open_camera(self, serial_number):
+        camera = self.sdk.open_camera(serial_number)
+        camera.frames_per_trigger_zero_for_unlimited = 0
+        camera.arm(2)
+        camera.issue_software_trigger()
+        self.cameras[serial_number] = camera
+        return camera
+    
+    def start_image_acquisition_thread(self, serial_number):
+        camera = self.cameras[serial_number]
+        image_acquisition_thread = ImageAcquisitionThread(camera)
+        image_acquisition_thread.start()
+        self.image_acquisition_threads[serial_number] = image_acquisition_thread
+        self.image_queues[serial_number] = image_acquisition_thread.get_output_queue()
 
-    def stop_acquisition(self):
-        self._camera_thread.stop()
-        self._camera_thread.join()
-        self._camera.dispose()
-        self._sdk.dispose()
+    def stop_image_acquisition_thread(self, serial_number):
+        image_acquisition_thread = self.image_acquisition_threads[serial_number]
+        image_acquisition_thread.stop()
+        image_acquisition_thread.join()
 
-    def __del__(self):
-        self.stop_acquisition()
+    def switch_camera(self, serial_number):
+        if self.active_camera_serial:
+            self.stop_image_acquisition_thread(self.active_camera_serial)
+        self.active_camera_serial = serial_number
+        self.active_image_thread = self.image_acquisition_threads[serial_number]
 
+    def get_active_image_queue(self):
+        return self.image_queues[self.active_camera_serial]
+    
+    def dispose(self):
+        for serial_number in self.cameras:
+            camera = self.cameras[serial_number]
+            camera.dispose()
+        self.sdk.dispose()
 
-class LiveViewModule(tk.Frame):
+    def get_camera_list(self):
+        return self.camera_serial_number_list
+
+class LiveViewModule(Publisher, tk.Frame):
     def __init__(self, parent, width=288, height=216):
-        super().__init__(parent)
+        ttk.Frame.__init__(self, parent)  # Initialize ttk.Frame and Publisher
+        Publisher.__init__(self, ['switch_view'])
+        
         self.width = width
         self.height = height
         self.camera_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","camera_icon.png"))
@@ -185,14 +213,13 @@ class LiveViewModule(tk.Frame):
         self.active_camera_thread = self.widefield_camera_thread
         self.create_widgets()
 
-
     def create_widgets(self):
         self.live_frame = ttk.Labelframe(self, text="Wide FOV", width=self.width, padding=5)
         self.live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
 
         self.camera_widget = LiveCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height, refresh_rate=10, flip=False)
         self.camera_widget.grid(row=0, column=0, columnspan=2, sticky='nsew')
-        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.switch_view('TO_SMALL'), style='info')
+        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.handle_switch_view('TO_SMALL'), style='info')
         self.switch_view_button.grid(row=1, column=0, columnspan=1, sticky='nsew', pady=5, padx=5)
         capture_button = ttk.Button(self.live_frame, image=self.camera_icon, command= self.capture_frame, style='info')
         capture_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
@@ -369,21 +396,24 @@ class LiveViewModule(tk.Frame):
         except Exception as e:
             print(f"Failed to capture frame: {e}")
 
-    def switch_view(self, view):
+    def handle_switch_view(self, view):
         if view == 'TO_WIDE':
             self.active_camera_thread = self.widefield_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
             self.camera_widget.flip = False
-            self.switch_view_button.configure(text="Go To Small View")
-            self.switch_view_button.configure(command= lambda: self.switch_view('TO_SMALL'))
+            self.dispatch('switch_view', 'TO_WIDE')
             self.live_frame.configure(text="Wide FOV")
+            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_SMALL'))
+
         elif view == 'TO_SMALL':
             self.active_camera_thread = self.smallfield_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
             self.camera_widget.flip = True
-            self.switch_view_button.configure(text="Go To Wide View")
-            self.switch_view_button.configure(command= lambda: self.switch_view('TO_WIDE'))
+            self.dispatch('switch_view', 'TO_SMALL')
             self.live_frame.configure(text="Small FOV")
+            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_WIDE'))
+
+            
 
 
     def on_closing(self):
