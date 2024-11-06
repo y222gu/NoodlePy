@@ -3,7 +3,7 @@ from ttkbootstrap.constants import *
 from tkinter import StringVar
 import tkinter as tk
 from noodlepy.gui.liveviewmodule import LiveViewModule
-from noodlepy.gui.wasatchmodule import Wasatchmodule
+from noodlepy.gui.wasatchmodule import WasatchModule
 from noodlepy.gui.stagecontrolmodule import StageControlModule
 from noodlepy.gui.autofocusmodule import AutoFocusModule
 from noodlepy.gui.protocolmodule import ProtocolModule
@@ -32,15 +32,15 @@ class AcquisitionGUI(ttk.Frame):
         stage_control_frame.grid(row=0, column=0, rowspan=3, sticky="nsew")
         live_view_frame.register('switch_view', stage_control_frame, stage_control_frame.stage_handle_switch_view)
 
-        live_spectrum_frame = Wasatchmodule(last_column)
+        live_spectrum_frame = WasatchModule(last_column)
         live_spectrum_frame.grid(row=0, column=0, sticky="nsew")
+        wasatch_manager = live_spectrum_frame.get_wasatch_handle()
 
-        autofocus_frame = AutoFocusModule(last_column)
+        autofocus_frame = AutoFocusModule(last_column, wasatch_manager)
         autofocus_frame.grid(row=1, column=0, sticky="nsew")
 
         # acquisition_protocol_frame = ProtocolModule(last_column)
         # acquisition_protocol_frame.grid(row=1, column=0, sticky="nsew")
-
 
 
 if __name__ == '__main__':
