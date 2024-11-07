@@ -3,17 +3,24 @@ import torch
 from torch import nn
 from noodlepy.utils.positionaldataset import PositionalDataset
 from noodlepy.ml.positionalcnn import PositionalCNN
+from noodlepy.utils.spectrumpreprocessor import SpectrumPreprocessor
+import os
+
 
 # Assuming you have a model, loss function, and optimizer defined
-model = PositionalCNN(layer_channel_sizes=[1, 8, 16, 32, 64], num_classes=5)
+model = PositionalCNN(layer_channel_sizes=[1, 8, 32, 64], num_classes=5)
 criterion = nn.CrossEntropyLoss()
 optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
 num_epochs = 10
 
-# Instantiate the dataset
-dataset = PositionalDataset(spectra, positions, labels)
-
-# Create a DataLoader
+data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc", "test")
+annotation_file_path =  os.path.join(os.getcwd(), "noodlepy", "data", "python_test_patient_staging.xlsx")
+preprocessor = SpectrumPreprocessor(cropping=True,
+                                    baseline_correction=True,
+                                    remove_cosmic_rays= True,
+                                    normalization=True,
+                                    smoothing=True)
+dataset = PositionalDataset(data_folder, annotation_file_path, preprocessor)
 dataloader = DataLoader(dataset, batch_size=8, shuffle=True)
 
 # Training loop
