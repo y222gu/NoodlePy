@@ -1,21 +1,18 @@
 import numpy as np
-import scipy.signal
 import matplotlib.pyplot as plt
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
-from PIL import Image, ImageTk
 from tkinter import StringVar
-import io
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from threading import Thread
 import queue
-import time
 from wasatch.WasatchBus import WasatchBus
 from wasatch.WasatchDevice import WasatchDevice
 from wasatch.RealUSBDevice import RealUSBDevice
 import logging
 import threading
 import os
+from noodlepy.gui.publisher_subscriber import Publisher
 
 class WasatchManager():
     def __init__(self, integ_time_ms, laser_power_mW):
@@ -81,9 +78,11 @@ class WasatchManager():
             spectrum = response.data.spectrum
             return np.asarray(spectrum)
 
-class WasatchModule(ttk.Frame):
+class WasatchModule(Publisher, ttk.Frame):
     def __init__(self, parent):
-        super().__init__(parent)
+        ttk.Frame.__init__(self, parent)
+        Publisher.__init__(self, ['update_spectrum'])
+
         self.initial_integ_time_ms = 100
         self.initial_laser_power_mW = 450
         self.units = "wavelength"
@@ -128,11 +127,11 @@ class WasatchModule(ttk.Frame):
         self.ref_button = ttk.Button(self.spectrum_frame, text="Ref. Polystyrene", command=self.debug_with_polystyrene, bootstyle ='info-outline')
         self.ref_button.grid(row=1, column=3, sticky='ew', pady=5, padx=5)
 
-        self.start_button = ttk.Button(self.spectrum_frame, text="Start", command=self.start_spectrum_thread, bootstyle ='info-outline')
-        self.start_button.grid(row=2, column=3, sticky='ew', pady=5, padx=5)
+        self.start_button = ttk.Button(self.spectrum_frame, text="Play", command=self.start_spectrum_thread, bootstyle ='info-outline')
+        self.start_button.grid(row=2, column=3, columnspan =2, sticky='ew', pady=5, padx=5)
 
         self.spectrum_canvas = ttk.Canvas(self.spectrum_frame)
-        self.spectrum_canvas.grid(row=0, column=0, columnspan=4, sticky='nsew', pady=5, padx=5)
+        self.spectrum_canvas.grid(row=0, column=0, columnspan=5, sticky='nsew', pady=5, padx=5)
 
         self.unit_toggle_var = ttk.BooleanVar(value=False)
         self.unit_toggle_btn = ttk.Checkbutton(self.spectrum_frame, variable=self.unit_toggle_var, text="To cm⁻¹", bootstyle="info-round-toggle", command=self.update_units)
@@ -187,15 +186,24 @@ class WasatchModule(ttk.Frame):
 
                 # # Assuming self.wasatch_manager.settings.wavelengths contains the x-axis (wavelengths)
                 # self.live_spectrum_ax.plot(self.wasatch_manager.settings.wavelengths, self.spectrum_queue.get())
-                
-                
-                self.live_spectrum_line.set_data(self.wasatch_manager.settings.wavelengths, self.spectrum_queue.get())
+                if self.units == "wavelength":
+                    self.live_spectrum_ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
+                    self.live_spectrum_line.set_data(self.wasatch_manager.settings.wavelengths, self.spectrum_queue.get())
+                elif self.units == "wavenumber":
+                    self.live_spectrum_ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
+                    self.live_spectrum_line.set_data(self.wasatch_manager.settings.wavenumbers, self.spectrum_queue.get())
+                else:
+                    print("Invalid units")
+
                 # Relimit the axis based on new data
                 self.live_spectrum_ax.relim()
                 self.live_spectrum_ax.autoscale_view()
 
                 # Redraw the updated plot
                 self.spectrum_canvas.draw()
+
+                updates_to_send = {"spectrum": self.spectrum_queue.get(), "wavelengths":self.wasatch_manager.settings.wavelengths}
+                self.dispatch('update_spectrum', updates_to_send)
 
             except Exception as e:
                 print(f"Error updating spectrum plot: {e}")
@@ -213,6 +221,7 @@ class WasatchModule(ttk.Frame):
 
     def collect_spectrum(self):
         while True:
+            wavelengths = self.wasatch_manager.settings.wavelengths
             spectrum = self.wasatch_manager.get_spectrum()
             if spectrum is not None:
                 self.latest_spectrum = spectrum

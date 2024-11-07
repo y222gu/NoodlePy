@@ -30,14 +30,14 @@ class AcquisitionGUI(ttk.Frame):
 
         stage_control_frame = StageControlModule(middle_column)
         stage_control_frame.grid(row=0, column=0, rowspan=3, sticky="nsew")
-        live_view_frame.register('switch_view', stage_control_frame, stage_control_frame.stage_handle_switch_view)
+        live_view_frame.register('switch_view', stage_control_frame, stage_control_frame.handle_switch_view)
 
         live_spectrum_frame = WasatchModule(last_column)
         live_spectrum_frame.grid(row=0, column=0, sticky="nsew")
-        wasatch_manager = live_spectrum_frame.get_wasatch_handle()
 
-        autofocus_frame = AutoFocusModule(last_column, wasatch_manager)
+        autofocus_frame = AutoFocusModule(last_column)
         autofocus_frame.grid(row=1, column=0, sticky="nsew")
+        live_spectrum_frame.register('update_spectrum', autofocus_frame, autofocus_frame.handle_update_spectrum)
 
         # acquisition_protocol_frame = ProtocolModule(last_column)
         # acquisition_protocol_frame.grid(row=1, column=0, sticky="nsew")

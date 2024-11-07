@@ -9,16 +9,12 @@ from tkinter import StringVar
 import tkinter as tk
 import numpy as np
 from threading import Thread, Lock
-import tkinter.messagebox as messagebox
-from ctypes import CDLL, c_uint, c_double # for the MCL stage control
 from noodlepy.gui.publisher_subscriber import Subscriber
 class StageControlModule(ttk.Frame, Subscriber):
     def __init__(self, parent):
         super().__init__(parent)
         Subscriber.__init__(self)
         # self.name = 'StageControlModule'
-
-        self.initialize_MCL_nanopositioner()
 
         self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png")).resize((20, 20))
         self.img_medium_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","medium_step.png")).resize((20, 20))
@@ -127,8 +123,6 @@ class StageControlModule(ttk.Frame, Subscriber):
         ttk.Label(direction_frame, text="Z (down)").grid(row=8, column=10, pady=3)
         ttk.Label(direction_frame, text="NP Z (up)").grid(row=0, column=11, pady=3)
         ttk.Label(direction_frame, text="NP Z (down)").grid(row=8, column=11, pady=3)
-        self.positionLabel = ttk.Label(direction_frame, text=f"Pos: F{self.position} um")
-        self.positionLabel.grid(row=9, column=11, pady=3)
         ttk.Label(direction_frame, text="").grid(row=2, column=9,columnspan=2, padx=50)
         ttk.Label(direction_frame, text="5").grid(row=3, column=1, pady=3)
         ttk.Label(direction_frame, text="0.5").grid(row=3, column=2, pady=3)
@@ -160,93 +154,15 @@ class StageControlModule(ttk.Frame, Subscriber):
         ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("FRONT MEDIUM"), bootstyle="secondary").grid(row=6, column=4, pady=3)
         ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("FRONT LARGE"), bootstyle="dark").grid(row=7, column=4, pady=3)
         ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.send_gcode("UP SMALL"), bootstyle="light").grid(row=3, column=10, columnspan=2)
-        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.move_relative(-1), bootstyle="light").grid(row=3, column=11, columnspan=2)
-        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.move_relative(-5), bootstyle="secondary").grid(row=2, column=11, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.send_gcode("UP MEDIUM"), bootstyle="secondary").grid(row=2, column=10, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.send_gcode("UP LARGE"), bootstyle="dark").grid(row=1, column=10, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.send_gcode("DOWN SMALL"), bootstyle="light").grid(row=5, column=10, columnspan=2)
-        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.move_relative(1), bootstyle="light").grid(row=5, column=11, columnspan=2)
         ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.send_gcode("DOWN MEDIUM"), bootstyle="secondary").grid(row=6, column=10, columnspan=2, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.move_relative(5), bootstyle="secondary").grid(row=6, column=11, columnspan=2, pady=3)
         ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.send_gcode("DOWN LARGE"), bootstyle="dark").grid(row=7, column=10, columnspan=2, pady=3)
-        ttk.Button(direction_frame, image=self.img_right_low, command=lambda: self.move_absolute()).grid(row=4, column=11, columnspan=2)
-
-
-    def initialize_MCL_nanopositioner(self):
-        
-        # Load the DLL for the MCL stage control
-        self.mcldll = CDLL("C:/Users/yifei/Documents/NoodlePy/noodlepy/dlls/Madlib.dll")
-        self.mcldll.MCL_ReleaseHandle.restype = None
-        self.mcldll.MCL_SingleReadN.restype = c_double
-        
-        # Initialize variables
-        self.handle = self.mcldll.MCL_InitHandle()
-        if self.handle == 0:
-            raise RuntimeError("Failed to initialize MCL handle  (is it plugged in?)")
-        print("MCL Handle = ", self.handle)
-
-        self.axis = c_uint(3)
-        self.position = c_double(0)
-          
-        # Move to a new position
-        error = self.mcldll.MCL_SingleWriteN(self.position, self.axis, self.handle)
-        print("Error = ", error)
-        
-        # Wait for nanopositioner to settle
-        time.sleep(0.025)
-        
-        # Read the new position
-        self.position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-        print("Position = ", self.position)
-
-    def move_relative(self, delta_z: float):
-        # Get the current position
-        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-     
-        # Calculate the new position
-        new_position = current_position + delta_z
-        new_position = max(0, min(new_position, 100)) # Ensure new_position stays within bounds [0, 100]
-        new_position_c_double = c_double(new_position)
-        
-        # Move to the new position
-        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
-        if error != 0:
-            raise RuntimeError(f"MCL Error: {error}")
-               
-        time.sleep(0.025) # Wait for nanopositioner to settle
-        
-        # Read the new position
-        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
-        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
-
-    def move_absolute(self, abs_z: float = 50):
-        # Get the current position
-        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-     
-        new_position = max(0, min(abs_z, 100)) # Ensure new_position stays within bounds [0, 100]
-        new_position_c_double = c_double(new_position)
-        
-        # Move to the new position
-        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
-        if error != 0:
-            raise RuntimeError(f"MCL Error: {error}")
-       
-        time.sleep(0.025) # Wait for nanopositioner to settle
-        
-        # Read the new position
-        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-
-        # Return the final position as a string
-        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
-        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
 
     def run_in_thread(self, func, *args):
         thread = Thread(target=func, args=args, daemon=True)
         thread.start()
-
-    # def go_to_first_sample(self):
-    #     self.run_in_thread(self._go_to_first_sample)
 
     def go_to_first_sample(self):
         if self.position_first_smaple:
@@ -257,9 +173,6 @@ class StageControlModule(ttk.Frame, Subscriber):
             self.go_to_xyz(z=float(self.position_first_smaple[2]))
         else:
             print("Please register the first sample first")
-
-    # def go_to_lowest_point(self):
-    #     self.run_in_thread(self._go_to_lowest_point)
 
     def go_to_lowest_point(self):
         if self.lowest_point:
@@ -539,7 +452,7 @@ class StageControlModule(ttk.Frame, Subscriber):
     def update_label(self, value):
         self.slider_value.set(f"{float(value):.2f} mm/s")
 
-    def stage_handle_switch_view(self, view):
+    def handle_switch_view(self, view):
         if view == "TO_SMALL":
             # send g code to move the stage to the right
             print("Switching to small view")

@@ -22,6 +22,7 @@ class Publisher:
         del self.get_subscribers(event)[who]
     def dispatch(self, event, message):
         for subscriber, callback in self.get_subscribers(event).items():
+            # print('Distpatching event "{}" to {}'.format(event, subscriber))
             callback(message)
 
 

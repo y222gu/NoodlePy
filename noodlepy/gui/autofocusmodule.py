@@ -1,4 +1,3 @@
-import tkinter as tk
 from tkinter import ttk
 import ttkbootstrap as ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -7,8 +6,10 @@ import os
 import numpy as np
 from ctypes import *
 import time
-from noodlepy.gui.wasatchmodule import WasatchManager
 from tkinter import StringVar
+from noodlepy.gui.publisher_subscriber import Subscriber
+from noodlepy.gui.wasatchmodule import WasatchModule
+from noodlepy.gui.stagecontrolmodule import StageControlModule
 
 class NanoDrive:
     def __init__(self):
@@ -16,10 +17,14 @@ class NanoDrive:
         self.dll_path = os.path.join(os.getcwd(),"noodlepy",'dlls','Madlib.dll')
         self.axis = c_uint(3) # Move along Z-axis
         self.mcldll = CDLL(self.dll_path)
+        print(self.mcldll) 
         self.mcldll.MCL_ReleaseHandle.restype = None
         self.mcldll.MCL_SingleReadN.restype = c_double
         self.handle = self.mcldll.MCL_InitHandle()
+        if self.handle == 0:
+            raise RuntimeError("Failed to initialize MCL handle. Error code: 8")
         print("MCL Handle = ", self.handle)
+        self.initialize_position()
 
     def initialize_position(self):
         pos = c_double(0)
@@ -38,20 +43,66 @@ class NanoDrive:
         pos = c_double(z_pos)
         error = self.mcldll.MCL_SingleWriteN(pos, self.axis, self.handle)
         if error != 0:
-            print("Error =", error)
-        time.sleep(0.025)  # Wait for nanopositioner to settle
+            print("Move_to_position Error =", error)
+            print(f"Attempting to move to position: {z_pos} on axis: {self.axis.value} with handle: {self.handle}")
+        else:
+            print(f"Moved to position: {z_pos} on axis: {self.axis.value} with handle: {self.handle}")
+        time.sleep(0.1)  # Wait for nanopositioner to settle
+
+    def move_relative(self, delta_z: float):
+        # Get the current position
+        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+     
+        # Calculate the new position
+        new_position = current_position + delta_z
+        new_position = max(0, min(new_position, 100)) # Ensure new_position stays within bounds [0, 100]
+        new_position_c_double = c_double(new_position)
+        
+        # Move to the new position
+        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
+        if error != 0:
+            raise RuntimeError(f"MCL Error: {error}")
+               
+        time.sleep(0.025) # Wait for nanopositioner to settle
+        
+        # Read the new position
+        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
+        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
+
+    def move_absolute(self, abs_z: float = 50):
+        # Get the current position
+        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+     
+        new_position = max(0, min(abs_z, 100)) # Ensure new_position stays within bounds [0, 100]
+        new_position_c_double = c_double(new_position)
+        
+        # Move to the new position
+        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
+        if error != 0:
+            raise RuntimeError(f"MCL Error: {error}")
+       
+        time.sleep(0.025) # Wait for nanopositioner to settle
+        
+        # Read the new position
+        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+
+        # Return the final position as a string
+        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
+        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
 
     def close(self):
         self.mcldll.MCL_ReleaseHandle(self.handle)
-        plt.ioff()
-        plt.show()
         print("NanoDrive shutdown")
 
-class AutoFocusModule(ttk.Frame):
-    def __init__(self, parent, wasatch_manager):
+class AutoFocusModule(ttk.Frame, Subscriber):
+    def __init__(self, parent):
         super().__init__(parent)
+        Subscriber.__init__(self)
         self.nano_drive = NanoDrive()
-        self.wasatch_manager = wasatch_manager
+        self.spectrum = None
+        self.wavelengths = None        
+        # self.wasatch_manager = wasatch_manager
         self.create_widgets()
 
     def create_widgets(self):
@@ -185,9 +236,9 @@ class AutoFocusModule(ttk.Frame):
 
     def measure_spectra(self, num_rep):
         intensities, wavelengths = [], []
-        wavelengths = self.wasatch_manager.settings.wavelengths
+        wavelengths = self.get_wavelengths()
         for _ in range(num_rep):
-            spectrum = self.wasatch_manager.get_spectrum()
+            spectrum = self.get_spectrum()
             intensities.append(spectrum)
 
         lengths = [len(seq) for seq in intensities]
@@ -245,18 +296,33 @@ class AutoFocusModule(ttk.Frame):
         self.intensity_ax.plot(wavelengths, intensities, color='#5bc0de')
         self.intensity_ax.lines[0].set_linewidth(0.5)
 
-
-
         self.autofocus_canvas.draw()
         self.autofocus_canvas.flush_events()  # Process any pending events for real-time updates
         self.update_idletasks()
 
+    def handle_update_spectrum(self, updated_from_wasatch):
+        self.spectrum = updated_from_wasatch["spectrum"]
+        self.wavelengths = updated_from_wasatch["wavelengths"]
+
+    def get_spectrum(self):
+        return self.spectrum
+    
+    def get_wavelengths(self):
+        return self.wavelengths
 
 
 if __name__ == '__main__':
     root = ttk.Window()
     root.style.theme_use('noodlepy')
-    wasatch_manager = WasatchManager(100, 50)
-    app = AutoFocusModule(root, wasatch_manager)
-    app.grid(row=0, column=0, sticky="nsew")
+
+    stage_control_module = StageControlModule(root)
+    stage_control_module.grid(row=0, column=1, sticky="nsew")
+
+    wasatch_module = WasatchModule(root)
+    wasatch_module.grid(row=0, column=0, sticky="nsew")
+
+    autofocus_module = AutoFocusModule(root)
+    autofocus_module.grid(row=1, column=0, sticky="nsew")
+
+    wasatch_module.register('update_spectrum', autofocus_module, autofocus_module.handle_update_spectrum)
     root.mainloop()
