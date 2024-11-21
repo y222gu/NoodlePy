@@ -3,24 +3,29 @@ from tkinter import ttk
 
 class Subscriber:
     def __init__(self):
+        self.name = 'Subscriber'
         print('Subscriber inited')
 
-    def update(self, message):
+    def handle_update_from_publsiher(self, message):
         print('{} got message "{}"'.format(self.name, message))
         
 class Publisher:
     def __init__(self, events):
         # Maps event names to subscribers
         self.events = {event: dict() for event in events}
+        print('Publisher initialized with events:', self.events.keys())
     def get_subscribers(self, event):
         return self.events[event]
-    def register(self, event, who, callback=None):
+    def add_subscriber(self, event, who, callback=None):
         if callback is None:
-            callback = getattr(who, 'update')
+            callback = getattr(who, 'handle_update_from_publsiher')
         self.get_subscribers(event)[who] = callback
-    def unregister(self, event, who):
+        print(f'{who.name} registered for event "{event}"')
+    def remove_subscriber(self, event, who):
         del self.get_subscribers(event)[who]
+        print(f'{who.name} unregistered from event "{event}"')
     def dispatch(self, event, message):
+        # print(f'Dispatching event "{event}" with message: "{message}"')
         for subscriber, callback in self.get_subscribers(event).items():
             # print('Distpatching event "{}" to {}'.format(event, subscriber))
             callback(message)
@@ -80,11 +85,11 @@ if __name__ == '__main__':
 
     a = A() 
     a.pack()
-    app.register('event_1', a, a.handle_event_1)
-    app.register('event_2', a, a.handle_event_2)
+    app.add_subscriber('event_1', a, a.handle_event_1)
+    app.add_subscriber('event_2', a, a.handle_event_2)
 
     b = B()
-    app.register('event_1', b, b.handle_event_1)
-    app.register('event_2', b, b.handle_event_2)
+    app.add_subscriber('event_1', b, b.handle_event_1)
+    app.add_subscriber('event_2', b, b.handle_event_2)
     
     root.mainloop()
