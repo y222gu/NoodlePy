@@ -36,7 +36,8 @@ class HNC_Dataset(Dataset):
         for filename in list_of_file_names:
             patient_annotations = HNC_Dataset._extract_patient_labels(filename, annotation_all)
             spectrum_objects = HNC_Dataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
-            list_of_spectrum_objects+=spectrum_objects
+            if spectrum_objects != []:
+                list_of_spectrum_objects+=spectrum_objects
 
         self.db = list_of_spectrum_objects
         print(f"Loaded {len(self.db)} spectra")
@@ -139,34 +140,43 @@ class HNC_Dataset(Dataset):
         f_split = spectrum_file_name.split('_')
         patient_id = int(f_split[0])
         sample_type = f_split[1]
-        patient_labels['patient_id'] = patient_id
-        patient_labels['sample_type'] = sample_type
+
         # Extract the metadata for the given patient_id
         if patient_id in all_patient_labels['OD Number'].values:
+            patient_labels['patient_id'] = patient_id
+            patient_labels['sample_type'] = sample_type
+
             patient_metadata_row = all_patient_labels[all_patient_labels['OD Number'] == patient_id]
 
             if len(patient_metadata_row) > 1:
                 patient_metadata_row = patient_metadata_row.iloc[[0]]
                 print(f"Patient ID {patient_id} has multiple entries in the metadata file")
                 print("Only the first entry will be used")
-                
-            patient_labels['staging'] = patient_metadata_row['Staging'].values[0]
+            
+            # map the staging to a number 0, 1, 2 (healthy, early stage, late stage)
+            if patient_metadata_row['Staging'].values[0] == 0:
+                patient_labels['staging'] = int(0)
+            elif patient_metadata_row['Staging'].values[0] == 1 or patient_metadata_row['Staging'].values[0] == 2:
+                patient_labels['staging'] = int(1)
+            elif patient_metadata_row['Staging'].values[0] == 3 or patient_metadata_row['Staging'].values[0] == 4:
+                patient_labels['staging'] = int(2)
+
+            # patient_labels['staging'] = patient_metadata_row['Staging'].values[0]
             patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
             patient_labels['race'] = patient_metadata_row['Race'].values[0]
-
+            return patient_labels
         else:
-            # If the patient_id is not found in the metadata file, set the every metadata to empty string and number
-            patient_labels['staging'] = np.nan
-            patient_labels['gender'] = ''
-            patient_labels['race'] = ''
-        
+            # skip the spectrum if the patient_id is not found in the metadata file
             print(f"Patient ID {patient_id} not found in the metadata file")
             print("Metadata set to empty strings and numbers")
-        return patient_labels
+        return {}
     
     def _load_files_to_spectrum_objects(data_folder:str,
                                filename:str, 
                                patient_annotations:dict):
+        if patient_annotations == {}: # skip the spectrum if the patient_id is not found in the metadata file
+            return []
+        
         with open(os.path.join(data_folder, filename)) as f:
             data = pd.read_csv(f, sep=",", header=None)
 
@@ -266,6 +276,7 @@ if __name__ == "__main__":
         ## get a random spectrum
         #idx = random.randint(0, dataset.__len__() - 1)
         example_spectrum = dataset.__getitem__(i)
+
 
     # dataset.get_peak_distribution()
     # dataset.get_cosmic_ray_counts_distribution()

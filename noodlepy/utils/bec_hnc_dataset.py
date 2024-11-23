@@ -10,9 +10,10 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import random
-class HNC_Dataset(Dataset):
+class Bec_HNC_Dataset(Dataset):
     def __init__(self, data_folder = None,
                  annotation_file_path = None,
+                 r_filter = None,
                  preprocessor = None,
                  augmentor = None):
         """
@@ -25,6 +26,7 @@ class HNC_Dataset(Dataset):
         list[Spectrum]: A list of Spectrum objects
         """
         print("Loading the Raman dataset")
+        self.r_filter = r_filter
         self.preprocessor = preprocessor
         self.augmentor = augmentor
 
@@ -34,8 +36,8 @@ class HNC_Dataset(Dataset):
         annotation_all = pd.read_excel(annotation_file_path)
 
         for filename in list_of_file_names:
-            patient_annotations = HNC_Dataset._extract_patient_labels(filename, annotation_all)
-            spectrum_objects = HNC_Dataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
+            patient_annotations = Bec_HNC_Dataset._extract_patient_labels(filename, self.r_filter, annotation_all)
+            spectrum_objects = Bec_HNC_Dataset._load_files_to_spectrum_objects(data_folder, filename, patient_annotations)
             list_of_spectrum_objects+=spectrum_objects
 
         self.db = list_of_spectrum_objects
@@ -132,6 +134,7 @@ class HNC_Dataset(Dataset):
         return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata
     
     def _extract_patient_labels(spectrum_file_name:str, 
+                                r_filter: np.array,
                           all_patient_labels:pd.DataFrame):
 
         # Patient metatdata extraction
@@ -139,36 +142,45 @@ class HNC_Dataset(Dataset):
         f_split = spectrum_file_name.split('_')
         patient_id = int(f_split[0])
         sample_type = f_split[1]
-        location_label = f_split[8]
-        patient_labels['patient_id'] = patient_id
-        patient_labels['sample_type'] = sample_type
-        patient_labels['location'] = location_label
-        # Extract the metadata for the given patient_id
+        theta = int(f_split[8])
+        r = int(f_split[9].split('.')[0])
+
         if patient_id in all_patient_labels['OD Number'].values:
-            patient_metadata_row = all_patient_labels[all_patient_labels['OD Number'] == patient_id]
+            if r in r_filter:
+                patient_labels['patient_id'] = patient_id
+                patient_labels['sample_type'] = sample_type
+                patient_labels['r'] = r
+                patient_labels['theta'] = theta
+                patient_metadata_row = all_patient_labels[all_patient_labels['OD Number'] == patient_id]
 
-            if len(patient_metadata_row) > 1:
-                patient_metadata_row = patient_metadata_row.iloc[[0]]
-                print(f"Patient ID {patient_id} has multiple entries in the metadata file")
-                print("Only the first entry will be used")
-                
-            patient_labels['staging'] = patient_metadata_row['Staging'].values[0]
-            patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
-            patient_labels['race'] = patient_metadata_row['Race'].values[0]
+                if len(patient_metadata_row) > 1:
+                    patient_metadata_row = patient_metadata_row.iloc[[0]]
+                    print(f"Patient ID {patient_id} has multiple entries in the metadata file")
+                    print("Only the first entry will be used")
+                    
+                if patient_metadata_row['Staging'].values[0] == 0:
+                    patient_labels['staging'] = int(0)
+                elif patient_metadata_row['Staging'].values[0] == 1 or patient_metadata_row['Staging'].values[0] == 2:
+                    patient_labels['staging'] = int(1)
+                elif patient_metadata_row['Staging'].values[0] == 3 or patient_metadata_row['Staging'].values[0] == 4:
+                    patient_labels['staging'] = int(2)
 
+                patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
+                patient_labels['race'] = patient_metadata_row['Race'].values[0]
+                return patient_labels
+            else:
+                return {}
         else:
-            # If the patient_id is not found in the metadata file, set the every metadata to empty string and number
-            patient_labels['staging'] = np.nan
-            patient_labels['gender'] = ''
-            patient_labels['race'] = ''
-        
             print(f"Patient ID {patient_id} not found in the metadata file")
             print("Metadata set to empty strings and numbers")
-        return patient_labels
+        return {}
     
     def _load_files_to_spectrum_objects(data_folder:str,
                                filename:str, 
                                patient_annotations:dict):
+        if patient_annotations == {}: # skip the spectrum if the patient_id is not found in the metadata file
+            return []
+
         with open(os.path.join(data_folder, filename)) as f:
             data = pd.read_csv(f, sep=",", header=None)
 
@@ -237,8 +249,8 @@ class HNC_Dataset(Dataset):
         return mean_cosmic_ray_count, std_cosmic_ray_count
     
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "plasma_saliva_mixed","train")
-    metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc","train")
+    metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc_patient_annotations.xlsx")
 
     seed = 4
     random.seed(seed)
@@ -262,9 +274,10 @@ if __name__ == "__main__":
                                   augmentation_step_list = None,
                                   config_path= None)
 
-    dataset = HNC_Dataset(data_folder, metadata_file, preprocessor, augmentor)
+    r_filter = [1,2,3,4,5]
+    dataset = Bec_HNC_Dataset(data_folder, metadata_file, r_filter, preprocessor, augmentor)
 
-    for i in range(1):
+    for i in range(50):
         ## get a random spectrum
         #idx = random.randint(0, dataset.__len__() - 1)
         example_spectrum = dataset.__getitem__(i)
