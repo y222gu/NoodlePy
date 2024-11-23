@@ -24,11 +24,9 @@ class Publisher:
     def remove_subscriber(self, event, who):
         del self.get_subscribers(event)[who]
         print(f'{who.name} unregistered from event "{event}"')
-    def dispatch(self, event, message):
-        # print(f'Dispatching event "{event}" with message: "{message}"')
+    def dispatch(self, event, *args):
         for subscriber, callback in self.get_subscribers(event).items():
-            # print('Distpatching event "{}" to {}'.format(event, subscriber))
-            callback(message)
+            callback(*args)
 
 
 class GUI_with_buttons(Publisher, ttk.Frame):

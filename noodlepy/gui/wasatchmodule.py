@@ -82,6 +82,7 @@ class WasatchModule(Publisher, ttk.Frame):
     def __init__(self, parent):
         ttk.Frame.__init__(self, parent)
         Publisher.__init__(self, ['update_spectrum'])
+        self.name = 'WasatchModule_publisher'
 
         self.initial_integ_time_ms = 100
         self.initial_laser_power_mW = 450
@@ -169,48 +170,42 @@ class WasatchModule(Publisher, ttk.Frame):
 
 
     def update_units(self):
-        self.units = "wavelength" if not self.unit_toggle_var.get() else "wavenumber"
+        if self.unit_toggle_var.get():
+            self.units = "wavenumber"
+            self.live_spectrum_ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
+            self.unit_toggle_btn.configure(text="To nm")
+        else:
+            self.units = "wavelength"
+            self.live_spectrum_ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
+            self.unit_toggle_btn.configure(text="To cm⁻¹")
+
+        self.live_spectrum_ax.relim()
+        self.live_spectrum_ax.autoscale_view()
+        self.spectrum_canvas.draw()
 
     def update_spectrum(self):
-        """
-        Update the live spectrum plot if data is available.
-        This function will be called periodically using after() to update the plot continuously.
-        """
-        # ## check which thread is capture running in
-        # print("Update_spectrum is running in thread: ", threading.current_thread().name)
-
-        if not self.spectrum_queue.empty():
-            try:
-                # # Proceed with updating the plot if data is valid
-                # self.live_spectrum_ax.clear()  # Clear the current plot
-
-                # # Assuming self.wasatch_manager.settings.wavelengths contains the x-axis (wavelengths)
-                # self.live_spectrum_ax.plot(self.wasatch_manager.settings.wavelengths, self.spectrum_queue.get())
+        """Update the spectrum plot with the latest data from the queue."""
+        try:
+            while True:
+                spectrum_data = self.spectrum_queue.get_nowait()
+                
                 if self.units == "wavelength":
-                    self.live_spectrum_ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
-                    self.live_spectrum_line.set_data(self.wasatch_manager.settings.wavelengths, self.spectrum_queue.get())
-                elif self.units == "wavenumber":
-                    self.live_spectrum_ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
-                    self.live_spectrum_line.set_data(self.wasatch_manager.settings.wavenumbers, self.spectrum_queue.get())
+                    x_data = self.wasatch_manager.settings.wavelengths
                 else:
-                    print("Invalid units")
-
-                # Relimit the axis based on new data
+                    x_data = self.wasatch_manager.settings.wavenumbers
+                
+                self.live_spectrum_line.set_data(x_data, spectrum_data)
                 self.live_spectrum_ax.relim()
                 self.live_spectrum_ax.autoscale_view()
 
-                # Redraw the updated plot
-                self.spectrum_canvas.draw()
+                # Update the plot
+                self.spectrum_canvas.draw_idle()
+                send_to_autofocus = {'spectrum': spectrum_data, 'wavelengths': self.wasatch_manager.settings.wavelengths}
+                self.dispatch('update_spectrum', send_to_autofocus)
 
-                updates_to_send = {"spectrum": self.spectrum_queue.get(), "wavelengths":self.wasatch_manager.settings.wavelengths}
-                self.dispatch('update_spectrum', updates_to_send)
-
-            except Exception as e:
-                print(f"Error updating spectrum plot: {e}")
-
+        except queue.Empty:
+            pass
         self.after(self.wasatch_manager.integ_time_ms, self.update_spectrum)
-
-
     def start_spectrum_thread(self):
         """Start a thread to collect spectrum data."""
         if not hasattr(self, 'spectrum_thread') or not self.spectrum_thread.is_alive():
@@ -221,7 +216,6 @@ class WasatchModule(Publisher, ttk.Frame):
 
     def collect_spectrum(self):
         while True:
-            wavelengths = self.wasatch_manager.settings.wavelengths
             spectrum = self.wasatch_manager.get_spectrum()
             if spectrum is not None:
                 self.latest_spectrum = spectrum
@@ -249,7 +243,7 @@ class WasatchModule(Publisher, ttk.Frame):
     def capture(self):
         ## check which thread is capture running in
         print("Capture running in thread: ", threading.current_thread().name)
-
+        spectrum = self.spectrum_queue.get()
         if self.units == "wavelength":
             x_axis = self.wasatch_manager.settings.wavelengths
         else:
@@ -260,7 +254,7 @@ class WasatchModule(Publisher, ttk.Frame):
 
         captured_fig = plt.figure(figsize=(4, 2))
         captured_fig, captured_ax = plt.subplots(figsize=(4, 2))
-        captured_line, =  captured_ax.plot(x_axis, self.latest_spectrum)
+        captured_line, =  captured_ax.plot(x_axis, spectrum)
         captured_line.set_linewidth(0.8)
         captured_line.set_color('#5bc0de')
 
@@ -303,11 +297,42 @@ class WasatchModule(Publisher, ttk.Frame):
         with open(f"Captured_spectrum_{file_number}.txt", "w") as outfile:
             for i in range(len(x_axis)):
                 outfile.write(f"{x_axis[i]:0.2f}, {self.latest_spectrum[i]}\n")
-
-        return
+        plt.close(captured_fig)
+        
 
     def debug_with_polystyrene(self):
-        print("Debug with polystyrene functionality not implemented yet.")
+        expected_peak = 1006.22
+        expected_counts = 1500 
+        peak_tolerance_cm = 5
+
+        print("Take a sample spectrum")
+        # get the latest spectrum
+        measurement = self.spectrum_queue.get()
+
+        print('Comparing peaks to polystyrene')
+        peak_pixels = scipy.signal.find_peaks(measurement, height=700)[0]
+
+        peak_pixel = None
+        for pixel in peak_pixels:
+            peak_cm = self.wasatch_manager.settings.wavenumbers[pixel]
+            if abs(expected_peak - peak_cm) <= peak_tolerance_cm:
+                print(f"Found expected {expected_peak}cm⁻¹ at pixel {pixel} ({peak_cm:0.2f}cm⁻¹)")
+                peak_pixel = pixel
+                break
+
+        if peak_pixel is None:
+            print(f"Failed to find {expected_peak}cm⁻¹ peak in sample")
+            return False
+
+        counts = measurement[peak_pixel]
+        if counts < expected_counts:
+            print(f"Failed. {expected_peak}cm⁻¹ peak counts too low ({counts} < {expected_counts}): adjust working distance")
+            return False
+        
+        print(f"Success! {expected_peak}cm⁻¹ peak found with {counts} counts.")
+        return True
+    
+
 
     def turn_laser_on(self):
         if self.wasatch_manager is None:

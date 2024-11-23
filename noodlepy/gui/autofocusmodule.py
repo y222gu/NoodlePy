@@ -7,7 +7,7 @@ import numpy as np
 from ctypes import *
 import time
 from tkinter import StringVar
-from noodlepy.gui.publisher_subscriber import Subscriber
+from noodlepy.gui.publisher_subscriber import Subscriber, Publisher
 from noodlepy.gui.wasatchmodule import WasatchModule
 from noodlepy.gui.stagecontrolmodule import StageControlModule
 
@@ -17,95 +17,82 @@ class NanoDrive:
         self.dll_path = os.path.join(os.getcwd(),"noodlepy",'dlls','Madlib.dll')
         self.axis = c_uint(3) # Move along Z-axis
         self.mcldll = CDLL(self.dll_path)
-        print(self.mcldll) 
+        self.current_position_um = None
         self.mcldll.MCL_ReleaseHandle.restype = None
         self.mcldll.MCL_SingleReadN.restype = c_double
         self.handle = self.mcldll.MCL_InitHandle()
         if self.handle == 0:
             raise RuntimeError("Failed to initialize MCL handle. Error code: 8")
         print("MCL Handle = ", self.handle)
-        self.initialize_position()
+        self.initialize_position() # the nanodrive will initialize at 0 um
 
     def initialize_position(self):
-        pos = c_double(0)
-        error = self.mcldll.MCL_SingleWriteN(pos, self.axis, self.handle)
-        if error != 0:
-            raise RuntimeError(f"Error initializing position: {error}")
-        time.sleep(0.025)  # Wait for nanopositioner to settle
-        position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-        print("Initial Position = ", position)
+        pos_um = c_double(0)
+        error = self.mcldll.MCL_SingleWriteN(pos_um, self.axis, self.handle)
 
-    def get_position(self):
+        time.sleep(0.025)
+        if error != 0:
+            raise RuntimeError(f"Nanodrive error initializing position: {error}")
+        else:
+            self.current_position_um = self.get_current_position()
+            print("Nanodrive initialized.")
+
+
+    def get_current_position(self):
         position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
         return position
 
-    def move_to_position(self, z_pos):
-        pos = c_double(z_pos)
+    def move_to(self, z_pos_um):
+        if type(z_pos_um) != float:
+            z_pos_um = float(z_pos_um)
+        
+        z_pos_um = max(0, min(z_pos_um, 100)) # Ensure new_position stays within bounds [0, 100]um
+        pos = c_double(z_pos_um)
         error = self.mcldll.MCL_SingleWriteN(pos, self.axis, self.handle)
-        if error != 0:
-            print("Move_to_position Error =", error)
-            print(f"Attempting to move to position: {z_pos} on axis: {self.axis.value} with handle: {self.handle}")
-        else:
-            print(f"Moved to position: {z_pos} on axis: {self.axis.value} with handle: {self.handle}")
-        time.sleep(0.1)  # Wait for nanopositioner to settle
 
-    def move_relative(self, delta_z: float):
+        time.sleep(0.025)  # Wait for nanopositioner to settle
+        if error != 0:
+            print("Nanodrive move_to_position Error =", error)
+            print(f"Nanodrive attempting to move to position: {z_pos_um} on axis: {self.axis.value} with handle: {self.handle}")
+        else:
+            self.current_position_um = self.get_current_position()
+            # print(f"Nanodrive moved to position: {self.current_position_um}.")
+
+    def move_by(self, delta_z_um: float):
         # Get the current position
-        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+        current_position_um = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
      
         # Calculate the new position
-        new_position = current_position + delta_z
-        new_position = max(0, min(new_position, 100)) # Ensure new_position stays within bounds [0, 100]
-        new_position_c_double = c_double(new_position)
+        new_position_um = current_position_um + delta_z_um
+        new_position_um = max(0, min(new_position_um, 100)) # Ensure new_position stays within bounds [0, 100]
+        new_position_c_double_um = c_double(new_position_um)
         
-        # Move to the new position
-        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
+        time.sleep(0.025)
+        error = self.mcldll.MCL_SingleWriteN(new_position_c_double_um, self.axis, self.handle)
         if error != 0:
             raise RuntimeError(f"MCL Error: {error}")
-               
-        time.sleep(0.025) # Wait for nanopositioner to settle
-        
-        # Read the new position
-        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
-        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
-
-    def move_absolute(self, abs_z: float = 50):
-        # Get the current position
-        current_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-     
-        new_position = max(0, min(abs_z, 100)) # Ensure new_position stays within bounds [0, 100]
-        new_position_c_double = c_double(new_position)
-        
-        # Move to the new position
-        error = self.mcldll.MCL_SingleWriteN(new_position_c_double, self.axis, self.handle)
-        if error != 0:
-            raise RuntimeError(f"MCL Error: {error}")
-       
-        time.sleep(0.025) # Wait for nanopositioner to settle
-        
-        # Read the new position
-        final_position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
-
-        # Return the final position as a string
-        print(f"Moved from {current_position:.4f} um to {final_position:.4f} um")
-        self.positionLabel.config(text=f"Pos: F{final_position: .2f} um")
+        else:
+            self.current_position_um = self.get_current_position()
+            # print(f"Nanodrive moved by {delta_z_um} to position: {self.current_position_um}.")
 
     def close(self):
         self.mcldll.MCL_ReleaseHandle(self.handle)
         print("NanoDrive shutdown")
 
-class AutoFocusModule(ttk.Frame, Subscriber):
+class AutoFocusModule(ttk.Frame, Publisher, Subscriber):
     def __init__(self, parent):
-        super().__init__(parent)
+        ttk.Frame.__init__(self, parent)
+        Publisher.__init__(self, ["update_nanodrive_position"])
         Subscriber.__init__(self)
+        self.name = "AutoFocusModule_obserableobserver"
+
         self.nano_drive = NanoDrive()
+        # self.spectrum_updated = False
         self.spectrum = None
         self.wavelengths = None        
-        # self.wasatch_manager = wasatch_manager
-        self.create_widgets()
+        self.create_widgets_for_autofocus()
 
-    def create_widgets(self):
+    def create_widgets_for_autofocus(self):
 
         self.nanodrive_frame = ttk.Labelframe(self, text='Auto Focus', padding=5)
         self.nanodrive_frame.grid(row=1, column=0, columnspan=5, sticky="nsew", padx=5, pady=5)
@@ -194,14 +181,19 @@ class AutoFocusModule(ttk.Frame, Subscriber):
         # Rough Autofocusing
         min = float(self.autofocus_range_low_var.get())
         max = float(self.autofocus_range_high_var.get())
-        step_size = int(self.autofocus_step_size_var.get())
-        num_rep = int(self.autofocus_num_rep_var.get())
+        step_size = int(float(self.autofocus_step_size_var.get()))
+        num_rep = int(float(self.autofocus_num_rep_var.get()))
 
         z_axis_range = np.linspace(min, max, step_size)
-        entropy_list, x1_data, y1_data, int_array = [], [], [], []
+        entropy_list, x1_data, y1_data= [], [], []
 
         for i, z_pos in enumerate(z_axis_range):
-            self.nano_drive.move_to_position(z_pos)
+            self.nano_drive.move_to(z_pos)
+            self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+
+            # # Wait for a new spectrum update
+            # self.wait_for_spectrum_update()
+
             position, wavelengths, intensities = self.measure_spectra(num_rep)
             ent = self.calculate_entropy(intensities)
             entropy_list.append(ent)
@@ -209,7 +201,7 @@ class AutoFocusModule(ttk.Frame, Subscriber):
             y1_data.append(ent)
 
             # Plot entropy and spectrum
-            self.plot_data(x1_data, y1_data, wavelengths, np.mean(intensities, 0))
+            self.plot_autofocus_data(x1_data, y1_data, wavelengths, np.mean(intensities, 0))
 
         fineMin, fineMax = self.refine_focus_range(entropy_list, z_axis_range)
         self.fine_autofocus(fineMin, fineMax, num_rep)
@@ -219,7 +211,9 @@ class AutoFocusModule(ttk.Frame, Subscriber):
         entropy_list, x2_data, y2_data = [], [], []
 
         for i, z_pos in enumerate(z_axis_range):
-            self.nano_drive.move_to_position(z_pos)
+            self.nano_drive.move_to(z_pos)
+            self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+
             position, wavelengths, intensities = self.measure_spectra(num_rep)
             ent = self.calculate_entropy(intensities)
             entropy_list.append(ent)
@@ -227,10 +221,12 @@ class AutoFocusModule(ttk.Frame, Subscriber):
             y2_data.append(ent)
 
             # Plot fine focus data
-            self.plot_data(x2_data, y2_data, wavelengths, np.mean(intensities, 0))
+            self.plot_autofocus_data(x2_data, y2_data, wavelengths, np.mean(intensities, 0))
 
         focusedPos = z_axis_range[np.argmin(entropy_list)]
-        self.nano_drive.move_to_position(focusedPos)
+        self.nano_drive.move_to(focusedPos)
+        self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+
         print("Focused Position =", focusedPos)
         print("Autofocus complete")
 
@@ -245,7 +241,7 @@ class AutoFocusModule(ttk.Frame, Subscriber):
         print("Lengths of sequences in intensities:", lengths)
 
         intensities = np.array(intensities).reshape((num_rep, len(wavelengths)))
-        position = self.nano_drive.get_position()
+        position = self.nano_drive.get_current_position()
         return position, wavelengths, intensities
 
     def calculate_entropy(self, intensities):
@@ -267,7 +263,7 @@ class AutoFocusModule(ttk.Frame, Subscriber):
         self.autofocus_range_low_var.set(float(self.autofocus_range_low_var.get()))
         self.autofocus_range_high_var.set(float(self.autofocus_range_high_var.get()))
 
-    def plot_data(self, x_data, y_data, wavelengths, intensities):
+    def plot_autofocus_data(self, x_data, y_data, wavelengths, intensities):
         self.entropy_ax.clear()
         self.intensity_ax.clear()
         self.entropy_ax.set_xlabel('Z-axis position', fontsize=6, color='white')
@@ -301,8 +297,25 @@ class AutoFocusModule(ttk.Frame, Subscriber):
         self.update_idletasks()
 
     def handle_update_spectrum(self, updated_from_wasatch):
+        # Update the spectrum and wavelengths upon new spectrum data arrival
         self.spectrum = updated_from_wasatch["spectrum"]
         self.wavelengths = updated_from_wasatch["wavelengths"]
+        self.spectrum_updated = True  # Indicate a new spectrum is ready
+
+    def wait_for_spectrum_update(self):
+        # Wait until a new spectrum update is received
+        while not self.spectrum_updated:
+            time.sleep(0.01)  # Small delay to avoid excessive CPU usage
+        self.spectrum_updated = False  # Reset the flag after using the new spectrum
+
+    def handle_move_nanodrive_by_request(self, distance):
+        self.nano_drive.move_by(distance)
+        # print("Moving nanodrive up by {distance} um")
+        self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+
+    def handle_move_nanodrive_to_request(self, position):
+        self.nano_drive.move_to(position) # starting from the lowest position
+        self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
 
     def get_spectrum(self):
         return self.spectrum
@@ -324,5 +337,5 @@ if __name__ == '__main__':
     autofocus_module = AutoFocusModule(root)
     autofocus_module.grid(row=1, column=0, sticky="nsew")
 
-    wasatch_module.register('update_spectrum', autofocus_module, autofocus_module.handle_update_spectrum)
+    wasatch_module.add_subscriber('update_spectrum', autofocus_module, autofocus_module.handle_update_spectrum)
     root.mainloop()

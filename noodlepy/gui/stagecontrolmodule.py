@@ -4,6 +4,7 @@ import serial
 import serial.tools.list_ports
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
+from ttkbootstrap.dialogs import Messagebox
 from PIL import Image, ImageTk
 from tkinter import StringVar
 import tkinter as tk
@@ -24,7 +25,8 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.nanodrive_icon = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","nanodrive_arrow_1.png")).resize((20, 20))
        
         self.position_first_smaple = [154.02, 148.62, 30]
-
+        self.calibration_from_widefield_to_objective_x = -65.1 # calibrated on 11/21/2024
+        self.calibration_from_widefield_to_objective_y = -5.94 # calibrated on 11/21/2024
         self.small_step_size_mm = 0.06 #firmware seems to limit the smallest step size to 0.06 (60 um)
         self.medium_step_size_mm = 0.6
         self.large_step_size_mm = 6
@@ -36,6 +38,10 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.prusa_x_referenced = False
         self.prusa_y_referenced = False
         self.prusa_z_referenced = False
+        self.capture_frame_center_widefield_x= None
+        self.capture_frame_center_widefield_y = None
+        self.capture_frame_center_objective_x= None
+        self.capture_frame_center_objective_y = None
         self.ser = None
         self.create_widgets()
         self.connect_prusa_device()
@@ -113,18 +119,17 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
         # Speed slider
         self.slider_value = StringVar()
-        self.slider_value.set(5000)
+        self.slider_value.set(200)
         self.speed_slider = ttk.Scale(
             movement_frame,
-            from_=1000,
-            to=5000,
+            from_=10,
+            to=1000,
             orient=HORIZONTAL,
             bootstyle="info",
             variable=self.slider_value
         )
         self.speed_slider.grid(row=3, column=2, columnspan=2, pady=15)
         self.speed_slider.config(length=200)
-        self.speed_slider.set(10)
         self.speed = self.speed_slider.get()
         ttk.Label(movement_frame, text="Speed").grid(row=3, column=0, padx=5, pady=5)
         ttk.Label(movement_frame, text="1000 mm/s").grid(row=3, column=1, padx=5, pady=5)
@@ -311,15 +316,12 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         if option == "X":
             self.ser.write(str.encode("G28 X\r\n"))
             self.prusa_x_referenced = True
-            self.update_prusa_position()
         elif option == "Y":
             self.ser.write(str.encode("G28 Y\r\n"))
             self.prusa_y_referenced = True
-            self.update_prusa_position()
         elif option == "Z":
             self.ser.write(str.encode("G28 Z\r\n"))
             self.prusa_z_referenced = True
-            self.update_prusa_position()
         elif option == "nanodrive":
             self.dispatch('move_nanodrive_to', 0)
         elif option == "ALL":
@@ -331,7 +333,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             self.prusa_x_referenced = True
             self.prusa_y_referenced = True
             self.prusa_z_referenced = True
-            self.update_prusa_position()
             self.dispatch('move_nanodrive_to', 0)
         else:
             print("Invalid option")
@@ -427,6 +428,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.ser.flushOutput()
         self.ser.write(b'M114\n')
         line = self.wait_for_prusa_process_complete(process_name = "get_current_position", critiria='X')
+        print(line)
         if dim == 'XYZ':
             X = line.split(' ')[0].split(':')[1]
             Y = line.split(' ')[1].split(':')[1]
@@ -478,16 +480,16 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.go_to_lowest_point_button.configure(state=DISABLED)
 
     def handle_switch_view(self, view):
-        if view == "TO_SMALL":
+        if view == "TO_OBJECTIVE":
             # send g code to move the stage to the right
-            print("Switching to small view")
-            self.prusa_go_by_xyz(x=-65.1, y=-5.94)
+            print("Switching to objective view")
+            self.prusa_go_by_xyz(x=self.calibration_from_widefield_to_objective_x, y=self.calibration_from_widefield_to_objective_y)
 
         elif view == "TO_WIDE":
             # send g code to move the stage to the left
             print("Switching to wide view")
-            self.prusa_go_by_xyz(x=65.1, y=5.94)
-        
+            self.prusa_go_by_xyz(x=-self.calibration_from_widefield_to_objective_x, y=-self.calibration_from_widefield_to_objective_y)
+
         else:
             print("Error Happened", view)
 
@@ -501,6 +503,77 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
     def handle_update_nanodrive_position(self, nanodrive_position):
         self.current_nanodrive_position = nanodrive_position * (-1)
         self.current_nanodrive_z_entry.config(text=nanodrive_position)
+
+    def handle_test_sampling_points(self, view_to_inspect_in, relative_distance_for_sampling_points):
+        # Display a confirmation dialog
+        response = Messagebox.show_question(
+            title="Confirm Operation",
+            message="Is the objective at a safe height?",
+            alert=True,
+            buttons=["Yes", "No"],
+            bootstyle="danger"
+        )
+        if response == "Yes":  # If the user clicks "Yes"
+            print("Operation started!")
+            self.run_in_thread(self._handle_test_sampling_points, view_to_inspect_in, relative_distance_for_sampling_points)
+        else:  # If the user clicks "No"
+            print("Operation canceled.")
+
+
+    def _handle_test_sampling_points(self, view_to_inspect_in, relative_distance_for_sampling_points):
+        # convert the unit of the sampling points position from um to mm
+        if view_to_inspect_in == "OBJECTIVE":
+            if self.capture_frame_center_objective_x and self.capture_frame_center_objective_y:
+                # printer's y axis is flipped
+                filped_sampling_position_y = relative_distance_for_sampling_points[1] * -1
+
+                sampling_position_x = relative_distance_for_sampling_points[0] / 1000 + self.capture_frame_center_objective_x
+                sampling_position_y = filped_sampling_position_y / 1000 + self.capture_frame_center_objective_y
+        elif view_to_inspect_in == "WIDEFIELD":
+            if self.capture_frame_center_widefield_x and self.capture_frame_center_widefield_y:
+                print('when handling test_sampling_points, the center used for x: ', self.capture_frame_center_widefield_x)
+                print('when handling test_sampling_points, the center used for y: ', self.capture_frame_center_widefield_y)
+
+                # printer's y axis is flipped
+                filped_sampling_position_y = relative_distance_for_sampling_points[1] * -1
+
+                sampling_position_x = relative_distance_for_sampling_points[0] / 1000 + self.capture_frame_center_widefield_x
+                sampling_position_y = filped_sampling_position_y / 1000 + self.capture_frame_center_widefield_y
+
+                print('the sampling_position_x: ', sampling_position_x)
+                print('the sampling_position_y: ', sampling_position_y)
+        else:
+            raise ValueError("The center of the frame is not captured yet")
+
+        # round up the sampling position to 2 decimal places
+        sampling_position_x = np.round(sampling_position_x, 2)
+        sampling_position_y = np.round(sampling_position_y, 2)
+
+        # move to the test sample spot one by one
+        for i in range(len(sampling_position_x)):
+            print(f'Moving to the test sample spot {sampling_position_x[i]}, {sampling_position_y[i]}')
+            self.prusa_go_to_xyz(x=sampling_position_x[i], y=sampling_position_y[i])
+            time.sleep(1)
+
+    def handle_updated_captured_frame_center(self, field_of_view):
+        print("Captured the center of the frame")
+        if field_of_view == 'WIDEFIELD':
+            self.capture_frame_center_widefield_x = float(self.get_current_prusa_position('XYZ')[0])
+            self.capture_frame_center_widefield_y = float(self.get_current_prusa_position('XYZ')[1])
+
+            print('captured center position is in type: ',type(self.capture_frame_center_widefield_x))
+
+            print(f"Captured the center of the frame in the physical space: {self.capture_frame_center_widefield_x}, {self.capture_frame_center_widefield_y}")
+
+            self.capture_frame_center_objective_x = self.capture_frame_center_widefield_x + self.calibration_from_widefield_to_objective_x
+            self.capture_frame_center_objective_y = self.capture_frame_center_widefield_y + self.calibration_from_widefield_to_objective_y
+        elif field_of_view == 'OBJECTIVE':
+            self.capture_frame_center_objective_x = float(self.get_current_prusa_position('XYZ')[0])
+            self.capture_frame_center_objective_y = float(self.get_current_prusa_position('XYZ')[1])
+
+            self.capture_frame_center_widefield_x = self.capture_frame_center_objective_x - self.calibration_from_widefield_to_objective_x
+            self.capture_frame_center_widefield_y = self.capture_frame_center_objective_y - self.calibration_from_widefield_to_objective_y
+
 
     def update_prusa_position(self):
         current_prusa_position = self.get_current_prusa_position('XYZ')

@@ -15,7 +15,7 @@ class EdgeDetector():
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
         self.image = image
         self.width, self.height = image.shape[1], image.shape[0]
-        self.marker_size = image.shape[1]/10
+        self.marker_size = image.shape[1]/2
         self.center_x = self.width // 2
         self.center_y = self.height // 2
         model_path = os.path.join(os.getcwd(), "sam_vit_b_01ec64.pth")
@@ -160,7 +160,6 @@ class EdgeDetector():
         buf.seek(0)
         pil_image = Image.open(buf)
         plt.close(fig)
-        print(sampling_x, sampling_y)
         return pil_image, sampling_x, sampling_y
 
     @staticmethod
