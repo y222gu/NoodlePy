@@ -56,7 +56,6 @@ ax4.grid(True)
 
 plt.tight_layout()
 
-
 def autofocus(exp_time):
     #Rough Autofocusing
     entropy_list = []
@@ -75,7 +74,6 @@ def autofocus(exp_time):
   
     int_array = []
 
-    
     for i in range(z_spacing):  # Replace 10 with the number of iterations you need
         z_pos = z_axis_range[i]
         # Choose axis to move and new position in micrometers

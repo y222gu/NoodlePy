@@ -1,23 +1,25 @@
 import numpy as np
+import scipy.signal
 import matplotlib.pyplot as plt
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
+from PIL import Image, ImageTk
 from tkinter import StringVar
+import io
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 from threading import Thread
 import queue
+import time
+# from noodlepy.gui.nanodrive import NanoDrive
 from wasatch.WasatchBus import WasatchBus
 from wasatch.WasatchDevice import WasatchDevice
 from wasatch.RealUSBDevice import RealUSBDevice
 import logging
 import threading
-import os
-from noodlepy.gui.publisher_subscriber import Publisher
-
 class WasatchManager():
     def __init__(self, integ_time_ms, laser_power_mW):
-        self.integ_time_ms = integ_time_ms
         self.laser_power_mW = laser_power_mW
+        self.integ_time_ms = integ_time_ms
         self.connect()
 
     def connect(self):
@@ -65,10 +67,12 @@ class WasatchManager():
         print("Turning laser off.")
 
     def set_integration_time(self, time_ms):
+        self.integ_time_ms = time_ms
         self.fid.set_integration_time_ms(time_ms)
         print(f"Integration time set to {time_ms}ms")
 
     def set_laser_power(self, power_mW):
+        self.laser_power_mW = power_mW
         self.fid.set_laser_power_mW(power_mW)
         print(f"Laser power set to {power_mW}mW")
 
@@ -78,17 +82,13 @@ class WasatchManager():
             spectrum = response.data.spectrum
             return np.asarray(spectrum)
 
-class WasatchModule(Publisher, ttk.Frame):
+class WasatchModule(ttk.Frame):
     def __init__(self, parent):
-        ttk.Frame.__init__(self, parent)
-        Publisher.__init__(self, ['update_spectrum'])
-        self.name = 'WasatchModule_publisher'
-
+        super().__init__(parent)
         self.initial_integ_time_ms = 100
-        self.initial_laser_power_mW = 450
+        self.initial_laser_power_mW = 400
         self.units = "wavelength"
         self.spectrum_queue = queue.Queue()
-        self.latest_spectrum = None  # Store the latest spectrum
         self.create_live_spectrum_widgets()
         self.wasatch_manager = WasatchManager(self.initial_integ_time_ms, self.initial_laser_power_mW)
         if self.wasatch_manager.connect():
@@ -114,7 +114,7 @@ class WasatchModule(Publisher, ttk.Frame):
         self.integ_time_label.grid(row=1, column=1, sticky='nsew', pady=5, padx=5)
         self.integ_time_var = StringVar()
         self.integ_time_var.set(self.initial_integ_time_ms)
-        self.integ_time_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.integ_time_var, from_=100, to=10000, increment=5, width=5, justify='center')
+        self.integ_time_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.integ_time_var, from_=1, to=10000, increment=5, width=5, justify='center')
         self.integ_time_spinbox.grid(row=2, column=1, sticky='ew', pady=5, padx=5)
         self.integ_time_spinbox.bind("<FocusOut>", self.update_settings)
         self.integ_time_spinbox.bind("<Return>", self.update_settings)
@@ -123,16 +123,13 @@ class WasatchModule(Publisher, ttk.Frame):
         self.laser_button.grid(row=1, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
 
         self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='info-outline', command=self.capture)
-        self.capture_button.grid(row=1, column=4, sticky='ew', pady=5, padx=5)
+        self.capture_button.grid(row=2, column=3, sticky='ew', pady=5, padx=5)
 
-        self.ref_button = ttk.Button(self.spectrum_frame, text="Ref. Polystyrene", command=self.debug_with_polystyrene, bootstyle ='info-outline')
-        self.ref_button.grid(row=1, column=3, sticky='ew', pady=5, padx=5)
-
-        self.start_button = ttk.Button(self.spectrum_frame, text="Play", command=self.start_spectrum_thread, bootstyle ='info-outline')
-        self.start_button.grid(row=2, column=3, columnspan =2, sticky='ew', pady=5, padx=5)
+        self.stop_button = ttk.Button(self.spectrum_frame, text="Ref. Polystyrene", command=self.debug_with_polystyrene, bootstyle ='info-outline')
+        self.stop_button.grid(row=1, column=3, sticky='ew', pady=5, padx=5)
 
         self.spectrum_canvas = ttk.Canvas(self.spectrum_frame)
-        self.spectrum_canvas.grid(row=0, column=0, columnspan=5, sticky='nsew', pady=5, padx=5)
+        self.spectrum_canvas.grid(row=0, column=0, columnspan=4, sticky='nsew', pady=5, padx=5)
 
         self.unit_toggle_var = ttk.BooleanVar(value=False)
         self.unit_toggle_btn = ttk.Checkbutton(self.spectrum_frame, variable=self.unit_toggle_var, text="To cm⁻¹", bootstyle="info-round-toggle", command=self.update_units)
@@ -168,6 +165,12 @@ class WasatchModule(Publisher, ttk.Frame):
         self.spectrum_canvas = FigureCanvasTkAgg(self.live_spectrum_fig, master=self.spectrum_canvas)
         self.spectrum_canvas.get_tk_widget().grid(row=0, column=0, columnspan=4, sticky='nsew')
 
+    def get_wasatch_handle(self):
+        return self.wasatch_manager
+
+    def update_settings(self, event=None):
+        self.wasatch_manager.set_laser_power(int(self.laser_power_var.get()))
+        self.wasatch_manager.set_integration_time(int(self.integ_time_var.get()))
 
     def update_units(self):
         if self.unit_toggle_var.get():
@@ -200,12 +203,26 @@ class WasatchModule(Publisher, ttk.Frame):
 
                 # Update the plot
                 self.spectrum_canvas.draw_idle()
-                send_to_autofocus = {'spectrum': spectrum_data, 'wavelengths': self.wasatch_manager.settings.wavelengths}
-                self.dispatch('update_spectrum', send_to_autofocus)
 
         except queue.Empty:
             pass
         self.after(self.wasatch_manager.integ_time_ms, self.update_spectrum)
+
+    def turn_laser_on(self):
+        if self.wasatch_manager is None:
+            laser_power_mW = int(self.laser_power_var.get())
+            integ_time_ms = int(self.integ_time_var.get())
+            self.wasatch_manager = WasatchManager(integ_time_ms, laser_power_mW)
+            if not self.wasatch_manager.connect():
+                print("Failed to connect to Wasatch spectrometer. Check connection and try again.")
+                return
+        self.wasatch_manager.turn_laser_on()
+        self.laser_button.config(text="Laser Off", command=self.turn_laser_off, bootstyle ='info')
+
+    def turn_laser_off(self):
+        self.wasatch_manager.turn_laser_off()
+        self.laser_button.config(text="Laser On", command=self.turn_laser_on, bootstyle ='info-outline')
+
     def start_spectrum_thread(self):
         """Start a thread to collect spectrum data."""
         if not hasattr(self, 'spectrum_thread') or not self.spectrum_thread.is_alive():
@@ -215,34 +232,17 @@ class WasatchModule(Publisher, ttk.Frame):
             print("Started spectrum thread")
 
     def collect_spectrum(self):
+        """Collect spectrum data and put it into the queue."""
         while True:
             spectrum = self.wasatch_manager.get_spectrum()
             if spectrum is not None:
-                self.latest_spectrum = spectrum
                 self.spectrum_queue.put(spectrum)
-                # time.sleep(self.wasatch_manager.integ_time_ms / 1000.0)  # wait based on integration time
-
-    def update_settings(self, event=None):
-        try:
-            self.wasatch_manager.set_integration_time(int(self.integ_time_var.get()))
-            self.wasatch_manager.set_laser_power(int(self.laser_power_var.get()))
-        except ValueError:
-            pass
-
-    # def capture(self):
-    #     # Check if capture is already running
-    #     if hasattr(self, 'capture_thread') and self.capture_thread.is_alive():
-    #         print("Capture is already running. Please wait for the current capture to finish.")
-    #         return
-
-    #     # Create and start the capture thread
-    #     self.capture_thread = Thread(target=self._capture)
-    #     self.capture_thread.daemon = True
-    #     self.capture_thread.start()
+            # time.sleep(0.1)
 
     def capture(self):
         ## check which thread is capture running in
         print("Capture running in thread: ", threading.current_thread().name)
+        # Get the latest spectrum data in the queue
         spectrum = self.spectrum_queue.get()
         if self.units == "wavelength":
             x_axis = self.wasatch_manager.settings.wavelengths
@@ -252,7 +252,7 @@ class WasatchModule(Publisher, ttk.Frame):
         new_window = ttk.Toplevel()
         new_window.title("Captured Raman Spectrum")
 
-        captured_fig = plt.figure(figsize=(4, 2))
+        captured_fig = plt.figure()
         captured_fig, captured_ax = plt.subplots(figsize=(4, 2))
         captured_line, =  captured_ax.plot(x_axis, spectrum)
         captured_line.set_linewidth(0.8)
@@ -281,22 +281,12 @@ class WasatchModule(Publisher, ttk.Frame):
         canvas = FigureCanvasTkAgg(captured_fig, master=new_window)
         canvas.draw()
         canvas.get_tk_widget().pack(side=ttk.TOP, fill=ttk.BOTH, expand=1)
+        captured_fig.savefig("Captured_spectrum.png", dpi=300)
 
-        # check if the capture_spectrum fig already exists
-        filelist = [f for f in os.listdir() if f.endswith(".png")]
-        if "Captured_spectrum_1.png" in filelist:
-            file_number = 2
-            while f"Captured_spectrum_{file_number}.png" in filelist:
-                file_number += 1
-        else:
-            file_number = 1
-
-        # save the captured spectrum as a png file
-        captured_fig.savefig(f"Captured_spectrum_{file_number}.png", dpi=300)
-
-        with open(f"Captured_spectrum_{file_number}.txt", "w") as outfile:
+        with open("Captured_spectrum.txt", "w") as outfile:
             for i in range(len(x_axis)):
-                outfile.write(f"{x_axis[i]:0.2f}, {self.latest_spectrum[i]}\n")
+                outfile.write(f"{x_axis[i]:0.2f}, {spectrum[i]}\n")
+
         plt.close(captured_fig)
         
 
@@ -332,35 +322,10 @@ class WasatchModule(Publisher, ttk.Frame):
         print(f"Success! {expected_peak}cm⁻¹ peak found with {counts} counts.")
         return True
     
-
-
-    def turn_laser_on(self):
-        if self.wasatch_manager is None:
-            laser_power_mW = int(self.laser_power_var.get())
-            integ_time_ms = int(self.integ_time_var.get())
-            self.wasatch_manager = WasatchManager(integ_time_ms, laser_power_mW)
-            if not self.wasatch_manager.connect():
-                print("Failed to connect to Wasatch spectrometer. Check connection and try again.")
-                return
-        self.wasatch_manager.turn_laser_on()
-        self.laser_button.config(text="Laser Off", command=self.turn_laser_off, bootstyle ='info')
-
-    def turn_laser_off(self):
-        self.wasatch_manager.turn_laser_off()
-        self.laser_button.config(text="Laser On", command=self.turn_laser_on, bootstyle ='info-outline')
-
     def run_in_thread(self, func):
         thread = Thread(target=func)
         thread.daemon = True
         thread.start()
-
-    def get_latest_spectrum(self):
-        return self.latest_spectrum
-    
-    def get_wasatch_handle(self):
-        return self.wasatch_manager
-    
-
 
 if __name__ == "__main__":
     root = ttk.Window(themename="noodlepy")

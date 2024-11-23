@@ -88,11 +88,27 @@ class ImageAcquisitionThread(threading.Thread):
         camera.exposure_time_us = 40000
         self._camera = camera
         self._previous_timestamp = 0
-        self._is_color = False
         self._bit_depth = camera.bit_depth
         self._camera.image_poll_timeout_ms = 0
         self._image_queue = queue.Queue(maxsize=2)
         self._stop_event = threading.Event()
+
+                # setup color processing if necessary
+        if self._camera.camera_sensor_type != SENSOR_TYPE.BAYER:
+            # Sensor type is not compatible with the color processing library
+            self._is_color = False
+        else:
+            self._mono_to_color_sdk = MonoToColorProcessorSDK()
+            self._image_width = self._camera.image_width_pixels
+            self._image_height = self._camera.image_height_pixels
+            self._mono_to_color_processor = self._mono_to_color_sdk.create_mono_to_color_processor(
+                SENSOR_TYPE.BAYER,
+                self._camera.color_filter_array_phase,
+                self._camera.get_color_correction_matrix(),
+                self._camera.get_default_white_balance_matrix(),
+                self._camera.bit_depth
+            )
+            self._is_color = True
 
     def get_output_queue(self):
         return self._image_queue
@@ -106,16 +122,37 @@ class ImageAcquisitionThread(threading.Thread):
         image8bit = np.asarray(scaled_image, np.uint8)
         processed_image = image8bit.squeeze()
         return Image.fromarray(processed_image)
+    
+    def _get_color_image(self, frame):
+        # type: (Frame) -> Image
+        # verify the image size
+        width = frame.image_buffer.shape[1]
+        height = frame.image_buffer.shape[0]
+        if (width != self._image_width) or (height != self._image_height):
+            self._image_width = width
+            self._image_height = height
+            print("Image dimension change detected, image acquisition thread was updated")
+        # color the image. transform_to_24 will scale to 8 bits per channel
+        color_image_data = self._mono_to_color_processor.transform_to_24(frame.image_buffer,
+                                                                         self._image_width,
+                                                                         self._image_height)
+        color_image_data = color_image_data.reshape(self._image_height, self._image_width, 3)
+
+        # convert the image to a single channel image
+        color_image_data = color_image_data.mean(axis=2).astype('uint8')
+        # return PIL Image object
+        return Image.fromarray(color_image_data, mode="L") # use mode='RGB' for color images
+    
 
     def run(self):
         while not self._stop_event.is_set():
             try:
                 frame = self._camera.get_pending_frame_or_null()
-                # if frame is None:
-                #     continue
-
                 if frame is not None:
-                    pil_image = self._get_image(frame)
+                    if self._is_color:
+                        pil_image = self._get_color_image(frame)
+                    else:
+                        pil_image = self._get_image(frame)
                     self._image_queue.put(pil_image, block=False)
 
             except queue.Full:
@@ -125,92 +162,55 @@ class ImageAcquisitionThread(threading.Thread):
                 break
 
         print("Image acquisition has stopped")
+        if self._is_color:
+            self._mono_to_color_processor.dispose()
+            self._mono_to_color_sdk.dispose()
 
 class CameraManger():
     def __init__(self):
         self.sdk = TLCameraSDK()
         self.camera_serial_number_list = self.sdk.discover_available_cameras()
-        self.cameras = {}
-        self.image_acquisition_threads = {}
-        self.image_queues = {}
-        self.active_camera_serial = None
-        self.active_image_thread = None
 
     def open_camera(self, serial_number):
+        if serial_number not in self.camera_serial_number_list:
+            raise ValueError(f"Camera with serial number {serial_number} not found")
         camera = self.sdk.open_camera(serial_number)
+        image_acquisition_thread = ImageAcquisitionThread(camera)
+
         camera.frames_per_trigger_zero_for_unlimited = 0
         camera.arm(2)
         camera.issue_software_trigger()
-        self.cameras[serial_number] = camera
-        return camera
-    
-    def start_image_acquisition_thread(self, serial_number):
-        camera = self.cameras[serial_number]
-        image_acquisition_thread = ImageAcquisitionThread(camera)
         image_acquisition_thread.start()
-        self.image_acquisition_threads[serial_number] = image_acquisition_thread
-        self.image_queues[serial_number] = image_acquisition_thread.get_output_queue()
-
-    def stop_image_acquisition_thread(self, serial_number):
-        image_acquisition_thread = self.image_acquisition_threads[serial_number]
-        image_acquisition_thread.stop()
-        image_acquisition_thread.join()
-
-    def switch_camera(self, serial_number):
-        if self.active_camera_serial:
-            self.stop_image_acquisition_thread(self.active_camera_serial)
-        self.active_camera_serial = serial_number
-        self.active_image_thread = self.image_acquisition_threads[serial_number]
-
-    def get_active_image_queue(self):
-        return self.image_queues[self.active_camera_serial]
-    
-    def dispose(self):
-        for serial_number in self.cameras:
-            camera = self.cameras[serial_number]
-            camera.dispose()
-        self.sdk.dispose()
+        return camera, image_acquisition_thread
 
     def get_camera_list(self):
         return self.camera_serial_number_list
 
 class LiveViewModule(Publisher, tk.Frame):
-    def __init__(self, parent, width=288, height=216):
+    def __init__(self, parent):
         ttk.Frame.__init__(self, parent)  # Initialize ttk.Frame and Publisher
-        Publisher.__init__(self, ['switch_view'])
-        
-        self.width = width
-        self.height = height
+        Publisher.__init__(self, ['switch_view', 'test_sampling_points', 'update_captured_frame_center'])
+        self.name = 'LiveViewModule_publisher'
+
+        # the canvas width and height that the image will be resized to
+        self.width = 576 
+        self.height = 432
+
+        # calibrated size in object plane per pixel on 11/20/2024
+        self.x_pixel_size_objective_camera = 0.311 #um
+        self.y_pixel_size_objective_camera = 0.319 #um
+        self.x_pixel_size_widefield_camera = 2.842 #um
+        self.y_pixel_size_widefield_camera = 2.842 #um
+
         self.camera_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","camera_icon.png"))
         self.exchange_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","exchange_icon.png"))
+        self.camera_manager = CameraManger()
 
-        self.sdk = TLCameraSDK()
-        camera_list = self.sdk.discover_available_cameras()
-        if not camera_list:
-            raise Exception("No cameras found")
-        
-        # make sure both cameras are connected
-        if '14938' not in camera_list or '14628' not in camera_list:
-            raise Exception("Make sure both cameras are connected")
-        
-        self.widefield_camera = self.sdk.open_camera('14938')
-        self.smallfield_camera = self.sdk.open_camera('14628')
-        self.widefield_camera_thread = ImageAcquisitionThread(self.widefield_camera)
-        self.smallfield_camera_thread = ImageAcquisitionThread(self.smallfield_camera)
-
-        print("Setting camera parameters...")
-        self.widefield_camera.frames_per_trigger_zero_for_unlimited = 0
-        self.widefield_camera.arm(2)
-        self.widefield_camera.issue_software_trigger()
-
-        self.smallfield_camera.frames_per_trigger_zero_for_unlimited = 0
-        self.smallfield_camera.arm(2)
-        self.smallfield_camera.issue_software_trigger()
-
-        print("Starting image acquisition thread...")
-        self.widefield_camera_thread.start()
-        self.smallfield_camera_thread.start()
+        self.objective_field_camera, self.objective_field_camera_thread = self.camera_manager.open_camera('14628')
+        self.widefield_camera, self.widefield_camera_thread = self.camera_manager.open_camera('14938') 
         self.active_camera_thread = self.widefield_camera_thread
+        self.current_live_view = 'WIDEFIELD'
+        self.captured_view = None
         self.create_widgets()
 
     def create_widgets(self):
@@ -219,7 +219,7 @@ class LiveViewModule(Publisher, tk.Frame):
 
         self.camera_widget = LiveCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height, refresh_rate=10, flip=False)
         self.camera_widget.grid(row=0, column=0, columnspan=2, sticky='nsew')
-        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.handle_switch_view('TO_SMALL'), style='info')
+        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.handle_switch_view('TO_OBJECTIVE'), style='info')
         self.switch_view_button.grid(row=1, column=0, columnspan=1, sticky='nsew', pady=5, padx=5)
         capture_button = ttk.Button(self.live_frame, image=self.camera_icon, command= self.capture_frame, style='info')
         capture_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
@@ -232,7 +232,7 @@ class LiveViewModule(Publisher, tk.Frame):
         self.captured_image_label.grid(row=0, column=0, sticky='nsew')
         self.captured_image_label.image = self.image_to_display
 
-        # three tabs for selecting the sampling method
+        # selecting the sampling method
         self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='info')
         self.edge_detection_point_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
         self.sampling_method_var = tk.StringVar()
@@ -251,6 +251,8 @@ class LiveViewModule(Publisher, tk.Frame):
 
         self.create_sampling_profile_buttons= ttk.Button(sampling_method_frame, text="Create", command=self.on_create_button_clicked, state=DISABLED, style='info')
         self.create_sampling_profile_buttons.grid(row=3, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
+        self.test_sampling_points_button = ttk.Button(sampling_method_frame, text="Test", command= self.on_test_button_clicked, state=DISABLED, style='info')
+        self.test_sampling_points_button.grid(row=0, column=3, rowspan=5, sticky='nsew', pady=5, padx=5)
         
         # entry for the number of sampling points
         self.number_of_sampling_points_label = ttk.Label(sampling_method_frame, text="# of Points")
@@ -316,7 +318,8 @@ class LiveViewModule(Publisher, tk.Frame):
         print("Edge detection button clicked")
 
         self.masked_image = masked_image
-        self.image_to_display = ImageTk.PhotoImage(self.masked_image)
+        resized_masked_image = self.masked_image.resize((self.width, self.height), Image.LANCZOS)
+        self.image_to_display = ImageTk.PhotoImage(resized_masked_image)
         self.captured_image_label.configure(image=self.image_to_display)
         self.captured_image_label.image = self.image_to_display
 
@@ -352,49 +355,119 @@ class LiveViewModule(Publisher, tk.Frame):
             self.interval_entry.configure(state=NORMAL)
 
 
+    def optimize_the_sequence_of_sampling_points(self, x, y, shape):
+        if shape == 'rings':
+            # Compute the centroid
+            centroid_x = np.mean(x)
+            centroid_y = np.mean(y)
+
+            # Compute the angles of each point w.r.t. the centroid
+            angles = np.arctan2(y - centroid_y, x - centroid_x)
+
+            # Sort indices by angle in counter-clockwise order
+            sorted_indices = np.argsort(angles)
+
+            # Sort x and y arrays based on the sorted indices
+            sorted_x = x[sorted_indices]
+            sorted_y = y[sorted_indices]
+
+        elif shape == 'grid':
+            # Stack x and y into a single array of points
+            points = np.stack([x, y], axis=1)
+            
+            # Sort by x (left to right), then by y (bottom to top)
+            sorted_indices = np.lexsort((y, x))
+            sorted_points = points[sorted_indices]
+
+            # Unstack the sorted points
+            sorted_x = sorted_points[:, 0]
+            sorted_y = sorted_points[:, 1]
+
+        else:
+            sorted_x = x
+            sorted_y = y
+
+        return sorted_x, sorted_y
+
     def on_create_button_clicked(self):
         self.run_in_thread(self._on_create_button_clicked)
+        self.test_sampling_points_button.configure(state=NORMAL)
 
     def _on_create_button_clicked(self):
         selected_method = self.sampling_method_var.get()
         if selected_method == "Random":
             num_points = int(self.number_of_sampling_points_entry.get())
-            sampled_mask_image, x, y = self.edgedetector.generate_sampling_points(shape='random', num_points=num_points)
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='random', num_points=num_points)
+            
         elif selected_method == "Grid":
             row_number = int(self.row_number_entry.get())
             col_number = int(self.column_number_entry.get())
-            sampled_mask_image, x, y = self.edgedetector.generate_sampling_points(shape='grid', row_number=row_number, col_number=col_number)
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='grid', row_number=row_number, col_number=col_number)
+            self.sampling_position_x, self.sampling_position_y = self.optimize_the_sequence_of_sampling_points(self.sampling_position_x, self.sampling_position_y, shape='grid')
+
         elif selected_method == "Rings":
             num_points = int(self.number_of_sampling_points_entry.get())
             num_rings = int(self.rings_number_entry.get())
             interval = int(self.interval_entry.get())
-            sampled_mask_image, x, y = self.edgedetector.generate_sampling_points(shape='rings', num_points=num_points, num_rings=num_rings, interval=interval)
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='rings', num_points=num_points, num_rings=num_rings, interval=interval)
+            self.sampling_position_x, self.sampling_position_y = self.optimize_the_sequence_of_sampling_points(self.sampling_position_x, self.sampling_position_y, shape='rings')
 
         self.sampled_mask_image = sampled_mask_image
+        # resize the image to fit the canvas
+        self.sampled_mask_image = self.sampled_mask_image.resize((self.width, self.height), Image.LANCZOS)
         self.image_to_display = ImageTk.PhotoImage(self.sampled_mask_image)
         self.captured_image_label.configure(image=self.image_to_display)
         self.captured_image_label.image = self.image_to_display
         print("Sampling points generated")
 
     def capture_frame(self):
-        self.run_in_thread(self._capture_frame) 
-
+        self.run_in_thread(self._capture_frame)
+        self.captured_view = self.current_live_view
+        self.dispatch('update_captured_frame_center', self.captured_view)
 
     def _capture_frame(self):
         try:
-                self.captured_image = self.active_camera_thread.get_output_queue().get(timeout = 2)
+                self.captured_image = self.active_camera_thread.get_output_queue().get()
+                              
+                # resize the image to fit the canvas
                 print("Frame captured")
-                resized_image = self.captured_image.resize((self.width, self.height), Image.LANCZOS)
-                self.image_to_display = ImageTk.PhotoImage(resized_image)
+                self.image_to_display = ImageTk.PhotoImage(self.captured_image.resize((self.width, self.height), Image.LANCZOS))
                 self.captured_image_label.configure(image=self.image_to_display)
                 self.captured_image_label.configure(text="")
                 self.captured_image_label.image = self.image_to_display
+
+                # save the image with high resolution and no compression
+                self.captured_image.save('captured_image.png')  # Use a high-quality resampling filter for aliasing issues
+
                 self.edge_detection_point_button.configure(state=NORMAL)
 
         except queue.Empty:
             print("No frame available to capture")
         except Exception as e:
             print(f"Failed to capture frame: {e}")
+
+
+    def on_test_button_clicked(self):
+        sampling_position_x_centered = self.sampling_position_x - self.captured_image.size[0] / 2
+        sampling_position_y_centered = self.sampling_position_y - self.captured_image.size[1] / 2
+
+        # the pixel size to use for calculating the relative distance in physical space
+        if self.captured_view == 'OBJECTIVE':
+            x_pixel_size = self.x_pixel_size_objective_camera
+            y_pixel_size = self.y_pixel_size_objective_camera
+        elif self.captured_view == 'WIDEFIELD':
+            x_pixel_size = self.x_pixel_size_widefield_camera
+            y_pixel_size = self.y_pixel_size_widefield_camera
+        else:
+            raise ValueError("Unknown view")
+        # convert the pixel position to relative distance
+        x_distance = sampling_position_x_centered * x_pixel_size
+        y_distance = sampling_position_y_centered * y_pixel_size
+        relative_distance_to_camera_center = (x_distance, y_distance) # in um
+
+        view_to_inspect_in = self.current_live_view
+
+        self.dispatch('test_sampling_points', view_to_inspect_in, relative_distance_to_camera_center)
 
     def handle_switch_view(self, view):
         if view == 'TO_WIDE':
@@ -403,29 +476,28 @@ class LiveViewModule(Publisher, tk.Frame):
             self.camera_widget.flip = False
             self.dispatch('switch_view', 'TO_WIDE')
             self.live_frame.configure(text="Wide FOV")
-            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_SMALL'))
+            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_OBJECTIVE'))
+            self.current_live_view = 'WIDEFIELD'
 
-        elif view == 'TO_SMALL':
-            self.active_camera_thread = self.smallfield_camera_thread
+        elif view == 'TO_OBJECTIVE':
+            self.active_camera_thread = self.objective_field_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
             self.camera_widget.flip = True
-            self.dispatch('switch_view', 'TO_SMALL')
-            self.live_frame.configure(text="Small FOV")
+            self.dispatch('switch_view', 'TO_OBJECTIVE')
+            self.live_frame.configure(text="Objective FOV")
             self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_WIDE'))
-
-            
-
+            self.current_live_view = 'OBJECTIVE'
 
     def on_closing(self):
         print("Stopping image acquisition thread...")
         self.widefield_camera_thread.stop()
-        self.smallfield_camera_thread.stop()
+        self.objective_field_camera_thread.stop()
         self.widefield_camera_thread.join()
-        self.smallfield_camera_thread.join()
+        self.objective_field_camera_thread.join()
         self.widefield_camera.dispose()
-        self.smallfield_camera.dispose()
+        self.objective_field_camera.dispose()
 
-        self.sdk.dispose()
+        self.camera_manager.sdk.dispose()
         self.master.destroy()
 
 
