@@ -175,18 +175,25 @@ plt.xlabel("t-SNE Dimension 1")
 plt.ylabel("t-SNE Dimension 2")
 plt.savefig(f't-SNE Visualization of Embeddings by Patient ID threshold {threshold}.png')
 
-low_quality_spectra = {}
-
+######### save low quality spectra to json file #########
+##### Change the cluster number #####
+low_quality_spectra = []
 for i in range(4):
     cluster_data = metadata_df[metadata_df['Cluster'] == i]
-    # find unique patient id
-    unique_patient_id = cluster_data['patient_id'].unique()
-    # print all spectrum id of each patient id
-    for patient_id in unique_patient_id:
-        patient_data = cluster_data[cluster_data['patient_id'] == patient_id]
-        spectrum_id = patient_data['spectrum_id'].values
-        if len(spectrum_id) > 1:
-            low_quality_spectra[int(patient_id)] = spectrum_id.tolist()
+    # re index the cluster data
+    cluster_data = cluster_data.reset_index()
+    low_quality_spectra_for_this_cluster = {}
+    for j in range(len(cluster_data)):
+        patient_id = int(cluster_data['patient_id'][j])
+        sample_type = cluster_data['sample_type'][j]
+        spectrum_id = int(cluster_data['spectrum_id'][j])
+        if (patient_id, sample_type) not in low_quality_spectra_for_this_cluster:
+            low_quality_spectra_for_this_cluster[(patient_id, sample_type)] = []
+        low_quality_spectra_for_this_cluster[(patient_id, sample_type)].append(spectrum_id)
+
+    for key, value in low_quality_spectra_for_this_cluster.items():
+        if len(value) > 1:
+            low_quality_spectra.append([key[0], key[1], value])
 
 # save low quality spectra to json file
 with open('low_quality_spectra.json', 'w') as f:
