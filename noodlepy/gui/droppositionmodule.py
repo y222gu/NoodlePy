@@ -2,10 +2,14 @@ import numpy as np
 import time
 from tkinter import ttk
 from tkinter import DISABLED
-from noodlepy.gui.stagecontrolmodule import StageControlModule
+from noodlepy.gui.publisher_subscriber import Publisher
 
-class SampleGrid(ttk.Frame):
+class DropPositionModule(Publisher, ttk.Frame):
     def __init__(self, parent):
+        ttk.Frame.__init__(self, parent)
+        Publisher.__init__(self, ['test_drop_position'])
+        self.name = 'DropPositionModule_Publisher'
+
         self.parent = parent
         self.x_interval_label = ttk.Label(parent, text="X interval:")
         self.x_interval_label.grid(row=0, column=0, padx=5, pady=5)

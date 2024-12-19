@@ -24,9 +24,9 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.circle_black = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","circle-black.png")).resize((20, 20))
         self.nanodrive_icon = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","nanodrive_arrow_1.png")).resize((20, 20))
        
-        self.position_first_smaple = [154.02, 148.62, 30]
-        self.calibration_from_widefield_to_objective_x = -65.1 # calibrated on 11/21/2024
-        self.calibration_from_widefield_to_objective_y = -5.94 # calibrated on 11/21/2024
+        self.position_first_smaple = [162.48, 169.02, 30]
+        self.calibration_from_widefield_to_objective_x = -59.32 # calibrated on 12/16/2024
+        self.calibration_from_widefield_to_objective_y = -6 # calibrated on 12/16/2024
         self.small_step_size_mm = 0.06 #firmware seems to limit the smallest step size to 0.06 (60 um)
         self.medium_step_size_mm = 0.6
         self.large_step_size_mm = 6
@@ -68,13 +68,13 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         # Frame for register
         register_frame = ttk.Labelframe(top_frame, text="Register", padding=5)
         register_frame.grid(row=0, column=3, columnspan=3, sticky='nsew', padx=5, pady=5)
-        # self.register_first_smaple_button = ttk.Button(register_frame, text="Record XY as first sample", command = self.register_first_smaple, bootstyle ="info", width=22)
-        # self.register_first_smaple_button.grid(row=0, column=0, padx=5, pady=5)
+        self.register_first_smaple_button = ttk.Button(register_frame, text="Record XY as first sample", command = self.register_first_smaple, bootstyle ="info", width=22)
+        self.register_first_smaple_button.grid(row=0, column=0, padx=5, pady=5)
         self.register_lowest_point_button = ttk.Button(register_frame, text="Record Z as the lowest Z", command=self.register_lowest_point, bootstyle = "info", width=22)
         self.register_lowest_point_button.grid(row=1, column=0, padx=5, pady=5)
 
-        # self.remove_first_sample_button = ttk.Button(register_frame, text="x", command= self.remove_first_sample_registration,bootstyle="warning", state=DISABLED, width=2)
-        # self.remove_first_sample_button.grid(row=0, column=1, padx=5, pady=5)
+        self.remove_first_sample_button = ttk.Button(register_frame, text="x", command= self.remove_first_sample_registration,bootstyle="warning", state=DISABLED, width=2)
+        self.remove_first_sample_button.grid(row=0, column=1, padx=5, pady=5)
         self.remove_lowest_point_button = ttk.Button(register_frame, text="x", command= self.remove_lowest_point_registration,bootstyle="warning", state=DISABLED, width=2)
         self.remove_lowest_point_button.grid(row=1, column=1, padx=5, pady=5)
 
@@ -171,7 +171,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.img_up_nano = ImageTk.PhotoImage(self.nanodrive_icon.rotate(180))
         self.img_down_nano = ImageTk.PhotoImage(self.nanodrive_icon)
 
-
         ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.move_prusa("BACK SMALL"), bootstyle="light").grid(row=3, column=4, pady=3)
         ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.move_prusa("BACK MEDIUM"), bootstyle="secondary").grid(row=2, column=4, pady=3)
         ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.move_prusa("BACK LARGE"), bootstyle="dark").grid(row=1, column=4, pady=3)
@@ -192,6 +191,33 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.move_prusa("DOWN LARGE"), bootstyle="dark").grid(row=7, column=10, pady=3)
         ttk.Button(direction_frame, image=self.img_up_nano, command=lambda: self.move_nanodrive("UP"), bootstyle="light").grid(row=3, column=11)
         ttk.Button(direction_frame, image=self.img_down_nano, command=lambda: self.move_nanodrive("DOWN"), bootstyle="light").grid(row=5, column=11)
+
+        # Frame for test drop position
+        drop_position_frame = ttk.Labelframe(main_frame, text="Test Drop Position", padding=5)
+        drop_position_frame.grid(row=2, column=0, columnspan=6, sticky='nsew', padx=5, pady=5)
+        self.x_interval_label = ttk.Label(drop_position_frame, text="X interval:")
+        self.x_interval_label.grid(row=0, column=0, padx=5, pady=5)
+        self.y_interval_label = ttk.Label(drop_position_frame, text="Y interval:")
+        self.y_interval_label.grid(row=1, column=0, padx=5, pady=5)
+        self.x_number_label = ttk.Label(drop_position_frame, text="# in X:")
+        self.x_number_label.grid(row=0, column=2, padx=5, pady=5)
+        self.y_number_label = ttk.Label(drop_position_frame, text="# in Y:")
+        self.y_number_label.grid(row=1, column=2, padx=5, pady=5)
+        self.x_interval_entry = ttk.Entry(drop_position_frame, width=5)
+        self.x_interval_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.x_interval_entry.insert(0, "4.5")
+        self.y_interval_entry = ttk.Entry(drop_position_frame, width=5)
+        self.y_interval_entry.grid(row=1, column=1, padx=5, pady=5)
+        self.y_interval_entry.insert(0, "4.5")
+        self.x_number_entry = ttk.Entry(drop_position_frame, width=5)
+        self.x_number_entry.grid(row=0, column=3, padx=5, pady=5)
+        self.x_number_entry.insert(0, "5")
+        self.y_number_entry = ttk.Entry(drop_position_frame, width=5)
+        self.y_number_entry.grid(row=1, column=3, padx=5, pady=5)
+        self.y_number_entry.insert(0, "5")
+        self.test_sample_spot_button = ttk.Button(drop_position_frame, text="Test Sample Grid", command=self.test_sample_grid, bootstyle="info", state=DISABLED)
+        self.test_sample_spot_button.grid(row=0, column=4, rowspan=2, sticky='nsew', padx=5, pady=5)
+
 
     def run_in_thread(self, func, *args):
         thread = Thread(target=func, args=args, daemon=True)
@@ -444,14 +470,14 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             Z = line.split(' ')[2].split(':')[1]
             return Z
 
-    # def register_first_smaple(self):
-    #     self.position_first_smaple = self.get_current_prusa_position('XYZ')
-    #     self.register_first_smaple_button.configure(text="First Sample Registered")
-    #     self.register_first_smaple_button.configure(state=DISABLED)
-    #     self.remove_first_sample_button.configure(state=NORMAL)
-    #     self.go_to_first_sample_button.configure(state=NORMAL)
-    #     self.test_sample_spot_button.configure(state=NORMAL)
-    #     print("First sample registered")
+    def register_first_smaple(self):
+        self.position_first_smaple = self.get_current_prusa_position('XYZ')
+        self.register_first_smaple_button.configure(text="First Sample Registered")
+        self.register_first_smaple_button.configure(state=DISABLED)
+        self.remove_first_sample_button.configure(state=NORMAL)
+        self.go_to_first_sample_button.configure(state=NORMAL)
+        self.test_sample_spot_button.configure(state=NORMAL)
+        print("First sample registered")
 
     def register_lowest_point(self):
         current_position = self.get_current_prusa_position('XYZ')
@@ -462,15 +488,15 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.go_to_lowest_point_button.configure(state=NORMAL)
         print("Lowest Z registered")
 
-    # def remove_first_sample_registration(self):
-    #     self.position_first_smaple = None
-    #     print("Registration of the first sample removed")
-    #     self.remove_first_sample_button.configure(state=DISABLED)
-    #     self.register_first_smaple_button.configure(text="Record XY as first sample")
-    #     self.register_first_smaple_button.configure(state=NORMAL)
-    #     self.register_first_smaple_button.configure(bootstyle="info")
-    #     self.go_to_first_sample_button.configure(state=DISABLED)
-    #     self.test_sample_spot_button.configure(state=DISABLED)
+    def remove_first_sample_registration(self):
+        self.position_first_smaple = None
+        print("Registration of the first sample removed")
+        self.remove_first_sample_button.configure(state=DISABLED)
+        self.register_first_smaple_button.configure(text="Record XY as first sample")
+        self.register_first_smaple_button.configure(state=NORMAL)
+        self.register_first_smaple_button.configure(bootstyle="info")
+        self.go_to_first_sample_button.configure(state=DISABLED)
+        self.test_sample_spot_button.configure(state=DISABLED)
 
     def remove_lowest_point_registration(self):
         self.lowest_point = None
@@ -478,6 +504,48 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.remove_lowest_point_button.configure(state=DISABLED)
         self.register_lowest_point_button.configure(text ='Record Z as the lowest Z', state = NORMAL, bootstyle = 'info')
         self.go_to_lowest_point_button.configure(state=DISABLED)
+
+
+    def test_sample_grid(self):
+
+            if not self.x_interval_entry.get() or not self.y_interval_entry.get() or not self.x_number_entry.get() or not self.y_number_entry.get():
+                print("Please enter all the parameters")
+                return
+            
+            x_interval = self.x_interval_entry.get()
+            y_interval = self.y_interval_entry.get()
+            x_number = self.x_number_entry.get()
+            y_number = self.y_number_entry.get()
+
+            if self.position_first_smaple is None:
+                print("Please register the first sample first")
+                return
+
+            if x_interval and y_interval and x_number and y_number:
+                first_x = float(self.position_first_smaple[0])
+                first_y = float(self.position_first_smaple[1])
+                first_z = float(self.position_first_smaple[2])
+
+                x = np.linspace(first_x, first_x + float(x_interval) * (int(x_number) - 1), int(x_number))
+                y = np.linspace(first_y - float(y_interval) * (int(y_number) - 1), first_y, int(y_number))
+                xx, yy = np.meshgrid(x, y)
+                # make y descending order
+                yy = np.flip(yy, axis=0)
+                xx = xx.flatten(order='F')
+                yy = yy.flatten(order='F')
+                # make 
+                zz = np.ones(xx.size) * first_z
+
+                print(f"A grid containing {xx.size} points will be tested")
+            else:
+                print("Please enter all the parameters")
+            for i in range(xx.size):
+                self.go_to_xyz(x=xx[i], y=yy[i], z=zz[i])
+                print(f"Moving to {xx[i]}, {yy[i]}, {zz[i]}")
+                time.sleep(1)
+            print("Test completed")
+
+
 
     def handle_switch_view(self, view):
         if view == "TO_OBJECTIVE":
