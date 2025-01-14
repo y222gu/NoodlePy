@@ -148,6 +148,9 @@ class EdgeDetector():
                 sampling_x = np.concatenate([sampling_x, x_i_ring])
                 sampling_y = np.concatenate([sampling_y, y_i_ring])
 
+
+
+
         px = 1/plt.rcParams['figure.dpi']  # pixel in inches
         fig, ax = plt.subplots(figsize=(self.width*px, self.height*px))
         ax.imshow(self.image)

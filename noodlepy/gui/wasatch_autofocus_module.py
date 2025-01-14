@@ -544,14 +544,18 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.autofocus_range_low_var.set(float(self.autofocus_range_low_var.get()))
         self.autofocus_range_high_var.set(float(self.autofocus_range_high_var.get()))
 
+    def handle_get_nanodrive_position(self):
+        self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+
     def handle_move_nanodrive_by_request(self, distance):
         self.nano_drive.move_by(distance)
         # print("Moving nanodrive up by {distance} um")
-        self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+        self.handle_get_nanodrive_position()
 
     def handle_move_nanodrive_to_request(self, position):
         self.nano_drive.move_to(position) # starting from the lowest position
-        self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+        self.handle_get_nanodrive_position()
+
 
 if __name__ == "__main__":
     root = ttk.Window(themename="noodlepy")

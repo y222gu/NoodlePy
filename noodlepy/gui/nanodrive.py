@@ -31,6 +31,8 @@ class NanoDrive:
 
     def get_current_position(self):
         position = self.mcldll.MCL_SingleReadN(self.axis, self.handle)
+        # round to integer
+        position = round(position)
         return position
 
     def move_to(self, z_pos_um):

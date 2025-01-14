@@ -32,12 +32,19 @@ class AcquisitionGUI(ttk.Frame):
         live_view_frame.add_subscriber('switch_view', stage_control_frame, stage_control_frame.handle_switch_view)
         live_view_frame.add_subscriber('test_sampling_points', stage_control_frame, callback = stage_control_frame.handle_test_sampling_points)
         live_view_frame.add_subscriber('update_captured_frame_center', stage_control_frame, callback = stage_control_frame.handle_updated_captured_frame_center)
-
+        live_view_frame.add_subscriber('focus_widefield_camera', stage_control_frame, callback = stage_control_frame.handle_focus_widefield_camera)
+        live_view_frame.add_subscriber('focus_objective_camera', stage_control_frame, callback = stage_control_frame.handle_focus_objective_camera)
+        live_view_frame.add_subscriber('update_focus_score', stage_control_frame, callback = stage_control_frame.handle_update_focus_score)
+        stage_control_frame.add_subscriber('calculate_focus_score', live_view_frame, callback = live_view_frame.handle_calculate_focus_score)
+        stage_control_frame.add_subscriber('activate_camera_autofocus_button', live_view_frame, callback = live_view_frame.handle_activate_camera_autofocus_button)
+        stage_control_frame.add_subscriber('activate_switch_view_button', live_view_frame, callback = live_view_frame.handle_activate_switch_view_button)
+        
         wasatch_autofocus_frame = WasatchAutofocusModule(last_column)
         wasatch_autofocus_frame.grid(row=0, column=0, sticky="nsew")
         wasatch_autofocus_frame.add_subscriber('update_nanodrive_position', stage_control_frame, callback = stage_control_frame.handle_update_nanodrive_position)
         stage_control_frame.add_subscriber('move_nanodrive_by', wasatch_autofocus_frame, callback = wasatch_autofocus_frame.handle_move_nanodrive_by_request)
         stage_control_frame.add_subscriber('move_nanodrive_to', wasatch_autofocus_frame, callback = wasatch_autofocus_frame.handle_move_nanodrive_to_request)
+        stage_control_frame.add_subscriber('get_nanodrive_position', wasatch_autofocus_frame, callback = wasatch_autofocus_frame.handle_get_nanodrive_position)
 
         # sample_grid_frame = DropPositionModule(last_column)
         # sample_grid_frame.grid(row=1, column=0, sticky="nsew")

@@ -11,6 +11,8 @@ import os
 from threading import Thread
 from noodlepy.gui.publisher_subscriber import Publisher
 import time
+import cv2
+from skimage import filters
 
 try:
     from noodlepy.utils.windows_setup import configure_path
@@ -189,21 +191,22 @@ class CameraManger():
 class LiveViewModule(Publisher, tk.Frame):
     def __init__(self, parent):
         ttk.Frame.__init__(self, parent)  # Initialize ttk.Frame and Publisher
-        Publisher.__init__(self, ['switch_view', 'test_sampling_points', 'update_captured_frame_center'])
+        Publisher.__init__(self, ['switch_view', 'test_sampling_points', 'update_captured_frame_center', 'focus_widefield_camera', 'focus_objective_camera', 'update_focus_score'])
         self.name = 'LiveViewModule_publisher'
 
         # the canvas width and height that the image will be resized to
         self.width = 576 
         self.height = 432
 
-        # calibrated size in object plane per pixel on 11/20/2024
-        self.x_pixel_size_objective_camera = 0.311 #um
-        self.y_pixel_size_objective_camera = 0.319 #um
-        self.x_pixel_size_widefield_camera = 2.842 #um
-        self.y_pixel_size_widefield_camera = 2.842 #um
+        # calibrated size in object plane per pixel on 1/4/2025
+        self.x_pixel_size_objective_camera = 0.357 #um
+        self.y_pixel_size_objective_camera = 0.357 #um
+        self.x_pixel_size_widefield_camera = 2.967 #um
+        self.y_pixel_size_widefield_camera = 2.967 #um
 
         self.camera_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","camera_icon.png"))
         self.exchange_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","exchange_icon.png"))
+        self.focus_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","focus_icon.png"))
         self.camera_manager = CameraManger()
 
         self.objective_field_camera, self.objective_field_camera_thread = self.camera_manager.open_camera('14628')
@@ -218,11 +221,13 @@ class LiveViewModule(Publisher, tk.Frame):
         self.live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
 
         self.camera_widget = LiveCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height, refresh_rate=10, flip=False)
-        self.camera_widget.grid(row=0, column=0, columnspan=2, sticky='nsew')
-        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.handle_switch_view('TO_OBJECTIVE'), style='info')
+        self.camera_widget.grid(row=0, column=0, columnspan=3, sticky='nsew')
+        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.handle_switch_view('TO_OBJECTIVE'), style='info', state=DISABLED)
         self.switch_view_button.grid(row=1, column=0, columnspan=1, sticky='nsew', pady=5, padx=5)
+        self.camera_autofocus_button = ttk.Button(self.live_frame, image=self.focus_icon, command= self.focus_camera, style='info', state=DISABLED)
+        self.camera_autofocus_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
         capture_button = ttk.Button(self.live_frame, image=self.camera_icon, command= self.capture_frame, style='info')
-        capture_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
+        capture_button.grid(row=1, column=2, columnspan=1, sticky='nsew', pady=5, padx=5)
 
         capture_frame = ttk.Labelframe(self, text="Captured Frame", width=self.width, padding=5)
         capture_frame.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
@@ -295,7 +300,7 @@ class LiveViewModule(Publisher, tk.Frame):
 
     def load_icon(self, icon_path):
         icon = Image.open(icon_path)
-        icon = icon.resize((30, 30))
+        icon = icon.resize((40, 40))
         icon = ImageTk.PhotoImage(icon)
         return icon
 
@@ -469,6 +474,27 @@ class LiveViewModule(Publisher, tk.Frame):
 
         self.dispatch('test_sampling_points', view_to_inspect_in, relative_distance_to_camera_center)
 
+    def calculate_focus_score_of_current_image(self):
+        image = self.active_camera_thread.get_output_queue().get()
+        # convert the image to CV2 format
+        image = np.array(image)
+        ## Laplacian method
+        # focus_score = cv2.Laplacian(image, cv2.CV_64F).var()
+
+        # Sobel method
+        focus_score = filters.sobel(image).var()
+        return focus_score
+    
+    def handle_calculate_focus_score(self):
+        focus_score = self.calculate_focus_score_of_current_image()
+        self.dispatch('update_focus_score', focus_score)
+
+    def focus_camera(self):
+        if self.current_live_view == 'OBJECTIVE':
+            self.dispatch('focus_objective_camera')
+        elif self.current_live_view == 'WIDEFIELD':
+            self.dispatch('focus_widefield_camera')
+
     def handle_switch_view(self, view):
         if view == 'TO_WIDE':
             self.active_camera_thread = self.widefield_camera_thread
@@ -488,6 +514,7 @@ class LiveViewModule(Publisher, tk.Frame):
             self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_WIDE'))
             self.current_live_view = 'OBJECTIVE'
 
+
     def on_closing(self):
         print("Stopping image acquisition thread...")
         self.widefield_camera_thread.stop()
@@ -500,6 +527,12 @@ class LiveViewModule(Publisher, tk.Frame):
         self.camera_manager.sdk.dispose()
         self.master.destroy()
 
+
+    def handle_activate_camera_autofocus_button(self):
+        self.camera_autofocus_button.configure(state=NORMAL)
+
+    def handle_activate_switch_view_button(self):
+        self.switch_view_button.configure(state=NORMAL)
 
 if __name__ == "__main__":
     root = ttk.Window()
