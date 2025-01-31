@@ -1,3 +1,4 @@
+import itertools
 import numpy as np
 import matplotlib.pyplot as plt
 import ttkbootstrap as ttk
@@ -18,7 +19,7 @@ from PIL import Image, ImageTk
 
 class WasatchAutofocusModule(Publisher, ttk.Frame):
     def __init__(self, parent):
-        Publisher.__init__(self, ["update_nanodrive_position"])
+        Publisher.__init__(self, ["update_nanodrive_position", 'task_completed'])
         ttk.Frame.__init__(self, parent)
         self.name = "WasatchAutofocusModule"
 
@@ -400,7 +401,9 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.step_size = int(float(self.autofocus_step_size_var.get()))
         self.num_rep = int(float(self.autofocus_num_rep_var.get()))
 
-        self.z_axis_range = np.linspace(self.min, self.max, self.step_size)
+        # should only be integers
+        self.z_axis_range =  np.round(np.linspace(self.min, self.max, self.step_size))
+
         self.entropy_list, self.x1_data, self.y1_data = [], [], []
         self.current_step = 0
 
@@ -418,12 +421,17 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             # Move nano drive and get current position
             z_pos = self.z_axis_range[self.current_step]
             self.nano_drive.move_to(z_pos)
-            position = self.nano_drive.get_current_position()
+
+            while True:
+                position = self.nano_drive.get_current_position()
+                if position == z_pos:
+                    break
+            
             self.dispatch("update_nanodrive_position", position)
             self.x1_data.append(position)
 
             # Measure spectra in the background thread (self.num_rep reps)
-            wavelengths, intensities = self.measure_spectra(self.num_rep)
+            wavelength, wavelengths, intensities = self.measure_spectra(self.num_rep)
 
             # Calculate entropy and plot in main thread
             ent = self.calculate_entropy(intensities)
@@ -432,7 +440,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             avg_intensity = np.mean(intensities, 0)
 
             # Update plot in the main thread
-            self.after(0, self.plot_autofocus_data, self.x1_data, self.y1_data, wavelengths, avg_intensity)
+            self.after(0, self.plot_autofocus_data, self.x1_data, self.y1_data, wavelength, avg_intensity)
 
             # Proceed to the next step
             self.current_step += 1
@@ -442,7 +450,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.start_fine_autofocus(fineMin, fineMax, self.num_rep)
 
     def start_fine_autofocus(self, fineMin, fineMax, num_rep):
-        self.z_axis_range = np.linspace(fineMin, fineMax, 10)
+        self.z_axis_range =  np.round(np.linspace(fineMin, fineMax, 20))
         self.entropy_list, self.x2_data, self.y2_data = [], [], []
         self.current_step = 0
         self.num_rep = num_rep
@@ -455,12 +463,17 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         while self.current_step < len(self.z_axis_range):
             z_pos = self.z_axis_range[self.current_step]
             self.nano_drive.move_to(z_pos)
-            position = self.nano_drive.get_current_position()
+
+            while True:
+                position = self.nano_drive.get_current_position()
+                if position == z_pos:
+                    break
+
             self.dispatch("update_nanodrive_position", position)
             self.x2_data.append(position)
 
             # Measure spectra in the background thread
-            wavelengths, intensities = self.measure_spectra(self.num_rep)
+            wavelength, wavelengths, intensities = self.measure_spectra(self.num_rep)
 
             # Calculate entropy and plot in main thread
             ent = self.calculate_entropy(intensities)
@@ -469,7 +482,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             avg_intensity = np.mean(intensities, 0)
 
             # Update plot in the main thread
-            self.after(0, self.plot_autofocus_data, self.x2_data, self.y2_data, wavelengths, avg_intensity)
+            self.after(0, self.plot_autofocus_data, self.x2_data, self.y2_data, wavelength, avg_intensity)
 
             # Proceed to the next fine autofocus step
             self.current_step += 1
@@ -480,28 +493,37 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
         print("Focused Position =", focusedPos)
         print("Autofocus complete")
+        self.dispatch("task_completed")
 
     def measure_spectra(self, num_rep):
         print("Measuring spectra:", threading.current_thread().name)
         intensities = []
-        wavelengths = self.wasatch_manager.settings.wavelengths
+        wavelengths = []
+        wavelength = self.wasatch_manager.settings.wavelengths
+
         time.sleep(self.wasatch_manager.integ_time_ms / 1000.0)
-        for i in range(num_rep):
+        for i in range(int(num_rep)):
             spectrum = self.spectrum_queue.get()
+
             intensities.append(spectrum)
+            wavelengths.append(wavelength)
+
             time.sleep(self.wasatch_manager.integ_time_ms / 1000.0)
-        return wavelengths, intensities
+        return wavelength, wavelengths, intensities
 
     def calculate_entropy(self, intensities):
         median_intensities = np.median(intensities, 0)
-        normalized_int = median_intensities / np.sum(median_intensities)
+        epsilon = 1e-10
+        normalized_int = (median_intensities + epsilon) / (np.sum(median_intensities) + epsilon)
         entropy = -np.sum(normalized_int * np.log2(normalized_int))
         return entropy
 
     def refine_focus_range(self, entropy_list, z_axis_range):
         k = np.argmin(entropy_list)
-        fineMin = z_axis_range[np.clip(k - 1, 0, len(z_axis_range) - 1)]
-        fineMax = z_axis_range[np.clip(k + 1, 0, len(z_axis_range) - 1)]
+        padding = max(2, int(0.1 * len(z_axis_range)))  # 10% padding or at least 2 steps
+        fineMin = z_axis_range[np.clip(k - padding, 0, len(z_axis_range) - 1)]
+        fineMax = z_axis_range[np.clip(k + padding, 0, len(z_axis_range) - 1)]
+
         print("The fine range is:", fineMin, fineMax)
         return fineMin, fineMax
 
@@ -545,17 +567,37 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.autofocus_range_high_var.set(float(self.autofocus_range_high_var.get()))
 
     def handle_get_nanodrive_position(self):
-        self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
+        self.dispatch("update_nanodrive_position", np.round(self.nano_drive.get_current_position()))
+        return None
 
     def handle_move_nanodrive_by_request(self, distance):
         self.nano_drive.move_by(distance)
         # print("Moving nanodrive up by {distance} um")
         self.handle_get_nanodrive_position()
+        return None
 
     def handle_move_nanodrive_to_request(self, position):
         self.nano_drive.move_to(position) # starting from the lowest position
         self.handle_get_nanodrive_position()
+        return None
 
+    def handle_measure_spectra_and_save_to_specific_folder(self, num_rep, folder_path, filename):
+        wavelength, wavelengths, intensities = self.measure_spectra(num_rep)
+
+        # flatten the intensities
+        wavelengths_flatten = list(itertools.chain.from_iterable(wavelengths))
+        intensities_flatten = list(itertools.chain.from_iterable(intensities))
+
+        # Save the spectra to a file
+        with open(os.path.join(folder_path, filename + ".txt"), "w") as outfile:
+            for i in range(len(wavelengths_flatten)):
+                outfile.write(f"{wavelengths_flatten[i]:0.2f}, {intensities_flatten[i]}\n")
+        
+        self.dispatch("task_completed")
+        return None
+
+    def handle_get_nanodrive_min_max(self):
+        return self.nano_drive.min_position_um, self.nano_drive.max_position_um
 
 if __name__ == "__main__":
     root = ttk.Window(themename="noodlepy")

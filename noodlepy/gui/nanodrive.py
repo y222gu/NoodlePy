@@ -12,6 +12,8 @@ class NanoDrive:
         self.mcldll.MCL_ReleaseHandle.restype = None
         self.mcldll.MCL_SingleReadN.restype = c_double
         self.handle = self.mcldll.MCL_InitHandle()
+        self.max_position_um = 80
+        self.min_position_um = 0
         if self.handle == 0:
             raise RuntimeError("Failed to initialize MCL handle. Error code: 8")
         print("MCL Handle = ", self.handle)
@@ -39,7 +41,7 @@ class NanoDrive:
         if type(z_pos_um) != float:
             z_pos_um = float(z_pos_um)
         
-        z_pos_um = max(0, min(z_pos_um, 100)) # Ensure new_position stays within bounds [0, 100]um
+        z_pos_um = max(self.min_position_um, min(z_pos_um, self.max_position_um)) # Ensure new_position stays within bounds [0, 100]um
         pos = c_double(z_pos_um)
         error = self.mcldll.MCL_SingleWriteN(pos, self.axis, self.handle)
 
@@ -50,6 +52,7 @@ class NanoDrive:
         else:
             self.current_position_um = self.get_current_position()
             # print(f"Nanodrive moved to position: {self.current_position_um}.")
+            # print(f"Requested position: {z_pos_um}")
 
     def move_by(self, delta_z_um: float):
         # Get the current position
@@ -57,7 +60,7 @@ class NanoDrive:
      
         # Calculate the new position
         new_position_um = current_position_um + delta_z_um
-        new_position_um = max(0, min(new_position_um, 100)) # Ensure new_position stays within bounds [0, 100]
+        new_position_um = max(self.min_position_um, min(new_position_um, self.max_position_um)) # Ensure new_position stays within bounds [0, 100]
         new_position_c_double_um = c_double(new_position_um)
         
         time.sleep(0.025)

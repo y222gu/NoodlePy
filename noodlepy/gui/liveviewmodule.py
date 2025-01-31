@@ -6,7 +6,8 @@ import threading
 import queue
 import ttkbootstrap as ttk
 import numpy as np
-from noodlepy.gui.edgedetector import EdgeDetector
+from noodlepy.gui.edgedetectorSAM import EdgeDetectorSAM
+from noodlepy.gui.edgedetectorUnet import EdgeDetectorUnet
 import os
 from threading import Thread
 from noodlepy.gui.publisher_subscriber import Publisher
@@ -191,12 +192,20 @@ class CameraManger():
 class LiveViewModule(Publisher, tk.Frame):
     def __init__(self, parent):
         ttk.Frame.__init__(self, parent)  # Initialize ttk.Frame and Publisher
-        Publisher.__init__(self, ['switch_view', 'test_sampling_points', 'update_captured_frame_center', 'focus_widefield_camera', 'focus_objective_camera', 'update_focus_score'])
+        Publisher.__init__(self, ['switch_view', 
+                                  'test_all_sampling_points', 
+                                  'update_captured_frame_center', 
+                                  'focus_widefield_camera', 
+                                  'focus_objective_camera', 
+                                  'update_focus_score', 
+                                  'task_completed',
+                                  'abort_aquisition',
+                                  'update_sampling_points_to_protocol_module'])
+        
         self.name = 'LiveViewModule_publisher'
-
         # the canvas width and height that the image will be resized to
-        self.width = 576 
-        self.height = 432
+        self.width = 500 
+        self.height = 375
 
         # calibrated size in object plane per pixel on 1/4/2025
         self.x_pixel_size_objective_camera = 0.357 #um
@@ -222,7 +231,7 @@ class LiveViewModule(Publisher, tk.Frame):
 
         self.camera_widget = LiveCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height, refresh_rate=10, flip=False)
         self.camera_widget.grid(row=0, column=0, columnspan=3, sticky='nsew')
-        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.handle_switch_view('TO_OBJECTIVE'), style='info', state=DISABLED)
+        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.on_switch_view_button_clicked('TO_OBJECTIVE'), style='info', state=DISABLED)
         self.switch_view_button.grid(row=1, column=0, columnspan=1, sticky='nsew', pady=5, padx=5)
         self.camera_autofocus_button = ttk.Button(self.live_frame, image=self.focus_icon, command= self.focus_camera, style='info', state=DISABLED)
         self.camera_autofocus_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
@@ -240,18 +249,20 @@ class LiveViewModule(Publisher, tk.Frame):
         # selecting the sampling method
         self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='info')
         self.edge_detection_point_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
-        self.sampling_method_var = tk.StringVar()
-        self.sampling_method_var.set("Random")
         sampling_method_frame = ttk.Labelframe(capture_frame, text="Sampling Method", padding=5)
         sampling_method_frame.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
         sampling_method_frame.columnconfigure(0, weight=1)
         sampling_method_frame.columnconfigure(1, weight=1)
         sampling_method_frame.columnconfigure(2, weight=1)
-        self.random_radio = ttk.Radiobutton(sampling_method_frame, text="Random", variable=self.sampling_method_var, value="Random", command=lambda: self.on_sampling_method_selected('Random'), style='info', state=DISABLED)
+
+        self.sampling_method_var = tk.StringVar()
+        self.sampling_method_var.set("Random")
+
+        self.random_radio = ttk.Radiobutton(sampling_method_frame, text="Random", variable=self.sampling_method_var, value="Random", command=lambda: self.on_sampling_method_selected('Random'), style='info', state=NORMAL)
         self.random_radio.grid(row=0, column=0, sticky='nesw', padx=5, pady=5)
-        self.rings_radio = ttk.Radiobutton(sampling_method_frame, text="Rings", variable=self.sampling_method_var, value="Rings", command=lambda: self.on_sampling_method_selected('Rings'), style='info', state=DISABLED)
+        self.rings_radio = ttk.Radiobutton(sampling_method_frame, text="Rings", variable=self.sampling_method_var, value="Rings", command=lambda: self.on_sampling_method_selected('Rings'), style='info', state=NORMAL)
         self.rings_radio.grid(row=0, column=1, sticky='nesw', padx=5, pady=5)
-        self.grid_radio = ttk.Radiobutton(sampling_method_frame, text="Grid", variable=self.sampling_method_var, value="Grid", command=lambda: self.on_sampling_method_selected('Grid'), style='info', state=DISABLED)
+        self.grid_radio = ttk.Radiobutton(sampling_method_frame, text="Grid", variable=self.sampling_method_var, value="Grid", command=lambda: self.on_sampling_method_selected('Grid'), style='info', state=NORMAL)
         self.grid_radio.grid(row=0, column=2, sticky='nesw', padx=5, pady=5)
 
         self.create_sampling_profile_buttons= ttk.Button(sampling_method_frame, text="Create", command=self.on_create_button_clicked, state=DISABLED, style='info')
@@ -265,7 +276,6 @@ class LiveViewModule(Publisher, tk.Frame):
         self.number_of_sampling_points_entry = ttk.Entry(sampling_method_frame, width=5)
         self.number_of_sampling_points_entry.grid(row=2, column=0, sticky='ew', padx=5)
         self.number_of_sampling_points_entry.insert(0, "80")
-        self.number_of_sampling_points_entry.configure(state=DISABLED)
 
         # entry for the number of rings
         self.rings_number_label = ttk.Label(sampling_method_frame, text="# of Rings")
@@ -309,11 +319,9 @@ class LiveViewModule(Publisher, tk.Frame):
         thread.start()
 
     def edge_detection(self, detection_type):
-        self.run_in_thread(self._edge_detection, detection_type)
-
-    def _edge_detection(self, detection_type):
-        self.edgedetector = EdgeDetector(self.captured_image)
-
+        self.edgedetector = EdgeDetectorSAM(self.captured_image)
+        # self.edgedetector = EdgeDetectorUnet(self.captured_image)
+        
         if detection_type == "auto":
             masked_image = self.edgedetector.auto_mask_generate()
         elif detection_type == "point":
@@ -332,7 +340,6 @@ class LiveViewModule(Publisher, tk.Frame):
         self.random_radio.configure(state=NORMAL)
         self.rings_radio.configure(state=NORMAL)
         self.grid_radio.configure(state=NORMAL)
-        self.sampling_method_var.set("Random")
         self.number_of_sampling_points_entry.configure(state=NORMAL)
 
 
@@ -395,10 +402,6 @@ class LiveViewModule(Publisher, tk.Frame):
         return sorted_x, sorted_y
 
     def on_create_button_clicked(self):
-        self.run_in_thread(self._on_create_button_clicked)
-        self.test_sampling_points_button.configure(state=NORMAL)
-
-    def _on_create_button_clicked(self):
         selected_method = self.sampling_method_var.get()
         if selected_method == "Random":
             num_points = int(self.number_of_sampling_points_entry.get())
@@ -425,12 +428,11 @@ class LiveViewModule(Publisher, tk.Frame):
         self.captured_image_label.image = self.image_to_display
         print("Sampling points generated")
 
-    def capture_frame(self):
-        self.run_in_thread(self._capture_frame)
-        self.captured_view = self.current_live_view
-        self.dispatch('update_captured_frame_center', self.captured_view)
+        self.test_sampling_points_button.configure(state=NORMAL)
+        return True
 
-    def _capture_frame(self):
+
+    def capture_frame(self):
         try:
                 self.captured_image = self.active_camera_thread.get_output_queue().get()
                               
@@ -451,10 +453,26 @@ class LiveViewModule(Publisher, tk.Frame):
         except Exception as e:
             print(f"Failed to capture frame: {e}")
 
+        self.captured_view = self.current_live_view
+        self.dispatch('update_captured_frame_center', self.captured_view)
+        return True
 
-    def on_test_button_clicked(self):
-        sampling_position_x_centered = self.sampling_position_x - self.captured_image.size[0] / 2
-        sampling_position_y_centered = self.sampling_position_y - self.captured_image.size[1] / 2
+
+    def handling_create_sampling_points_during_aquisition(self):
+        self.capture_frame()
+        self.edge_detection('point')
+        self.on_create_button_clicked()
+
+        relative_distance_to_camera_center = self.convert_pixel_position_to_relative_distance(self.sampling_position_x, self.sampling_position_y)
+
+        self.dispatch('update_sampling_points_to_protocol_module', relative_distance_to_camera_center)
+        print("Dispatched the sampling points to the protocol module")
+        self.dispatch('task_completed')
+        return True
+
+    def convert_pixel_position_to_relative_distance(self, x, y):
+        x_centered = x - self.captured_image.size[0] / 2
+        y_centered = y - self.captured_image.size[1] / 2
 
         # the pixel size to use for calculating the relative distance in physical space
         if self.captured_view == 'OBJECTIVE':
@@ -466,13 +484,15 @@ class LiveViewModule(Publisher, tk.Frame):
         else:
             raise ValueError("Unknown view")
         # convert the pixel position to relative distance
-        x_distance = sampling_position_x_centered * x_pixel_size
-        y_distance = sampling_position_y_centered * y_pixel_size
-        relative_distance_to_camera_center = (x_distance, y_distance) # in um
+        x_distance = x_centered * x_pixel_size
+        y_distance = y_centered * y_pixel_size
+        return (x_distance, y_distance)
 
+
+    def on_test_button_clicked(self):
+        relative_distance_to_camera_center = self.convert_pixel_position_to_relative_distance(self.sampling_position_x, self.sampling_position_y)
         view_to_inspect_in = self.current_live_view
-
-        self.dispatch('test_sampling_points', view_to_inspect_in, relative_distance_to_camera_center)
+        self.dispatch('test_all_sampling_points', view_to_inspect_in, relative_distance_to_camera_center)
 
     def calculate_focus_score_of_current_image(self):
         image = self.active_camera_thread.get_output_queue().get()
@@ -488,6 +508,7 @@ class LiveViewModule(Publisher, tk.Frame):
     def handle_calculate_focus_score(self):
         focus_score = self.calculate_focus_score_of_current_image()
         self.dispatch('update_focus_score', focus_score)
+        return None
 
     def focus_camera(self):
         if self.current_live_view == 'OBJECTIVE':
@@ -495,14 +516,14 @@ class LiveViewModule(Publisher, tk.Frame):
         elif self.current_live_view == 'WIDEFIELD':
             self.dispatch('focus_widefield_camera')
 
-    def handle_switch_view(self, view):
+    def on_switch_view_button_clicked(self, view):
         if view == 'TO_WIDE':
             self.active_camera_thread = self.widefield_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
             self.camera_widget.flip = False
             self.dispatch('switch_view', 'TO_WIDE')
             self.live_frame.configure(text="Wide FOV")
-            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_OBJECTIVE'))
+            self.switch_view_button.configure(command= lambda: self.on_switch_view_button_clicked('TO_OBJECTIVE'))
             self.current_live_view = 'WIDEFIELD'
 
         elif view == 'TO_OBJECTIVE':
@@ -511,8 +532,10 @@ class LiveViewModule(Publisher, tk.Frame):
             self.camera_widget.flip = True
             self.dispatch('switch_view', 'TO_OBJECTIVE')
             self.live_frame.configure(text="Objective FOV")
-            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_WIDE'))
+            self.switch_view_button.configure(command= lambda: self.on_switch_view_button_clicked('TO_WIDE'))
             self.current_live_view = 'OBJECTIVE'
+
+        self.dispatch('task_completed')
 
 
     def on_closing(self):
@@ -530,9 +553,18 @@ class LiveViewModule(Publisher, tk.Frame):
 
     def handle_activate_camera_autofocus_button(self):
         self.camera_autofocus_button.configure(state=NORMAL)
+        return None
 
     def handle_activate_switch_view_button(self):
         self.switch_view_button.configure(state=NORMAL)
+        return None
+
+    def handle_check_current_camera_view(self, view_to_check):
+        if self.current_live_view == view_to_check:
+            self.dispatch('task_completed')
+        else:
+            self.dispatch('abort_aquisition')
+        return True
 
 if __name__ == "__main__":
     root = ttk.Window()
