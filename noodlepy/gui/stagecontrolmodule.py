@@ -24,7 +24,8 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                                   'activate_switch_view_button', 
                                   'activate_protocol_module_state',
                                   'get_nanodrive_min_max',
-                                  'task_completed'])
+                                  'task_completed',
+                                  'abort_aquisition'])
         Subscriber.__init__(self)
         self.name = 'StageControlModule_obserableobserver'
         self.parent = parent
@@ -54,18 +55,23 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
        
         self.safety_height = 20 # calibrated on 1/4/2025
         self.home_position = [145.54, 181.62, self.safety_height]
-        self.calibration_from_widefield_to_objective_x = -60.5 # calibrated on 1/13/2025
-        self.calibration_from_widefield_to_objective_y = -6.08 # calibrated on 1/13/2025
-        self.calibration_from_widefield_to_objective_z = - 0.9 #  in mm calibrated on 1/4/2025
+        self.calibration_from_widefield_to_objective_x = -60.38 # calibrated on 2/06/2025
+        self.calibration_from_widefield_to_objective_y = -5.9 # calibrated on 2/06/2025
+        self.calibration_from_widefield_to_objective_z = - 0.82 #  in mm calibrated on 1/4/2025
         self.initial_nanodrive_position = 50
         self.small_step_size_xy_mm = 0.06 #firmware seems to limit the smallest step size to 0.06 (60 um)
         self.medium_step_size_xy_mm = 0.5
         self.large_step_size_xy_mm = 4.5
-        self.small_step_size_z_mm = 0.01
+        self.small_step_size_z_mm = 0.02
         self.medium_step_size_z_mm = 0.1
         self.large_step_size_z_mm = 1
         self.nanodrive_step_size_um = 1
 
+        self.prusa_fine_focus_step_number = 20 # in objective view
+        self.prusa_rough_focus_step_number = 20 # in widefield view
+        self.nanodrive_movement_stabilization_time = 1.5
+        self.prusa_movement_stabilization_time = 3
+        self.prusa_rough_fine_focus_overlap_step_number = 4 # the actual number of steps to overlap between rough and fine focus is double this number
         self.focus_upper_limit = None
         self.focus_lower_limit = None
         self.focus_score_at_current_z_position = None
@@ -168,7 +174,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
         # Speed slider
         self.slider_value = StringVar()
-        self.slider_value.set(1000)
+        self.slider_value.set(3000)
         self.speed_slider = ttk.Scale(
             movement_frame,
             from_=10,
@@ -240,50 +246,46 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
         self.xy_position_label = ttk.Label(register_focus_range_frame, text="(X, Y) [mm]")
         self.xy_position_label.grid(row=0, column=1, padx=5, pady=5)
-        self.focus_lower_limit_label = ttk.Label(register_focus_range_frame, text="Z Lower Limit[mm]")
+        self.focus_lower_limit_label = ttk.Label(register_focus_range_frame, text="Z Range[mm]")
         self.focus_lower_limit_label.grid(row=0, column=2, padx=5, pady=5)
-        self.focus_upper_limit_label = ttk.Label(register_focus_range_frame, text="Z Upper Limit[mm]")
-        self.focus_upper_limit_label.grid(row=0, column=3, padx=5, pady=5)
 
         self.point_1_button = ttk.Button(register_focus_range_frame, text="Point 1", command=lambda: self.register_focus_range("P1"), bootstyle="info_outline", state=DISABLED)
         self.point_1_button.grid(row=1, column=0, padx=5, pady=5)
         self.point_1_position_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
         self.point_1_position_label.grid(row=1, column=1, padx=5, pady=5)
-        self.point_1_focus_lower_limit_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_1_focus_lower_limit_label.grid(row=1, column=2, padx=5, pady=5)
-        self.point_1_focus_upper_limit_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_1_focus_upper_limit_label.grid(row=1, column=3, padx=5, pady=5)
+        self.point_1_focus_range_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
+        self.point_1_focus_range_label.grid(row=1, column=2, padx=5, pady=5)
 
         self.point_2_button = ttk.Button(register_focus_range_frame, text="Point 2", command=lambda: self.register_focus_range("P2"), bootstyle="info_outline", state=DISABLED)
         self.point_2_button.grid(row=2, column=0, padx=5, pady=5)
         self.point_2_position_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
         self.point_2_position_label.grid(row=2, column=1, padx=5, pady=5)
-        self.point_2_focus_lower_limit_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_2_focus_lower_limit_label.grid(row=2, column=2, padx=5, pady=5)
-        self.point_2_focus_upper_limit_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_2_focus_upper_limit_label.grid(row=2, column=3, padx=5, pady=5)
+        self.point_2_focus_range_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
+        self.point_2_focus_range_label.grid(row=2, column=2, padx=5, pady=5)
 
         self.point_3_button = ttk.Button(register_focus_range_frame, text="Point 3",  command=lambda: self.register_focus_range("P3"), bootstyle="info_outline", state=DISABLED)
         self.point_3_button.grid(row=3, column=0, padx=5, pady=5)
         self.point_3_position_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
         self.point_3_position_label.grid(row=3, column=1, padx=5, pady=5)
-        self.point_3_focus_lower_limit_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_3_focus_lower_limit_label.grid(row=3, column=2, padx=5, pady=5)
-        self.point_3_focus_upper_limit_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_3_focus_upper_limit_label.grid(row=3, column=3, padx=5, pady=5)
-
-        self.focus_step_number_label = ttk.Label(register_focus_range_frame, text="Focus with # steps")
-        self.focus_step_number_label.grid(row=4, column=0, padx=5, pady=5)
-        self.focus_step_number_entry = ttk.Entry(register_focus_range_frame, width=5)
-        self.focus_step_number_entry.grid(row=4, column=1, padx=5, pady=5)
-        self.focus_step_number_entry.insert(0, "20")
-        self.focus_step_number_entry.config(state=DISABLED)
+        self.point_3_focus_range_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
+        self.point_3_focus_range_label.grid(row=3, column=2, padx=5, pady=5)
 
         self.interpolate_button = ttk.Button(register_focus_range_frame, text="Interpolate", command=self.interpolate_prusa_focus_range, bootstyle="info_outline", state=DISABLED)
         self.interpolate_button.grid(row=4, column=2, columnspan=2, sticky='nesw', padx=5, pady=5)
     
     def run_in_thread(self, func, *args):
         thread = Thread(target=func, args=args, daemon=True)
+        thread.start()
+
+    def run_in_thread_with_callback(self, func, callback, *args):
+        def wrapper():
+            # Execute the target function and store the result
+            result = func(*args)
+            # Pass the result to the callback function
+            callback(result)
+
+        # Run the wrapper function in a separate thread
+        thread = Thread(target=wrapper, daemon=True)
         thread.start()
 
     def prusa_go_to_home_position(self):
@@ -447,7 +449,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             self.sample_drop_panel_canvas.configure(state=NORMAL)
             self.sample_drop_panel_activate_circles()
             self.sample_drop_panel_tooltip.configure(state=NORMAL)
-            self.focus_step_number_entry.configure(state=NORMAL)
             self.go_button.configure(state=NORMAL)
             self.update_position_button.configure(state=NORMAL)
             self.dispatch('activate_switch_view_button')
@@ -575,7 +576,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.sample_drop_panel_calculate_circle_pursa_coordinates()
         print("Home position updated")
 
-
     def handle_switch_view(self, view):
         if view == "TO_OBJECTIVE":
             # send g code to move the stage to the right
@@ -586,8 +586,8 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         elif view == "TO_WIDE":
             # send g code to move the stage to the left
             print("Switching to wide view")
-            self.prusa_go_by_xyz(x=-self.calibration_from_widefield_to_objective_x, y=-self.calibration_from_widefield_to_objective_y)
             self.prusa_go_by_xyz(z=-self.calibration_from_widefield_to_objective_z)
+            self.prusa_go_by_xyz(x=-self.calibration_from_widefield_to_objective_x, y=-self.calibration_from_widefield_to_objective_y)
         else:
             print("Error Happened", view)
 
@@ -604,8 +604,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.current_nanodrive_position = nanodrive_position
         self.current_nanodrive_z_entry.config(text=nanodrive_position)
         return None
-
-
 
     def handle_test_sampling_points(self, view_to_inspect_in, relative_distance_for_sampling_points):
         # Display a confirmation dialog
@@ -641,7 +639,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         else:
             raise ValueError("The center of the frame is not captured yet")
         
-    def handle_move_to_a_single_sampling_point(self, view_to_inspect_in, relative_distance_for_sampling_point):
+    def handle_move_to_a_single_sampling_point_during_acquisition(self, view_to_inspect_in, relative_distance_for_sampling_point):
         sampling_position_x, sampling_position_y = self.calculate_sampling_point_position_in_absolute_coordinate(view_to_inspect_in, relative_distance_for_sampling_point)
         self.prusa_go_to_xyz(x=sampling_position_x, y=sampling_position_y)
         
@@ -700,7 +698,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         return None
 
 
-    def handle_move_stage_to_target_sample_drop_during_aquisition_in_widefield_view(self, sample_drop_row_column):
+    def handle_move_stage_to_target_sample_drop_in_widefield_view_during_aquisition(self, sample_drop_row_column):
         # get current position of the stage
         current_x = float(self.get_current_prusa_position('XYZ')[0])
         current_y = float(self.get_current_prusa_position('XYZ')[1])
@@ -731,14 +729,13 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.dispatch('task_completed')
         return None
 
-
-    def handle_reposition_stage_and_nanodrive_in_objective_view(self):
+    def handle_reposition_stage_and_nanodrive_in_objective_view_during_acquisition(self):
         # move the stage to the best focus position in widefield view
         self.prusa_go_to_xyz(z=self.best_prusa_focus_position_widefield)
 
         # check if the stage is at the target position
         while True:
-            current_position = self.get_current_prusa_position('XYZ')
+            current_position = self.get_current_prusa_position('Z')
             if current_position == self.best_prusa_focus_position_widefield:
                 break
 
@@ -748,11 +745,10 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         return True
 
     def handle_focus_widefield_camera(self):
-        print("Focusing the widefield camera")
         self.run_in_thread(self._handle_focus_widefield_camera)
-        return True
 
     def _handle_focus_widefield_camera(self):
+        print("Focusing the widefield camera")
         # move nanodrive to the middle position
         self.dispatch('move_nanodrive_to', self.initial_nanodrive_position)
 
@@ -767,146 +763,158 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         current_x = float(self.get_current_prusa_position('XYZ')[0])
         current_y = float(self.get_current_prusa_position('XYZ')[1])
         lower_limit, upper_limit = self.calculate_focus_range_at_position(current_x, current_y)
-        focus_step_number = self.focus_step_number_entry.get()
-
-        focus_score = []
-        self.focus_score_at_current_z_position = None
     
         if upper_limit and lower_limit:
-            z_range = np.linspace(float(upper_limit), float(lower_limit), int(focus_step_number))
-            # round up the z range to 2 decimal places
-            z_range = np.round(z_range, 2)
-
-            print(f"z range: {z_range}")
-            for z in z_range:
-                self.prusa_go_to_xyz(z=z)
-
-                # wait until the stage position is at the target position
-                while True:
-                    current_z_position = float(self.get_current_prusa_position('Z'))
-                    if current_z_position == z:
-                        break
-
-                # wait until the robot is stable
-                time.sleep(4)
-
-                self.dispatch('calculate_focus_score')
-
-                # wait until the score is different from the previous one
-                while True:
-                    if self.focus_score_at_current_z_position:
-                        #check if the focus score is different from the previous one except the first one
-                        if len(focus_score) > 0:
-                            if self.focus_score_at_current_z_position != focus_score[-1]:
-                                break
-                        else:
-                            break
-
-                
-                focus_score.append(self.focus_score_at_current_z_position)
-
-            # find the best focus position
-            self.best_prusa_focus_position_widefield = z_range[np.argmax(focus_score)]
-            self.prusa_go_to_xyz(z=self.best_prusa_focus_position_widefield)
-
-            print(f'focus score at each z position: {focus_score}')
-            print(f"The best focus position is {self.best_prusa_focus_position_widefield}, with the focus score of {max(focus_score)}")
-            self.dispatch('task_completed')
-
+            self.best_prusa_focus_position_widefield, self.best_prusa_focus_position_widefield_refine_min, self.best_prusa_focus_position_widefield_refine_max = self.focus_prusa(lower_limit, upper_limit, self.prusa_rough_focus_step_number)
+            print(f"Best focus position for widefield camera: {self.best_prusa_focus_position_widefield}")
+            return True
         else:
             print("Please interpolate the focus range first")
+            return False
+        
+    def focus_prusa(self, lower_limit, upper_limit, step_number):
+        focus_score = []
+        self.focus_score_at_current_z_position = None
 
+        z_range = np.linspace(float(upper_limit), float(lower_limit), int(step_number))
+        # round up the z range to 2 decimal places
+        z_range = np.round(z_range, 2)
 
+        print(f"Focusing prusa in z range: {z_range}")
+        for z in z_range:
+            self.prusa_go_to_xyz(z=z)
 
+            # wait until the stage position is at the target position
+            while True:
+                current_z_position = float(self.get_current_prusa_position('Z'))
+                if current_z_position == z:
+                    break
 
-    def handle_focus_objective_camera(self):
-        print("Focusing the objective camera")
-        self.run_in_thread(self._handle_focus_objective_camera)
-        return None
+            # wait until the robot is stable
+            time.sleep(self.prusa_movement_stabilization_time)
 
-    def _handle_focus_objective_camera(self):
+            self.dispatch('calculate_focus_score')
 
-        if self.best_prusa_focus_position_widefield:
+            # wait until the score is different from the previous one
+            while True:
+                if self.focus_score_at_current_z_position:
+                    if len(focus_score) > 0:
+                        if self.focus_score_at_current_z_position != focus_score[-1]:
+                            break
+                    else:
+                        break
 
-            # move nanodrive to the middle position
-            self.dispatch('move_nanodrive_to', self.initial_nanodrive_position)
+            focus_score.append(self.focus_score_at_current_z_position)
+
+        best_prusa_focus_position, best_prusa_focus_refine_min, best_prusa_focus_refine_max= self.refine_focus_range(focus_score, z_range, self.prusa_rough_fine_focus_overlap_step_number)
+
+        self.prusa_go_to_xyz(z=best_prusa_focus_position)
+        time.sleep(self.prusa_movement_stabilization_time)
+
+        print(f'focus score at each z position: {focus_score}')
+        print(f"The best focus position for prusa is {best_prusa_focus_position}, with the focus score of {max(focus_score)}")
+        return best_prusa_focus_position, best_prusa_focus_refine_min, best_prusa_focus_refine_max
+    
+    def focus_nanodrive(self, lower_limit, upper_limit, step_number):
+        # focus with nanodrive
+        nanodrive_z_range = np.linspace(lower_limit, upper_limit, step_number)
+        print(f"z range: {nanodrive_z_range}")
+        # round up the z range to 2 decimal places
+        nanodrive_z_range = np.round(nanodrive_z_range)
+        print(f"z range after rounding: {nanodrive_z_range}")
+        focus_score = []
+        self.focus_score_at_current_z_position = None
+
+        for z in nanodrive_z_range:
+            self.dispatch('move_nanodrive_to', z)
 
             # wait until the nanodrive position is at the target position
             while True:
                 current_nanodrive_position = self.get_nanodrive_position()
-                print(f"current nanodrive position: {current_nanodrive_position}")
-                print(f"target nanodrive position: {self.initial_nanodrive_position}")
+                if current_nanodrive_position == z:
+                    break
+
+            # wait until the robot is stable
+            time.sleep(self.nanodrive_movement_stabilization_time)
+
+            self.dispatch('calculate_focus_score')
+
+            # wait until the score is different from the previous one
+            while True:
+                if self.focus_score_at_current_z_position:
+                    #check if the focus score is different from the previous one except the first one
+                    if len(focus_score) > 0:
+                        if self.focus_score_at_current_z_position != focus_score[-1]:
+                            break
+                    else:
+                        break
+
+            focus_score.append(self.focus_score_at_current_z_position)
+
+        # find the best focus position
+        best_nanodrive_focus_position_objective = nanodrive_z_range[np.argmax(focus_score)]
+        self.dispatch('move_nanodrive_to', best_nanodrive_focus_position_objective)
+
+        print(f'focus score at each z position: {focus_score}')
+        print(f"The best focus position is {best_nanodrive_focus_position_objective}, with the focus score of {max(focus_score)}")
+        return best_nanodrive_focus_position_objective
+
+
+    def refine_focus_range(self, focus_score, z_axis_range, overlap_step_number):
+        k = np.argmax(focus_score)
+        fineMin = z_axis_range[max(k - overlap_step_number, 0)]
+        fineMax = z_axis_range[min(k + overlap_step_number, len(z_axis_range) - 1)]
+        print("Refined focus range for Prusa:", fineMin, fineMax)
+        best_focus_position = z_axis_range[k]
+        return best_focus_position, fineMin, fineMax
+
+    def handle_focus_widefield_camera_during_acquisition(self):
+        def on_focus_complete(result):
+            if result:
+                self.dispatch('task_completed')
+            else:
+                self.dispatch('abort_aquisition')
+        self.run_in_thread_with_callback(self._handle_focus_widefield_camera, on_focus_complete)
+
+    def handle_focus_objective_camera(self):
+        self.run_in_thread(self._handle_focus_objective_camera)
+
+    def _handle_focus_objective_camera(self):
+        print("Focusing the objective camera")
+        if self.best_prusa_focus_position_widefield_refine_max and self.best_prusa_focus_position_widefield_refine_min:
+
+            # re-position nanodrive before refining the prusa focus position
+            self.dispatch('move_nanodrive_to', self.initial_nanodrive_position)
+            while True:
+                current_nanodrive_position = self.get_nanodrive_position()
                 if current_nanodrive_position == self.initial_nanodrive_position:
                     break
 
-            self.initial_prusa_focus_position_objective = round(self.best_prusa_focus_position_widefield + self.calibration_from_widefield_to_objective_z, 2)
-            print(f"best prusa focus position widefield: {self.best_prusa_focus_position_widefield}")
+            # calculate the refined prusa focus range in the objective view
+            print('Refining the prusa focus position in the objective camera')
             print(f"focus plane offset widefield to objective: {self.calibration_from_widefield_to_objective_z}")
-            print(f"initial prusa focus position objective: {self.initial_prusa_focus_position_objective}")
+            prusa_focus_position_objective_refine_max = round(self.best_prusa_focus_position_widefield_refine_max + self.calibration_from_widefield_to_objective_z, 2)
+            prusa_focus_position_objective_refine_min = round(self.best_prusa_focus_position_widefield_refine_min + self.calibration_from_widefield_to_objective_z, 2)
+            print(f"Refined focus range for objective camera: {prusa_focus_position_objective_refine_min} - {prusa_focus_position_objective_refine_max}")
 
-            # move prusa to the best focus position
-            self.prusa_go_to_xyz(z=self.initial_prusa_focus_position_objective)
-
-            # wait until the stage position is at the target position
-            while True:
-                current_prusa_position = float(self.get_current_prusa_position('Z'))
-                # print('inside the while loop for checking the prusa position')
-                # print(f"current prusa position: {current_prusa_position}")
-                # print(f"target prusa position: {self.initial_prusa_focus_position_objective}")
-                if current_prusa_position == self.initial_prusa_focus_position_objective:
-                    break
-
-            # fine focus with nanodrive
-            nanodrive_z_range = np.linspace(self.nanodrive_min, self.nanodrive_max,30)
-            print(f"z range: {nanodrive_z_range}")
-            # round up the z range to 2 decimal places
-            nanodrive_z_range = np.round(nanodrive_z_range)
-            print(f"z range after rounding: {nanodrive_z_range}")
-            focus_score = []
-            self.focus_score_at_current_z_position = None
-
-            for z in nanodrive_z_range:
-                self.dispatch('move_nanodrive_to', z)
-
-                # wait until the nanodrive position is at the target position
-                while True:
-                    current_nanodrive_position = self.get_nanodrive_position()
-                    print(f"current nanodrive position: {current_nanodrive_position}")
-                    print(f"target nanodrive position: {z}")
-                    if current_nanodrive_position == z:
-                        break
-
-                # wait until the robot is stable
-                time.sleep(1.5)
-
-                self.dispatch('calculate_focus_score')
-
-                # wait until the score is different from the previous one
-                while True:
-                    if self.focus_score_at_current_z_position:
-                        print('inside the while loop for checking the focus score')
-                        print(f"focus score at current z position: {self.focus_score_at_current_z_position}")
-                        print(f"focus score at the previous z position: {focus_score}")
-                        #check if the focus score is different from the previous one except the first one
-                        if len(focus_score) > 0:
-                            if self.focus_score_at_current_z_position != focus_score[-1]:
-                                break
-                        else:
-                            break
-
-                focus_score.append(self.focus_score_at_current_z_position)
-
-            # find the best focus position
-            self.best_nanodrive_focus_position_objective = nanodrive_z_range[np.argmax(focus_score)]
-            self.dispatch('move_nanodrive_to', self.best_nanodrive_focus_position_objective)
-
-            print(f'focus score at each z position: {focus_score}')
-            print(f"The best focus position is {self.best_nanodrive_focus_position_objective}, with the focus score of {max(focus_score)}")
-            self.dispatch('task_completed')
-
+            # fine the best focus position in the objective view with the refined range
+            self.best_prusa_focus_position_objective, _, _ = self.focus_prusa(prusa_focus_position_objective_refine_min, prusa_focus_position_objective_refine_max, self.prusa_fine_focus_step_number)
+            # update the best focus position in the widefield view
+            self.best_prusa_focus_position_widefield = round(self.best_prusa_focus_position_objective - self.calibration_from_widefield_to_objective_z, 2)
+            return True
         else:
             print("Please focus the widefield camera first")
+            return False
 
+    def handle_focus_objective_camera_during_acquisition(self):
+        def on_focus_complete(result):
+            if result:
+                self.dispatch('task_completed')
+            else:
+                self.dispatch('abort_aquisition')
+
+        # Call the thread-running function, passing the callback
+        self.run_in_thread_with_callback(self._handle_focus_objective_camera, on_focus_complete)
 
 
     def handle_update_focus_score(self, focus_score):
@@ -937,13 +945,11 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                 self.lower_limit_p1, self.upper_limit_p1 = float(lower), float(upper)
                 self.focus_p1 = [float(position[0]), float(position[1]), float(position[2])]
                 # Update the labels
-                self.point_1_focus_lower_limit_label.config(text=f"{self.lower_limit_p1}")
-                self.point_1_focus_upper_limit_label.config(text=f"{self.upper_limit_p1}")
+                self.point_1_focus_range_label.config(text=f"{self.lower_limit_p1}-{self.upper_limit_p1}")
                 self.point_1_position_label.config(text=f"{self.focus_p1}")
                 self.point_1_button.configure(bootstyle='info')
             else:
-                self.point_1_focus_lower_limit_label.config(text="N/A")
-                self.point_1_focus_upper_limit_label.config(text="N/A")
+                self.point_1_focus_range_label.config(text="N/A")
                 self.point_1_position_label.config(text="N/A")
                 self.point_1_button.configure(bootstyle='info_outline')
 
@@ -952,13 +958,11 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                 self.lower_limit_p2, self.upper_limit_p2 = float(lower), float(upper)
                 self.focus_p2 = [float(position[0]), float(position[1]), float(position[2])]
                 # Update the labels
-                self.point_2_focus_lower_limit_label.config(text=f"{self.lower_limit_p2}")
-                self.point_2_focus_upper_limit_label.config(text=f"{self.upper_limit_p2}")
+                self.point_2_focus_range_label.config(text=f"{self.lower_limit_p2}-{self.upper_limit_p2}")
                 self.point_2_position_label.config(text=f"{self.focus_p2}")
                 self.point_2_button.configure(bootstyle='info')
             else:
-                self.point_2_focus_lower_limit_label.config(text="N/A")
-                self.point_2_focus_upper_limit_label.config(text="N/A")
+                self.point_2_focus_range_label.config(text="N/A")
                 self.point_2_position_label.config(text="N/A")
                 self.point_2_button.configure(bootstyle='info_outline')
 
@@ -967,13 +971,11 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                 self.lower_limit_p3, self.upper_limit_p3 = float(lower), float(upper)
                 self.focus_p3 = [float(position[0]), float(position[1]), float(position[2])]
                 # Update the labels
-                self.point_3_focus_lower_limit_label.config(text=f"{self.lower_limit_p3}")
-                self.point_3_focus_upper_limit_label.config(text=f"{self.upper_limit_p3}")
+                self.point_3_focus_range_label.config(text=f"{self.lower_limit_p3}-{self.upper_limit_p3}")
                 self.point_3_position_label.config(text=f"{self.focus_p3}")
                 self.point_3_button.configure(bootstyle='info')
             else:
-                self.point_3_focus_lower_limit_label.config(text="N/A")
-                self.point_3_focus_upper_limit_label.config(text="N/A")
+                self.point_3_focus_range_label.config(text="N/A")
                 self.point_3_position_label.config(text="N/A")
                 self.point_3_button.configure(bootstyle='info_outline')
 

@@ -27,9 +27,23 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.initial_laser_power_mW = 450
         self.image_height = 300
         self.image_width = 600
+        self.laser_power_spinbox_increment = 20
+
+        self.LASER_POWER_SPINBOX_LOWER_LIMIT = 0 # fixed 
+        self.LASER_POWER_SPINBOX_UPPER_LIMIT = 450 # fixed
+
+        self.integ_time_spinbox_lower_limit = 100
+        self.integ_time_spinbox_upper_limit = 100000
+        self.integ_time_spinbox_increment = 5
+
+        self.nanodrive_movement_stabilization_time = 1.5 # seconds
+
         self.keep_refreshing_live_spectrum = False
         self.units = "wavelength"
         self.nano_drive = NanoDrive()
+        self.create_live_spectrum_widgets()  
+        self.create_widgets_for_autofocus()
+
         self.spectrum_queue = queue.Queue()
         self.wasatch_manager = WasatchManager(self.initial_integ_time_ms, self.initial_laser_power_mW)
         if self.wasatch_manager.connect():
@@ -38,8 +52,6 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         else:
             logging.error('Failed to connect to Wasatch spectrometer. Check connection')
 
-        self.create_live_spectrum_widgets()  
-        self.create_widgets_for_autofocus()
 
     def create_live_spectrum_widgets(self):
         play_icon = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","play_icon.png")).resize((55, 55))
@@ -54,7 +66,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.laser_power_label.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
         self.laser_power_var = StringVar()
         self.laser_power_var.set(self.initial_laser_power_mW)
-        self.laser_power_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.laser_power_var, from_=0, to=450, increment=20, width=5, justify='center')
+        self.laser_power_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.laser_power_var, from_=self.LASER_POWER_SPINBOX_LOWER_LIMIT, to=self.LASER_POWER_SPINBOX_UPPER_LIMIT, increment=self.laser_power_spinbox_increment, width=5, justify='center')
         self.laser_power_spinbox.grid(row=2, column=0, sticky='ew', pady=5, padx=5)
         self.laser_power_spinbox.bind("<FocusOut>", self.update_wasatch_settings)
         self.laser_power_spinbox.bind("<Return>", self.update_wasatch_settings)
@@ -63,7 +75,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.integ_time_label.grid(row=1, column=1, sticky='nsew', pady=5, padx=5)
         self.integ_time_var = StringVar()
         self.integ_time_var.set(self.initial_integ_time_ms)
-        self.integ_time_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.integ_time_var, from_=100, to=10000, increment=5, width=5, justify='center')
+        self.integ_time_spinbox = ttk.Spinbox(self.spectrum_frame, textvariable=self.integ_time_var, from_=self.integ_time_spinbox_lower_limit, to=self.integ_time_spinbox_upper_limit, increment=self.integ_time_spinbox_increment, width=5, justify='center')
         self.integ_time_spinbox.grid(row=2, column=1, sticky='ew', pady=5, padx=5)
         self.integ_time_spinbox.bind("<FocusOut>", self.update_wasatch_settings)
         self.integ_time_spinbox.bind("<Return>", self.update_wasatch_settings)
@@ -124,52 +136,52 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.nanodrive_frame = ttk.Labelframe(self, text='Auto Focus', padding=5)
         self.nanodrive_frame.grid(row=1, column=0, columnspan=5, sticky="nsew", padx=5, pady=5)
 
-        self.autofocus_fig, self.entropy_ax, self.intensity_ax = self.initialize_autofocus_figure()
-        self.autofocus_canvas = FigureCanvasTkAgg(self.autofocus_fig, master=self.nanodrive_frame)
-        self.autofocus_canvas.draw()
-        self.autofocus_canvas.get_tk_widget().grid(row=0, column=0, columnspan=5, rowspan=2, sticky="nsew", padx=5, pady=5)
+        self.wasatch_autofocus_fig, self.entropy_ax, self.intensity_ax = self.initialize_wasatch_autofocus_figure()
+        self.wasatch_autofocus_canvas = FigureCanvasTkAgg(self.wasatch_autofocus_fig, master=self.nanodrive_frame)
+        self.wasatch_autofocus_canvas.draw()
+        self.wasatch_autofocus_canvas.get_tk_widget().grid(row=0, column=0, columnspan=5, rowspan=2, sticky="nsew", padx=5, pady=5)
 
         # create initial values for autofocus parameters
-        self.autofocus_step_size_var = StringVar()
-        self.autofocus_step_size_var.set(10)
-        self.autofocus_num_rep_var = StringVar()
-        self.autofocus_num_rep_var.set(3)
-        self.autofocus_range_low_var = StringVar()
-        self.autofocus_range_low_var.set(0)
-        self.autofocus_range_high_var = StringVar()
-        self.autofocus_range_high_var.set(100)
+        self.wasatch_autofocus_step_num_var = StringVar()
+        self.wasatch_autofocus_step_num_var.set(10)
+        self.wasatch_autofocus_num_rep_var = StringVar()
+        self.wasatch_autofocus_num_rep_var.set(3)
+        self.wasatch_autofocus_range_low_var = StringVar()
+        self.wasatch_autofocus_range_low_var.set(0)
+        self.wasatch_autofocus_range_high_var = StringVar()
+        self.wasatch_autofocus_range_high_var.set(80)
         
         # Create the entries for the autofocus parameters
-        self.autofocus_step_size_label = ttk.Label(self.nanodrive_frame, text="Number of Steps")
-        self.autofocus_step_size_label.grid(row=2, column=0, pady=5, padx=5)
-        self.autofocus_step_size_entry = ttk.Entry(self.nanodrive_frame, width=5, textvariable=self.autofocus_step_size_var)
-        self.autofocus_step_size_entry.grid(row=2, column=1, padx=5, pady=5)
-        self.autofocus_step_size_entry.bind("<FocusOut>", self.update_wasatch_settings)
-        self.autofocus_step_size_entry.bind("<Return>", self.update_wasatch_settings)
+        self.wasatch_autofocus_step_num_label = ttk.Label(self.nanodrive_frame, text="Number of Steps")
+        self.wasatch_autofocus_step_num_label.grid(row=2, column=0, pady=5, padx=5)
+        self.wasatch_autofocus_step_num_entry = ttk.Entry(self.nanodrive_frame, width=5, textvariable=self.wasatch_autofocus_step_num_var)
+        self.wasatch_autofocus_step_num_entry.grid(row=2, column=1, padx=5, pady=5)
+        self.wasatch_autofocus_step_num_entry.bind("<FocusOut>", self.update_wasatch_settings)
+        self.wasatch_autofocus_step_num_entry.bind("<Return>", self.update_wasatch_settings)
 
-        self.autofocus_num_rep_label = ttk.Label(self.nanodrive_frame, text="Number of Reps")
-        self.autofocus_num_rep_label.grid(row=2, column=2, pady=5, padx=5)
-        self.autofocus_num_rep_entry = ttk.Entry(self.nanodrive_frame, width=5, textvariable=self.autofocus_num_rep_var)
-        self.autofocus_num_rep_entry.grid(row=2, column=3, padx=5, pady=5)
-        self.autofocus_num_rep_entry.bind("<FocusOut>", self.update_wasatch_settings)
-        self.autofocus_num_rep_entry.bind("<Return>", self.update_wasatch_settings)
+        self.wasatch_autofocus_rep_num_label = ttk.Label(self.nanodrive_frame, text="Number of Reps")
+        self.wasatch_autofocus_rep_num_label.grid(row=2, column=2, pady=5, padx=5)
+        self.wasatch_autofocus_rep_num_entry = ttk.Entry(self.nanodrive_frame, width=5, textvariable=self.wasatch_autofocus_num_rep_var)
+        self.wasatch_autofocus_rep_num_entry.grid(row=2, column=3, padx=5, pady=5)
+        self.wasatch_autofocus_rep_num_entry.bind("<FocusOut>", self.update_wasatch_settings)
+        self.wasatch_autofocus_rep_num_entry.bind("<Return>", self.update_wasatch_settings)
     
-        self.autofocus_range_label = ttk.Label(self.nanodrive_frame, text="Z Min [um]")
-        self.autofocus_range_label.grid(row=3, column=0,pady=5, padx=5)
-        self.autofocus_range_low_entry = ttk.Entry(self.nanodrive_frame, width=5, textvariable=self.autofocus_range_low_var)
-        self.autofocus_range_low_entry.grid(row=3, column=1, padx=5, pady=5)
-        self.autofocus_range_low_entry.bind("<FocusOut>", self.update_wasatch_settings)
-        self.autofocus_range_low_entry.bind("<Return>", self.update_wasatch_settings)
+        self.wasatch_autofocus_range_label = ttk.Label(self.nanodrive_frame, text="Z Min [um]")
+        self.wasatch_autofocus_range_label.grid(row=3, column=0,pady=5, padx=5)
+        self.wasatch_autofocus_range_low_spinbox = ttk.Spinbox(self.nanodrive_frame, from_=self.nano_drive.min_position_um, to=self.nano_drive.max_position_um, increment=1, textvariable=self.wasatch_autofocus_range_low_var, width=5)
+        self.wasatch_autofocus_range_low_spinbox.grid(row=3, column=1, padx=5, pady=5)
+        self.wasatch_autofocus_range_low_spinbox.bind("<FocusOut>", self.update_wasatch_settings)
+        self.wasatch_autofocus_range_low_spinbox.bind("<Return>", self.update_wasatch_settings)
 
-        self.autofocus_range_label = ttk.Label(self.nanodrive_frame, text="Z Max [um]")
-        self.autofocus_range_label.grid(row=3, column=2,pady=5, padx=5)
-        self.autofocus_range_low_entry = ttk.Entry(self.nanodrive_frame, width=5, textvariable=self.autofocus_range_high_var)
-        self.autofocus_range_low_entry.grid(row=3, column=3, padx=5, pady=5)
-        self.autofocus_range_low_entry.bind("<FocusOut>", self.update_wasatch_settings)
-        self.autofocus_range_low_entry.bind("<Return>", self.update_wasatch_settings)
+        self.wasatch_autofocus_range_label = ttk.Label(self.nanodrive_frame, text="Z Max [um]")
+        self.wasatch_autofocus_range_label.grid(row=3, column=2,pady=5, padx=5)
+        self.wasatch_autofocus_range_high_spinbox = ttk.Spinbox(self.nanodrive_frame, from_=self.nano_drive.min_position_um, to=self.nano_drive.max_position_um, increment=1, textvariable=self.wasatch_autofocus_range_high_var, width=5)
+        self.wasatch_autofocus_range_high_spinbox.grid(row=3, column=3, padx=5, pady=5)
+        self.wasatch_autofocus_range_high_spinbox.bind("<FocusOut>", self.update_wasatch_settings)
+        self.wasatch_autofocus_range_high_spinbox.bind("<Return>", self.update_wasatch_settings)
 
-        self.autofocus_button = ttk.Button(self.nanodrive_frame, text="Focus", command=self.start_autofocus, bootstyle="info", width=5)
-        self.autofocus_button.grid(row=2, column=4, rowspan=2, padx=5, pady=5, sticky="news")
+        self.wasatch_autofocus_button = ttk.Button(self.nanodrive_frame, text="Focus", command=self.start_autofocus, bootstyle="info", width=5)
+        self.wasatch_autofocus_button.grid(row=2, column=4, rowspan=2, padx=5, pady=5, sticky="news")
 
     def start_to_play_live_spectrum(self):
         self.keep_refreshing_live_spectrum = True
@@ -180,7 +192,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.keep_refreshing_live_spectrum = False
         self.play_button.config(image=self.play_icon, command=self.start_to_play_live_spectrum, bootstyle ='dark')
 
-    def initialize_autofocus_figure(self):
+    def initialize_wasatch_autofocus_figure(self):
                 # Create the figure and axes
         fig, axes = plt.subplots(1, 2, figsize=(8, 4))
 
@@ -193,7 +205,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
 
         intensity_ax.set_xlabel('Z-axis position', fontsize=6, color='white')
         intensity_ax.set_ylabel('Intensity', fontsize=6, color='white')
-        intensity_ax.set_title('Spectrum', fontsize=8, color='white')
+        intensity_ax.set_title('Average Spectrum at Current Position', fontsize=8, color='white')
 
         for ax in entropy_ax, intensity_ax:
             ax.tick_params(axis='both', which='major', labelsize=6)
@@ -391,32 +403,19 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
     def start_autofocus(self):
         # Stop the live spectrum and set up parameters
         self.stop_to_play_live_spectrum()
-        # self.autofocus_button.configure(state=DISABLED)
-        # self.capture_button.configure(state=DISABLED)
-        # self.ref_polystyrene_button.configure(state=DISABLED)
-        # self.play_button.configure(state=DISABLED)
-
-        self.min = float(self.autofocus_range_low_var.get())
-        self.max = float(self.autofocus_range_high_var.get())
-        self.step_size = int(float(self.autofocus_step_size_var.get()))
-        self.num_rep = int(float(self.autofocus_num_rep_var.get()))
-
-        # should only be integers
-        self.z_axis_range =  np.round(np.linspace(self.min, self.max, self.step_size))
-
-        self.entropy_list, self.x1_data, self.y1_data = [], [], []
-        self.current_step = 0
-
-        # Create a single worker thread for the autofocus steps
         self.autofocus_worker_thread = threading.Thread(target=self.perform_rough_autofocus_step)
         self.autofocus_worker_thread.start()
 
-        # self.autofocus_button.configure(state=NORMAL)
-        # self.capture_button.configure(state=NORMAL)
-        # self.ref_polystyrene_button.configure(state=NORMAL)
-        # self.play_button.configure(state=NORMAL)
-
     def perform_rough_autofocus_step(self):
+        print("Starting rough autofocus for Wasatch")
+        self.min = float(self.wasatch_autofocus_range_low_var.get())
+        self.max = float(self.wasatch_autofocus_range_high_var.get())
+        self.num_step = int(float(self.wasatch_autofocus_step_num_var.get()))
+        self.num_rep = int(float(self.wasatch_autofocus_num_rep_var.get()))
+        self.z_axis_range =  np.round(np.linspace(self.min, self.max, self.num_step))
+        self.x1_data, self.y1_data = [], []
+        self.current_step = 0
+
         while self.current_step < len(self.z_axis_range):
             # Move nano drive and get current position
             z_pos = self.z_axis_range[self.current_step]
@@ -427,17 +426,16 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
                 if position == z_pos:
                     break
             
+            time.sleep(self.nanodrive_movement_stabilization_time)
             self.dispatch("update_nanodrive_position", position)
-            self.x1_data.append(position)
 
             # Measure spectra in the background thread (self.num_rep reps)
             wavelength, wavelengths, intensities = self.measure_spectra(self.num_rep)
-
-            # Calculate entropy and plot in main thread
-            ent = self.calculate_entropy(intensities)
-            self.entropy_list.append(ent)
-            self.y1_data.append(ent)
             avg_intensity = np.mean(intensities, 0)
+
+            ent = self.calculate_entropy(avg_intensity)
+            self.x1_data.append(position)
+            self.y1_data.append(ent)
 
             # Update plot in the main thread
             self.after(0, self.plot_autofocus_data, self.x1_data, self.y1_data, wavelength, avg_intensity)
@@ -446,20 +444,19 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             self.current_step += 1
 
         # Once done with rough autofocus, proceed to fine autofocus
-        fineMin, fineMax = self.refine_focus_range(self.entropy_list, self.z_axis_range)
-        self.start_fine_autofocus(fineMin, fineMax, self.num_rep)
+        fineMin, fineMax = self.refine_focus_range(self.y1_data, self.z_axis_range)
+        fine_focus = self.start_fine_autofocus(fineMin, fineMax, self.num_rep)
+        if fine_focus:
+            print("Autofocus complete")
+            return True
 
     def start_fine_autofocus(self, fineMin, fineMax, num_rep):
+        print("Starting fine autofocus for Wasatch")
         self.z_axis_range =  np.round(np.linspace(fineMin, fineMax, 20))
-        self.entropy_list, self.x2_data, self.y2_data = [], [], []
+        self.x2_data, self.y2_data = [], []
         self.current_step = 0
         self.num_rep = num_rep
 
-        # Reuse the worker thread for fine autofocus steps
-        self.autofocus_worker_thread = threading.Thread(target=self.perform_fine_autofocus_step)
-        self.autofocus_worker_thread.start()
-
-    def perform_fine_autofocus_step(self):
         while self.current_step < len(self.z_axis_range):
             z_pos = self.z_axis_range[self.current_step]
             self.nano_drive.move_to(z_pos)
@@ -470,16 +467,15 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
                     break
 
             self.dispatch("update_nanodrive_position", position)
-            self.x2_data.append(position)
+            time.sleep(self.nanodrive_movement_stabilization_time)
 
             # Measure spectra in the background thread
             wavelength, wavelengths, intensities = self.measure_spectra(self.num_rep)
-
-            # Calculate entropy and plot in main thread
-            ent = self.calculate_entropy(intensities)
-            self.entropy_list.append(ent)
-            self.y2_data.append(ent)
             avg_intensity = np.mean(intensities, 0)
+
+            ent = self.calculate_entropy(avg_intensity)
+            self.x2_data.append(position)
+            self.y2_data.append(ent)
 
             # Update plot in the main thread
             self.after(0, self.plot_autofocus_data, self.x2_data, self.y2_data, wavelength, avg_intensity)
@@ -488,12 +484,36 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             self.current_step += 1
 
         # After fine autofocus, finalize focus position
-        focusedPos = self.z_axis_range[np.argmin(self.entropy_list)]
+        focusedPos = self.z_axis_range[np.argmin(self.y2_data)]
         self.nano_drive.move_to(focusedPos)
+        time.sleep(self.nanodrive_movement_stabilization_time)
         self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
         print("Focused Position =", focusedPos)
-        print("Autofocus complete")
-        self.dispatch("task_completed")
+        print("Fine focusing complete")
+        return True
+
+    def handle_autofocus_wasatch_during_aquisition(self):
+        def on_focus_complete(result):
+            if result:
+                self.dispatch('task_completed')
+            else:
+                self.dispatch('abort_aquisition')
+
+        # Call the thread-running function, passing the callback
+        self.stop_to_play_live_spectrum()
+        self.run_in_thread_with_callback(self.perform_rough_autofocus_step, on_focus_complete)
+
+
+    def run_in_thread_with_callback(self, func, callback, *args):
+        def wrapper():
+            # Execute the target function and store the result
+            result = func(*args)
+            # Pass the result to the callback function
+            callback(result)
+
+        # Run the wrapper function in a separate thread
+        thread = Thread(target=wrapper, daemon=True)
+        thread.start()
 
     def measure_spectra(self, num_rep):
         print("Measuring spectra:", threading.current_thread().name)
@@ -501,29 +521,23 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         wavelengths = []
         wavelength = self.wasatch_manager.settings.wavelengths
 
-        time.sleep(self.wasatch_manager.integ_time_ms / 1000.0)
         for i in range(int(num_rep)):
             spectrum = self.spectrum_queue.get()
 
             intensities.append(spectrum)
             wavelengths.append(wavelength)
 
-            time.sleep(self.wasatch_manager.integ_time_ms / 1000.0)
         return wavelength, wavelengths, intensities
 
     def calculate_entropy(self, intensities):
-        median_intensities = np.median(intensities, 0)
-        epsilon = 1e-10
-        normalized_int = (median_intensities + epsilon) / (np.sum(median_intensities) + epsilon)
+        normalized_int = intensities / np.sum(intensities)
         entropy = -np.sum(normalized_int * np.log2(normalized_int))
         return entropy
 
     def refine_focus_range(self, entropy_list, z_axis_range):
         k = np.argmin(entropy_list)
-        padding = max(2, int(0.1 * len(z_axis_range)))  # 10% padding or at least 2 steps
-        fineMin = z_axis_range[np.clip(k - padding, 0, len(z_axis_range) - 1)]
-        fineMax = z_axis_range[np.clip(k + padding, 0, len(z_axis_range) - 1)]
-
+        fineMin = z_axis_range[max(k - 1, 0)]
+        fineMax = z_axis_range[min(k + 1, len(z_axis_range) - 1)]
         print("The fine range is:", fineMin, fineMax)
         return fineMin, fineMax
 
@@ -556,15 +570,15 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.intensity_ax.plot(wavelengths, intensities, color='#5bc0de')
         self.intensity_ax.lines[0].set_linewidth(0.5)
 
-        self.autofocus_canvas.draw_idle()
-        self.autofocus_canvas.flush_events()  # Process any pending events for real-time updates
+        self.wasatch_autofocus_canvas.draw_idle()
+        self.wasatch_autofocus_canvas.flush_events()  # Process any pending events for real-time updates
         self.update_idletasks()
 
     def update_nanodrive_settings(self, event):
-        self.autofocus_step_size_var.set(float(self.autofocus_step_size_var.get()))
-        self.autofocus_num_rep_var.set(int(self.autofocus_num_rep_var.get()))
-        self.autofocus_range_low_var.set(float(self.autofocus_range_low_var.get()))
-        self.autofocus_range_high_var.set(float(self.autofocus_range_high_var.get()))
+        self.wasatch_autofocus_step_num_var.set(float(self.wasatch_autofocus_step_num_var.get()))
+        self.wasatch_autofocus_num_rep_var.set(int(self.wasatch_autofocus_num_rep_var.get()))
+        self.wasatch_autofocus_range_low_var.set(float(self.wasatch_autofocus_range_low_var.get()))
+        self.wasatch_autofocus_range_high_var.set(float(self.wasatch_autofocus_range_high_var.get()))
 
     def handle_get_nanodrive_position(self):
         self.dispatch("update_nanodrive_position", np.round(self.nano_drive.get_current_position()))

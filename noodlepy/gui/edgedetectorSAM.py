@@ -139,9 +139,10 @@ class EdgeDetectorSAM():
             num_points = kwargs['num_points']
             num_rings = kwargs['num_rings']
             interval = kwargs['interval']
+            offset_from_the_edge = kwargs['offset_from_the_edge']
             sampling_x, sampling_y = np.array([]), np.array([])
             for i_ring in range(num_rings):
-                erosion_size = interval*i_ring
+                erosion_size = interval*i_ring + offset_from_the_edge
                 edge_coords = self.find_edge_of_eroded_mask(mask, erosion_size=erosion_size, erosion_shape=cv.MORPH_RECT)
                 indices = np.linspace(0, len(edge_coords) - 1, num_points).astype(int)
                 y_i_ring, x_i_ring = edge_coords[indices].T

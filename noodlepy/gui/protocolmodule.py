@@ -103,12 +103,7 @@ class ProtocolModule(Publisher, ttk.Frame):
             return
         
         print("Executing protocol")
-        # for each sample drop call aquisit_a_single_sample
-        for sample_drop_row_column in self.selected_circle_positions:
-            self.measure_single_sample(sample_drop_row_column)
-
-    def measure_single_sample(self, sample_drop_row_column):
-        self.current_task_generator = self.task_sequence_generator(sample_drop_row_column)
+        self.current_task_generator = self.task_sequence_generator(self.selected_circle_positions)
         self.enqueue_next_task()
 
     def enqueue_next_task(self):
@@ -119,71 +114,42 @@ class ProtocolModule(Publisher, ttk.Frame):
             print("All tasks for the current sample drop are completed.")
             self.current_task_generator = None
 
+    def task_sequence_generator(self, selected_circle_positions):
+        for sample_drop_row_column in selected_circle_positions:
+            print('Measuring the sample drop at row', sample_drop_row_column[0], 'column', sample_drop_row_column[1])
+            yield ('check_current_camera_view', "WIDEFIELD")
+            yield ("move_stage_to_target_sample_drop_during_aquisition", sample_drop_row_column)
 
-    # def measure_single_sample(self, sample_drop_row_column):
-    #     # Enqueue tasks sequentially
-    #     self.enqueue_task('check_current_camera_view', "WIDEFIELD")
+            if self.autofocus_widefield_var.get() == "True":
+                yield ("focus_widefield_camera",)
 
-    #     self.enqueue_task("move_stage_to_target_sample_drop_during_aquisition", sample_drop_row_column)
+            yield ("capture_current_image_and_detect_sample_drop_and_create_sampling_points",)
+            yield ("call_switch_view_button_in_live_camera_module", "TO_OBJECTIVE")
+            yield ("check_current_camera_view", "OBJECTIVE")
 
-    #     if self.autofocus_widefield_var.get() == "True":
-    #         self.enqueue_task("focus_widefield_camera")
+            print("Sampling points relative to camera center:", self.sampling_points_relative_distance_to_camera_center)
+            for i, point in enumerate(self.sampling_points_relative_distance_to_camera_center):
+                print(f"Measuring #{i} point at position {point}")
+                yield ("move_to_a_single_sampling_point", 'OBJECTIVE', point)
 
-    #     print("Before capture_current_image_and_detect_sample_drop_and_create_sampling_points")
-    #     print(self.sampling_points_relative_distance_to_camera_center)
+                if self.autofocus_objective_var.get() == "True":
+                    yield ("focus_objective_camera",)
 
-    #     self.enqueue_task("capture_current_image_and_detect_sample_drop_and_create_sampling_points")
+                if self.autofocus_wasatch_var.get() == "True":
+                    yield ("focus_wasatch",)
 
-    #     self.enqueue_task("call_switch_view_button_in_live_camera_module", "TO_OBJECTIVE")
+                subfolder = f"sample_drop_row{sample_drop_row_column[0]}_column{sample_drop_row_column[1]}"
+                folder = os.path.join(self.folder_path.get(), subfolder)
+                if not os.path.exists(folder):
+                    os.makedirs(folder)
+                filename = f"{self.file_base_name.get()}_sample_drop_row{sample_drop_row_column[0]}_column{sample_drop_row_column[1]}_point_x{point[0]}_y{point[1]}"
+                yield ("measure_spectra_and_save_to_specific_folder", self.number_of_samples.get(), folder, filename)
+                print(f"Data saved to {folder}/{filename}")
 
-    #     self.enqueue_task("check_current_camera_view", "OBJECTIVE")
-
-        
-    #     for point in self.sampling_points_relative_distance_to_camera_center:
-            
-    #         self.enqueue_task("move_to_a_single_sampling_point", 'OBJECTIVE', point)
-
-    #         if self.autofocus_objective_var.get() == "True":
-    #             self.enqueue_task("focus_objective_camera")
-
-    #         if self.autofocus_wasatch_var.get() == "True":
-    #             self.enqueue_task("focus_wasatch")
-
-    #         filename = f"{self.file_base_name.get()}_sample_drop_row{sample_drop_row_column[0]}_column{sample_drop_row_column[1]}_point_x{point[0]}_y{point[1]}"
-    #         self.enqueue_task("measure_spectra_and_save_to_specific_folder", self.number_of_samples.get(), self.folder_path.get(), filename)
-
-    #     self.enqueue_task("reposition_stage_and_nanodrive_in_objective_view")
-
-    #     self.enqueue_task("call_switch_view_button_in_live_camera_module", "TO_WIDE")
-
-    #     self.enqueue_task("check_current_camera_view", "WIDEFIELD")
-
-    def task_sequence_generator(self, sample_drop_row_column):
-        yield ('check_current_camera_view', "WIDEFIELD")
-        yield ("move_stage_to_target_sample_drop_during_aquisition", sample_drop_row_column)
-
-        if self.autofocus_widefield_var.get() == "True":
-            yield ("focus_widefield_camera",)
-
-        yield ("capture_current_image_and_detect_sample_drop_and_create_sampling_points",)
-        yield ("call_switch_view_button_in_live_camera_module", "TO_OBJECTIVE")
-        yield ("check_current_camera_view", "OBJECTIVE")
-
-        for point in self.sampling_points_relative_distance_to_camera_center:
-            yield ("move_to_a_single_sampling_point", 'OBJECTIVE', point)
-
-            if self.autofocus_objective_var.get() == "True":
-                yield ("focus_objective_camera",)
-
-            if self.autofocus_wasatch_var.get() == "True":
-                yield ("focus_wasatch",)
-
-            filename = f"{self.file_base_name.get()}_sample_drop_row{sample_drop_row_column[0]}_column{sample_drop_row_column[1]}_point_x{point[0]}_y{point[1]}"
-            yield ("measure_spectra_and_save_to_specific_folder", self.number_of_samples.get(), self.folder_path.get(), filename)
-
-        yield ("reposition_stage_and_nanodrive_in_objective_view",)
-        yield ("call_switch_view_button_in_live_camera_module", "TO_WIDE")
-        yield ("check_current_camera_view", "WIDEFIELD")
+            print("All points for the current sample drop are completed.")
+            yield ("reposition_stage_and_nanodrive_in_objective_view",)
+            yield ("call_switch_view_button_in_live_camera_module", "TO_WIDE")
+            yield ("check_current_camera_view", "WIDEFIELD")
 
     def handle_task_completed(self):
         self.state = "TASK_COMPLETED"
