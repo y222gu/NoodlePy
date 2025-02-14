@@ -15,7 +15,7 @@ data = []
 preprocessor = SpectrumPreprocessor(cropping=True,
                                         baseline_correction=True,
                                         remove_cosmic_rays= True,
-                                        normalization=False,
+                                        normalization=True,
                                         smoothing=True)
 
 for file in files:
@@ -51,7 +51,7 @@ for file in files:
         # load them as a Spectrum object
         spectrum_object = Spectrum(wavelength_nm=wavelength_nm, intensity=intensity)
         spectrum_object = preprocessor.preprocess(spectrum_object)
-        spectrum_object.display()
+        # spectrum_object.display()
         preprocessed_wavelength_nm = spectrum_object.wavelength_nm
         preprocessed_intensity = spectrum_object.intensity
 

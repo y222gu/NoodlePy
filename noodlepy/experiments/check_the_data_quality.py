@@ -10,3 +10,6 @@ def calculate_snr(data):
         snr[i] = np.mean(data[i, 1000:2000]) / np.std(data[i, 1000:2000])
     return snr
 
+if __name__ == '__main__':
+    # Load the data
+    print("Loading the data...")

@@ -10,6 +10,14 @@ import copy
 import numpy as np
 import matplotlib.pyplot as plt
 import random
+
+# perform hierarchical clustering
+from scipy.cluster.hierarchy import dendrogram, linkage, cut_tree
+from scipy.spatial.distance import pdist
+from sklearn.manifold import TSNE
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 class HNC_Dataset(Dataset):
     def __init__(self, data_folder = None,
                  annotation_file_path = None,
@@ -79,8 +87,11 @@ class HNC_Dataset(Dataset):
         augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
 
-        # cropped_spectrum = copy.deepcopy(chosen_spectrum)        
-        # cropped_spectrum = cropped_spectrum.crop_spectrum(624.573, 1784.104)
+        cropped_spectrum = copy.deepcopy(chosen_spectrum)  
+        # cropped_spectrum.display(f"original_spectrum{idx}")
+        cropped_spectrum = cropped_spectrum.crop_spectrum(624.573, 1784.104)
+        normalized_spectrum = cropped_spectrum.normalize_spectrum()
+
         # cropped_spectrum.display(f"cropped_spectrum_{idx}")
         # preprocessed_spectrum.display(f"preprocessed_spectrum_{idx}")
         # augmented_spectrum_1.display(f"augmented_spectrum_1_{idx}")
@@ -130,7 +141,7 @@ class HNC_Dataset(Dataset):
         # path_for_figure = os.path.join(os.getcwd(), "output_plots", "example_spectra_from_the_training_set.svg")
         # plt.savefig(path_for_figure, transparent=True)
 
-        return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata
+        return augmented_spectrum_intensity_1, augmented_spectrum_intensity_2, chosen_spectrum.metadata, preprocessed_spectrum.raman_shift_cm#, cropped_spectrum.intensity, preprocessed_spectrum.intensity, normalized_spectrum.intensity
     
     def _extract_patient_labels(spectrum_file_name:str, 
                           all_patient_labels:pd.DataFrame):
@@ -207,6 +218,11 @@ class HNC_Dataset(Dataset):
         """
         Get the distribution of the highest intensity peaks
         """
+        mean_spectra_above_throshold = []
+        mean_spectra_below_throshold = []
+        max_spectra_above_throshold = []
+        max_spectra_below_throshold = []
+
         # get the highest intensity
         highest_intensity = []
         mean_intensity = []
@@ -214,38 +230,133 @@ class HNC_Dataset(Dataset):
             # smooth the spectrum
             spectrum.savgol_filter(window_length=5, polyorder=3)
             # get the highest intensity
+
             max_intensity = max(spectrum.intensity)
             highest_intensity.append(max_intensity)
             mean_intensity.append(np.mean(spectrum.intensity))
+            if max_intensity > 1000:
+                max_spectra_above_throshold.append(spectrum.intensity)
+            else:
+                max_spectra_below_throshold.append(spectrum.intensity)
 
-        # plt.figure()
-        # plt.hist(highest_intensity, bins=1000)
-        # plt.show()
+            if np.mean(spectrum.intensity) > 1000:
+                mean_spectra_above_throshold.append(spectrum.intensity)
+            else:
+                mean_spectra_below_throshold.append(spectrum.intensity)
 
-        # plt.figure()
-        # plt.hist(mean_intensity, bins=1000)
-        # plt.show()
+
+        # plot each spectrum for above and below the threshold
+        plt.figure()
+        plt.title("Spectra with the highest intensity above 2500")
+        for spectrum in max_spectra_above_throshold:
+            plt.plot(spectrum)
+        plt.show()
+        plt.figure()
+        plt.title("Spectra with the highest intensity below 2500")
+        for spectrum in max_spectra_below_throshold:
+            plt.plot(spectrum)
+
+        plt.figure()
+        plt.title("Spectra with the mean intensity above 2500")
+        for spectrum in mean_spectra_above_throshold:
+            plt.plot(spectrum)
+        plt.show()
+        plt.figure()
+        plt.title("Spectra with the mean intensity below 2500")
+        for spectrum in mean_spectra_below_throshold:
+            plt.plot(spectrum)
+        plt.show()
+
+        plt.figure()
+        plt.hist(highest_intensity, bins=2000)
+        plt.title("Distribution of the highest intensity peaks of db")
+        plt.show()
+
+        plt.figure()
+        plt.hist(mean_intensity, bins=2000)
+        plt.title("Distribution of the mean intensity of db")
+        plt.show()
         mean_peak = np.mean(highest_intensity)
         std_peak = np.std(highest_intensity)
-        return mean_peak, std_peak
+        print(f"Mean peak intensity: {mean_peak}")
+        print(f"Standard deviation of peak intensity: {std_peak}")
+        return
     
-    def get_cosmic_ray_counts_distribution(self):
+    def hierarchical_clustering(self, threshold):
         """
-        Get the distribution of the cosmic ray counts
+        Perform hierarchical clustering on the dataset
         """
-        cosmic_ray_counts = []
-        for spectrum in self.db:
-            cosmic_ray_counts.append(spectrum.count_number_of_cosmic_rays())
+        # hierarchical clustering on cropped and normalized spectra
+        # get the cropped and normalized spectra
+        cropped_spectra = []
+        for ori_spectrum in self.db:
+            # copy the spectrum
+            spectrum = copy.deepcopy(ori_spectrum)
+            cropped_spectrum = spectrum.crop_spectrum(624.573, 1784.104)
+            cropped_spectrum = cropped_spectrum.normalize_spectrum()
+            cropped_spectra.append(cropped_spectrum.intensity)
+        # convert to numpy array
+        cropped_spectra = np.array(cropped_spectra)
+
+        # calculate the distance matrix
+        distance_matrix = pdist(cropped_spectra, metric='euclidean')
+        Z = linkage(distance_matrix, method='complete')
+        clusters = cut_tree(Z, height=threshold)
+        num_clusters = np.max(clusters) + 1
+        # plot the dendrogram
+        plt.figure(figsize=(10, 5))
+        plt.title("Dendrogram of the dataset")
+        dendrogram(Z, color_threshold= threshold,above_threshold_color="#808080")
+        plt.show()
+
+        ## Example spectra for each cluster
+        fig, axes = plt.subplots(num_clusters, 1, sharex=True, figsize=(10, num_clusters * 2))
+        colors = plt.cm.get_cmap('tab20', num_clusters)
+        raman_shift = spectrum.raman_shift_cm
+
+        for i in range(num_clusters):
+            cluster_spectra = cropped_spectra[clusters.flatten()== i]
+            for j in range(min(300, len(cluster_spectra))):
+                sns.lineplot(x=raman_shift, y=cluster_spectra[j], color=colors(i), alpha=0.5, ax=axes[i])
+                # add text to show the total number of spectra in the cluster
+                axes[i].text(0.05, 0.95, f"Cluster {i} Total spectra: {len(cluster_spectra)}", transform=axes[i].transAxes, fontsize=12, verticalalignment='top', color=colors(i))
+        plt.tight_layout()
+        plt.savefig(f'Example Spectra clustering with threshold {threshold}.png')
+
+        # perform T-SNE on the dataset
+        tsne = TSNE(n_components=2, random_state=0)
+        tsne_results = tsne.fit_transform(cropped_spectra)
+        plt.figure(figsize=(10, 5))
+        plt.title("T-SNE of the dataset")
+        plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=clusters.flatten(), cmap='tab20')
+        plt.colorbar()
+        plt.show()
+
+        # t-SNE of the dataset colored by staging in the metadata
+        plt.figure(figsize=(10, 5))
+        plt.title("T-SNE of the dataset colored by staging")
+        plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=[s.metadata['staging'] for s in self.db], cmap='rainbow')
+        plt.colorbar()
+        plt.show()
+
+
+        # add the clusters to the metadata in the database
+        for i in range(len(self.db)):
+            self.db[i].metadata['cluster'] = clusters[i][0]
+        return
+    
+    def remove_clusters_from_db(self, clusters_index_to_remove:list):
+        """
+        Remove the clusters from the database
+        """
+        # remove the clusters from the database
+        self.db = [spectrum for spectrum in self.db if spectrum.metadata['cluster'] not in clusters_index_to_remove]
+        print(f"Removed {len(clusters_index_to_remove)} clusters from the database")
+        return
         
-        plt.figure()
-        plt.hist(cosmic_ray_counts, bins=1000)
-        plt.xlim(0, 50)
-        mean_cosmic_ray_count = np.mean(cosmic_ray_counts)
-        std_cosmic_ray_count = np.std(cosmic_ray_counts)
-        return mean_cosmic_ray_count, std_cosmic_ray_count
     
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer", "plasma_saliva_mixed","train")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer","plasma_cleaned")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
     seed = 4
@@ -261,24 +372,62 @@ if __name__ == "__main__":
     os.environ['PYTHONHASHSEED'] = str(seed)
 
     preprocessor = SpectrumPreprocessor(cropping=True,
-                                        baseline_correction=True,
-                                        remove_cosmic_rays= True,
+                                        baseline_correction=False,
+                                        remove_cosmic_rays= False,
                                         normalization=True,
-                                        smoothing=True)
+                                        smoothing=False)
     
-    augmentor = SpectrumAugmentor(ramdom_augmentations=False,
+    augmentor = SpectrumAugmentor(ramdom_augmentations=True,
                                   augmentation_step_list = None,
                                   config_path= None)
 
     dataset = HNC_Dataset(data_folder, metadata_file, preprocessor, augmentor)
 
-    for i in range(1):
-        ## get a random spectrum
-        #idx = random.randint(0, dataset.__len__() - 1)
-        example_spectrum = dataset.__getitem__(i)
+    # augmented_spectra = []
 
+    # for i in range(1):
+    #     ## get a random spectrum
+    #     #idx = random.randint(0, dataset.__len__() - 1)
+    #     example_spectrum = dataset.__getitem__(1)
+    #     augmented_spectra.append(example_spectrum[0])
+    #     augmented_spectra.append(example_spectrum[1])
+
+
+    ######################################################
+    # plt.figure()
+    # # plot all the augmented spectra
+    # # for i in range(len(augmented_spectra)):
+    # #     plt.plot(raman_shift, augmented_spectra[i].numpy().flatten(), alpha=0.5, color="blue")
+    # # add label for one of the augmented spectra
+    # # plt.plot(raman_shift, augmented_spectra[0].numpy().flatten(), label="Augmented spectra", alpha=0.5, color="blue")
+    
+    # # plot mean spectrum
+    # raman_shift = example_spectrum[3]
+    # plt.plot(raman_shift, np.mean([s.numpy().flatten() for s in augmented_spectra], axis=0), label="Mean of augmented spectra", color="red")
+    
+    # # plot original spectrum
+    # plt.plot(raman_shift, example_spectrum[5], label="preprocessed preprocessed spectrum", color="black")
+    # plt.plot(raman_shift, example_spectrum[6], label="original spectrum", color="y")
+    
+    # # plt the std band
+    # std_band = np.std([s.numpy().flatten() for s in augmented_spectra], axis=0)
+    # plt.fill_between(raman_shift, np.mean([s.numpy().flatten() for s in augmented_spectra], axis=0) - std_band, np.mean([s.numpy().flatten() for s in augmented_spectra], axis=0) + std_band, color="y", alpha=0.5, label="Standard deviation band of augmented spectra")
+    # plt.xlabel("Raman shift (cm^-1)")
+    # plt.ylabel("Normalized Intensity (a.u.)")
+    # plt.legend()
+    # plt.title("Augmented the same spectrum 1000 times")
+    # plt.show()
+
+    ######################################################
 
     # dataset.get_peak_distribution()
-    # dataset.get_cosmic_ray_counts_distribution()
+
+    ######################################################
+
+    dataset.hierarchical_clustering(threshold=8)
+    dataset.remove_clusters_from_db([1,2,3,4,5,6])
+
+    ######################################################
+
 
     print("Done")

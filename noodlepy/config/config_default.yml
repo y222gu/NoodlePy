@@ -20,7 +20,7 @@ preprocessing:
 
 augmentation:
   default_augmentation_steps:
-    - baseline
+    # - baseline
     - shot_noise
     - dark_current_noise
     - photo_response_non_uniformity
@@ -50,8 +50,8 @@ augmentation:
   photo_response_non_uniformity: #photo_response_non_uniformity
     noise_type: gaussian
     mean: 
-      low: 0.01
-      high: 0.05
+      low: 0.005
+      high: 0.015
     std: 
       low: 0.01
       high: 0.05
@@ -77,8 +77,19 @@ augmentation:
 
   cosmic_ray:
     spike_number: 
-      low: 0
-      high: 5 
+      - 0
+      - 1
+      - 2
+      - 3
+      - 4
+      - 5
+    spike_number_prob: 
+      - 0.99
+      - 0.009
+      - 0.0009
+      - 0.00009
+      - 0.000005
+      - 0.000005
     spike_amplitude: 
       low: 2
       high: 5
@@ -87,8 +98,8 @@ augmentation:
     baseline_type_options: 
       - poly
     baseline_amplifying_factor: 
-      low: 1
-      high: 3 # Uniform
+      low: 0.1
+      high: 1.5 # Uniform
     baseline_offset:
       low: 300
       high: 800
@@ -98,13 +109,13 @@ augmentation:
     poly_coefficients:
       low: 0.00000001
       high: 0.0000001
-    sine:
-      sine_amplitude: 
-        low: 1
-        high: 5
-      sine_frequency: 
-        low: 2
-        high: 15
-      sine_phase:
-        low: 0
-        high: 2
+    # sine:
+    #   sine_amplitude: 
+    #     low: 1
+    #     high: 5
+    #   sine_frequency: 
+    #     low: 2
+    #     high: 15
+    #   sine_phase:
+    #     low: 0
+    #     high: 2

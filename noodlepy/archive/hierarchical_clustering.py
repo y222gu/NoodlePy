@@ -11,7 +11,7 @@ from sklearn.manifold import TSNE
 from matplotlib.lines import Line2D
 
 #########
-threshold = 0.4
+threshold = 0.28
 number_example_spectrum = 50
 #########
 
@@ -24,6 +24,8 @@ metadata_df = pd.DataFrame(data)
 
 # Extract embeddings as a NumPy array
 embeddings = np.array(metadata_df['embeddings'].tolist())
+
+#
 
 # Perform hierarchical clustering
 complete_clustering = linkage(embeddings, method="complete", metric="euclidean")
