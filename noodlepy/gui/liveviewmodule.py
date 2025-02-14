@@ -6,11 +6,14 @@ import threading
 import queue
 import ttkbootstrap as ttk
 import numpy as np
-from noodlepy.gui.edgedetector import EdgeDetector
+from noodlepy.gui.edgedetectorSAM import EdgeDetectorSAM
+from noodlepy.gui.edgedetectorUnet import EdgeDetectorUnet
 import os
 from threading import Thread
 from noodlepy.gui.publisher_subscriber import Publisher
 import time
+import cv2
+from skimage import filters
 
 try:
     from noodlepy.utils.windows_setup import configure_path
@@ -34,27 +37,23 @@ class LiveCanvas(tk.Canvas):
         image_queue: Queue object for storing images
         width: Width of the canvas
         height: Height of the canvas
-        flip: Boolean for flipping the image
+
     '''
-    def __init__(self, parent, image_queue, width, height, refresh_rate, flip=False):
+    def __init__(self, parent, image_queue, canvas_width, canvas_height, refresh_rate):
         self.image_queue = image_queue
-        self._image_width = width
-        self._image_height = height
+        self._image_width = canvas_width
+        self._image_height = canvas_height
         self._image = None
         self.tk_image = None
-        self.flip = flip
         self.refresh_rate = refresh_rate #ms
-        tk.Canvas.__init__(self, parent, width=width, height=height)
+
+        tk.Canvas.__init__(self, parent, width=canvas_width, height=canvas_height)
         self.grid(row=0, column=0, sticky='nsew')
         self._get_image()
 
     def _get_image(self):
         try:
             self._image = self.image_queue.get_nowait()
-            # the image is mirrored, so we flip it
-            if self.flip:
-                self._image = self._image.transpose(Image.FLIP_LEFT_RIGHT)
-
             self._resize()
             self._draw_crossline()
             self._display_image()
@@ -82,8 +81,9 @@ class ImageAcquisitionThread(threading.Thread):
     
     Args:
         camera: TLCamera object
+        flip: Boolean for flipping the image
     '''
-    def __init__(self, camera):
+    def __init__(self, camera, flip, crop, center_x, center_y, crop_width, crop_height):
         super().__init__()
         camera.exposure_time_us = 40000
         self._camera = camera
@@ -92,6 +92,13 @@ class ImageAcquisitionThread(threading.Thread):
         self._camera.image_poll_timeout_ms = 0
         self._image_queue = queue.Queue(maxsize=2)
         self._stop_event = threading.Event()
+        self._flip = flip
+        self._crop = crop
+        self._center_x = center_x
+        self._center_y = center_y
+        self._crop_width = crop_width
+        self._crop_height = crop_height
+
 
                 # setup color processing if necessary
         if self._camera.camera_sensor_type != SENSOR_TYPE.BAYER:
@@ -121,7 +128,14 @@ class ImageAcquisitionThread(threading.Thread):
         scaled_image = frame.image_buffer >> (self._bit_depth - 8)
         image8bit = np.asarray(scaled_image, np.uint8)
         processed_image = image8bit.squeeze()
-        return Image.fromarray(processed_image)
+        image = Image.fromarray(processed_image)
+        if self._flip:
+            image = image.transpose(Image.FLIP_LEFT_RIGHT)
+        
+        if self._crop:
+            image = image.crop((self._center_x - self._crop_width//2, self._center_y - self._crop_height//2, self._center_x + self._crop_width//2, self._center_y + self._crop_height//2))
+        
+        return image
     
     def _get_color_image(self, frame):
         # type: (Frame) -> Image
@@ -141,9 +155,15 @@ class ImageAcquisitionThread(threading.Thread):
         # convert the image to a single channel image
         color_image_data = color_image_data.mean(axis=2).astype('uint8')
         # return PIL Image object
-        return Image.fromarray(color_image_data, mode="L") # use mode='RGB' for color images
-    
+        image = Image.fromarray(color_image_data, mode="L") # use mode='RGB' for color images
+        if self._flip:
+            image = image.transpose(Image.FLIP_LEFT_RIGHT)
 
+        if self._crop:
+            image = image.crop((self._center_x - self._crop_width//2, self._center_y - self._crop_height//2, self._center_x + self._crop_width//2, self._center_y + self._crop_height//2))
+
+        return image
+    
     def run(self):
         while not self._stop_event.is_set():
             try:
@@ -171,11 +191,11 @@ class CameraManger():
         self.sdk = TLCameraSDK()
         self.camera_serial_number_list = self.sdk.discover_available_cameras()
 
-    def open_camera(self, serial_number):
+    def open_camera(self, serial_number, flip=False, crop=False, center_x=None, center_y=None, crop_width=None, crop_height=None):
         if serial_number not in self.camera_serial_number_list:
             raise ValueError(f"Camera with serial number {serial_number} not found")
         camera = self.sdk.open_camera(serial_number)
-        image_acquisition_thread = ImageAcquisitionThread(camera)
+        image_acquisition_thread = ImageAcquisitionThread(camera, flip, crop, center_x, center_y, crop_width, crop_height)
 
         camera.frames_per_trigger_zero_for_unlimited = 0
         camera.arm(2)
@@ -189,25 +209,44 @@ class CameraManger():
 class LiveViewModule(Publisher, tk.Frame):
     def __init__(self, parent):
         ttk.Frame.__init__(self, parent)  # Initialize ttk.Frame and Publisher
-        Publisher.__init__(self, ['switch_view', 'test_sampling_points', 'update_captured_frame_center'])
+        Publisher.__init__(self, ['switch_view', 
+                                  'test_all_sampling_points', 
+                                  'update_captured_frame_center', 
+                                  'focus_widefield_camera', 
+                                  'focus_objective_camera', 
+                                  'update_focus_score', 
+                                  'task_completed',
+                                  'abort_aquisition',
+                                  'update_sampling_points_to_protocol_module'])
+        
         self.name = 'LiveViewModule_publisher'
-
         # the canvas width and height that the image will be resized to
-        self.width = 576 
-        self.height = 432
+        self.width = 500 
+        self.height = 375
 
-        # calibrated size in object plane per pixel on 11/20/2024
-        self.x_pixel_size_objective_camera = 0.311 #um
-        self.y_pixel_size_objective_camera = 0.319 #um
-        self.x_pixel_size_widefield_camera = 2.842 #um
-        self.y_pixel_size_widefield_camera = 2.842 #um
+        # calibrated size in object plane per pixel on 1/4/2025
+        self.x_pixel_size_objective_camera = 0.357 #um
+        self.y_pixel_size_objective_camera = 0.357 #um
+        self.x_pixel_size_widefield_camera = 2.967 #um
+        self.y_pixel_size_widefield_camera = 2.967 #um
+
+        # crop the objective camera image to the center
+        self.crop_center_x = 833 # calibrated on 2/5/2025
+        self.crop_center_y = 326 # calibrated on 2/5/2025
+
+        self.crop_width=500
+        self.crop_height = 375
+
+        # for the rings sampling method
+        self.offset_from_the_edge = 20
 
         self.camera_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","camera_icon.png"))
         self.exchange_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","exchange_icon.png"))
+        self.focus_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","focus_icon.png"))
         self.camera_manager = CameraManger()
 
-        self.objective_field_camera, self.objective_field_camera_thread = self.camera_manager.open_camera('14628')
-        self.widefield_camera, self.widefield_camera_thread = self.camera_manager.open_camera('14938') 
+        self.objective_field_camera, self.objective_field_camera_thread = self.camera_manager.open_camera('14628', flip=True, crop=True, center_x=self.crop_center_x, center_y=self.crop_center_y, crop_width=self.crop_width, crop_height=self.crop_height)
+        self.widefield_camera, self.widefield_camera_thread = self.camera_manager.open_camera('14938', flip=False) 
         self.active_camera_thread = self.widefield_camera_thread
         self.current_live_view = 'WIDEFIELD'
         self.captured_view = None
@@ -217,12 +256,14 @@ class LiveViewModule(Publisher, tk.Frame):
         self.live_frame = ttk.Labelframe(self, text="Wide FOV", width=self.width, padding=5)
         self.live_frame.grid(row=0, column=0, sticky='nsew', pady=5, padx=5)
 
-        self.camera_widget = LiveCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), width=self.width, height=self.height, refresh_rate=10, flip=False)
-        self.camera_widget.grid(row=0, column=0, columnspan=2, sticky='nsew')
-        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.handle_switch_view('TO_OBJECTIVE'), style='info')
+        self.camera_widget = LiveCanvas(parent=self.live_frame, image_queue=self.active_camera_thread.get_output_queue(), canvas_width=self.width, canvas_height=self.height, refresh_rate=10)
+        self.camera_widget.grid(row=0, column=0, columnspan=3, sticky='nsew')
+        self.switch_view_button = ttk.Button(self.live_frame, image = self.exchange_icon, command= lambda: self.on_switch_view_button_clicked('TO_OBJECTIVE'), style='info', state=DISABLED)
         self.switch_view_button.grid(row=1, column=0, columnspan=1, sticky='nsew', pady=5, padx=5)
+        self.camera_autofocus_button = ttk.Button(self.live_frame, image=self.focus_icon, command= self.focus_camera, style='info', state=DISABLED)
+        self.camera_autofocus_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
         capture_button = ttk.Button(self.live_frame, image=self.camera_icon, command= self.capture_frame, style='info')
-        capture_button.grid(row=1, column=1, columnspan=1, sticky='nsew', pady=5, padx=5)
+        capture_button.grid(row=1, column=2, columnspan=1, sticky='nsew', pady=5, padx=5)
 
         capture_frame = ttk.Labelframe(self, text="Captured Frame", width=self.width, padding=5)
         capture_frame.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
@@ -235,24 +276,26 @@ class LiveViewModule(Publisher, tk.Frame):
         # selecting the sampling method
         self.edge_detection_point_button = ttk.Button(capture_frame, text="Point Detection", command=lambda: self.edge_detection('point'), state=DISABLED, style='info')
         self.edge_detection_point_button.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
-        self.sampling_method_var = tk.StringVar()
-        self.sampling_method_var.set("Random")
         sampling_method_frame = ttk.Labelframe(capture_frame, text="Sampling Method", padding=5)
         sampling_method_frame.grid(row=2, column=0, sticky='nsew', pady=5, padx=5)
         sampling_method_frame.columnconfigure(0, weight=1)
         sampling_method_frame.columnconfigure(1, weight=1)
         sampling_method_frame.columnconfigure(2, weight=1)
-        self.random_radio = ttk.Radiobutton(sampling_method_frame, text="Random", variable=self.sampling_method_var, value="Random", command=lambda: self.on_sampling_method_selected('Random'), style='info', state=DISABLED)
+
+        self.sampling_method_var = tk.StringVar()
+        self.sampling_method_var.set("Random")
+
+        self.random_radio = ttk.Radiobutton(sampling_method_frame, text="Random", variable=self.sampling_method_var, value="Random", command=lambda: self.on_sampling_method_selected('Random'), style='info', state=NORMAL)
         self.random_radio.grid(row=0, column=0, sticky='nesw', padx=5, pady=5)
-        self.rings_radio = ttk.Radiobutton(sampling_method_frame, text="Rings", variable=self.sampling_method_var, value="Rings", command=lambda: self.on_sampling_method_selected('Rings'), style='info', state=DISABLED)
+        self.rings_radio = ttk.Radiobutton(sampling_method_frame, text="Rings", variable=self.sampling_method_var, value="Rings", command=lambda: self.on_sampling_method_selected('Rings'), style='info', state=NORMAL)
         self.rings_radio.grid(row=0, column=1, sticky='nesw', padx=5, pady=5)
-        self.grid_radio = ttk.Radiobutton(sampling_method_frame, text="Grid", variable=self.sampling_method_var, value="Grid", command=lambda: self.on_sampling_method_selected('Grid'), style='info', state=DISABLED)
+        self.grid_radio = ttk.Radiobutton(sampling_method_frame, text="Grid", variable=self.sampling_method_var, value="Grid", command=lambda: self.on_sampling_method_selected('Grid'), style='info', state=NORMAL)
         self.grid_radio.grid(row=0, column=2, sticky='nesw', padx=5, pady=5)
 
         self.create_sampling_profile_buttons= ttk.Button(sampling_method_frame, text="Create", command=self.on_create_button_clicked, state=DISABLED, style='info')
         self.create_sampling_profile_buttons.grid(row=3, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
-        self.test_sampling_points_button = ttk.Button(sampling_method_frame, text="Test", command= self.on_test_button_clicked, state=DISABLED, style='info')
-        self.test_sampling_points_button.grid(row=0, column=3, rowspan=5, sticky='nsew', pady=5, padx=5)
+        # self.test_sampling_points_button = ttk.Button(sampling_method_frame, text="Test", command= self.on_test_button_clicked, state=DISABLED, style='info')
+        # self.test_sampling_points_button.grid(row=0, column=3, rowspan=5, sticky='nsew', pady=5, padx=5)
         
         # entry for the number of sampling points
         self.number_of_sampling_points_label = ttk.Label(sampling_method_frame, text="# of Points")
@@ -260,7 +303,6 @@ class LiveViewModule(Publisher, tk.Frame):
         self.number_of_sampling_points_entry = ttk.Entry(sampling_method_frame, width=5)
         self.number_of_sampling_points_entry.grid(row=2, column=0, sticky='ew', padx=5)
         self.number_of_sampling_points_entry.insert(0, "80")
-        self.number_of_sampling_points_entry.configure(state=DISABLED)
 
         # entry for the number of rings
         self.rings_number_label = ttk.Label(sampling_method_frame, text="# of Rings")
@@ -295,7 +337,7 @@ class LiveViewModule(Publisher, tk.Frame):
 
     def load_icon(self, icon_path):
         icon = Image.open(icon_path)
-        icon = icon.resize((30, 30))
+        icon = icon.resize((40, 40))
         icon = ImageTk.PhotoImage(icon)
         return icon
 
@@ -304,11 +346,9 @@ class LiveViewModule(Publisher, tk.Frame):
         thread.start()
 
     def edge_detection(self, detection_type):
-        self.run_in_thread(self._edge_detection, detection_type)
-
-    def _edge_detection(self, detection_type):
-        self.edgedetector = EdgeDetector(self.captured_image)
-
+        self.edgedetector = EdgeDetectorSAM(self.captured_image)
+        # self.edgedetector = EdgeDetectorUnet(self.captured_image)
+        
         if detection_type == "auto":
             masked_image = self.edgedetector.auto_mask_generate()
         elif detection_type == "point":
@@ -327,7 +367,6 @@ class LiveViewModule(Publisher, tk.Frame):
         self.random_radio.configure(state=NORMAL)
         self.rings_radio.configure(state=NORMAL)
         self.grid_radio.configure(state=NORMAL)
-        self.sampling_method_var.set("Random")
         self.number_of_sampling_points_entry.configure(state=NORMAL)
 
 
@@ -390,10 +429,6 @@ class LiveViewModule(Publisher, tk.Frame):
         return sorted_x, sorted_y
 
     def on_create_button_clicked(self):
-        self.run_in_thread(self._on_create_button_clicked)
-        self.test_sampling_points_button.configure(state=NORMAL)
-
-    def _on_create_button_clicked(self):
         selected_method = self.sampling_method_var.get()
         if selected_method == "Random":
             num_points = int(self.number_of_sampling_points_entry.get())
@@ -409,7 +444,7 @@ class LiveViewModule(Publisher, tk.Frame):
             num_points = int(self.number_of_sampling_points_entry.get())
             num_rings = int(self.rings_number_entry.get())
             interval = int(self.interval_entry.get())
-            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='rings', num_points=num_points, num_rings=num_rings, interval=interval)
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='rings', num_points=num_points, num_rings=num_rings, interval=interval, offset_from_the_edge=self.offset_from_the_edge)
             self.sampling_position_x, self.sampling_position_y = self.optimize_the_sequence_of_sampling_points(self.sampling_position_x, self.sampling_position_y, shape='rings')
 
         self.sampled_mask_image = sampled_mask_image
@@ -420,18 +455,19 @@ class LiveViewModule(Publisher, tk.Frame):
         self.captured_image_label.image = self.image_to_display
         print("Sampling points generated")
 
-    def capture_frame(self):
-        self.run_in_thread(self._capture_frame)
-        self.captured_view = self.current_live_view
-        self.dispatch('update_captured_frame_center', self.captured_view)
+        # self.test_sampling_points_button.configure(state=NORMAL)
+        return True
 
-    def _capture_frame(self):
+
+    def capture_frame(self):
         try:
                 self.captured_image = self.active_camera_thread.get_output_queue().get()
                               
                 # resize the image to fit the canvas
                 print("Frame captured")
                 self.image_to_display = ImageTk.PhotoImage(self.captured_image.resize((self.width, self.height), Image.LANCZOS))
+                # mirror the image if the the camera is the objective camera
+
                 self.captured_image_label.configure(image=self.image_to_display)
                 self.captured_image_label.configure(text="")
                 self.captured_image_label.image = self.image_to_display
@@ -446,10 +482,27 @@ class LiveViewModule(Publisher, tk.Frame):
         except Exception as e:
             print(f"Failed to capture frame: {e}")
 
+        self.captured_view = self.current_live_view
+        self.dispatch('update_captured_frame_center', self.captured_view)
+        return True
 
-    def on_test_button_clicked(self):
-        sampling_position_x_centered = self.sampling_position_x - self.captured_image.size[0] / 2
-        sampling_position_y_centered = self.sampling_position_y - self.captured_image.size[1] / 2
+
+    def handling_create_sampling_points_during_aquisition(self):
+        self.capture_frame()
+        self.edge_detection('point')
+        self.on_create_button_clicked()
+
+        relative_distance_to_camera_center = self.convert_pixel_position_to_relative_distance(self.sampling_position_x, self.sampling_position_y)
+
+        # turn it into [[x1, y1], [x2, y2]...] format
+        relative_distance_to_camera_center = np.stack([relative_distance_to_camera_center[0], relative_distance_to_camera_center[1]], axis=1)
+        self.dispatch('update_sampling_points_to_protocol_module', relative_distance_to_camera_center)
+        self.dispatch('task_completed')
+        return True
+
+    def convert_pixel_position_to_relative_distance(self, x, y):
+        x_centered = x - self.captured_image.size[0] / 2
+        y_centered = y - self.captured_image.size[1] / 2
 
         # the pixel size to use for calculating the relative distance in physical space
         if self.captured_view == 'OBJECTIVE':
@@ -461,32 +514,58 @@ class LiveViewModule(Publisher, tk.Frame):
         else:
             raise ValueError("Unknown view")
         # convert the pixel position to relative distance
-        x_distance = sampling_position_x_centered * x_pixel_size
-        y_distance = sampling_position_y_centered * y_pixel_size
-        relative_distance_to_camera_center = (x_distance, y_distance) # in um
+        x_distance = x_centered * x_pixel_size
+        y_distance = y_centered * y_pixel_size
+        return (x_distance, y_distance)
 
+
+    def on_test_button_clicked(self):
+        relative_distance_to_camera_center = self.convert_pixel_position_to_relative_distance(self.sampling_position_x, self.sampling_position_y)
         view_to_inspect_in = self.current_live_view
+        self.dispatch('test_all_sampling_points', view_to_inspect_in, relative_distance_to_camera_center)
 
-        self.dispatch('test_sampling_points', view_to_inspect_in, relative_distance_to_camera_center)
+    def calculate_focus_score_of_current_image(self):
+        image = self.active_camera_thread.get_output_queue().get()
+        # convert the image to CV2 format
+        image = np.array(image)
+        ## Laplacian method
+        # focus_score = cv2.Laplacian(image, cv2.CV_64F).var()
 
-    def handle_switch_view(self, view):
+        # Sobel method
+        focus_score = filters.sobel(image).var()
+        return focus_score
+    
+    def handle_calculate_focus_score(self):
+        focus_score = self.calculate_focus_score_of_current_image()
+        self.dispatch('update_focus_score', focus_score)
+        return None
+
+    def focus_camera(self):
+        if self.current_live_view == 'OBJECTIVE':
+            self.dispatch('focus_objective_camera')
+        elif self.current_live_view == 'WIDEFIELD':
+            self.dispatch('focus_widefield_camera')
+
+    def on_switch_view_button_clicked(self, view):
         if view == 'TO_WIDE':
             self.active_camera_thread = self.widefield_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
-            self.camera_widget.flip = False
             self.dispatch('switch_view', 'TO_WIDE')
             self.live_frame.configure(text="Wide FOV")
-            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_OBJECTIVE'))
+            self.switch_view_button.configure(command= lambda: self.on_switch_view_button_clicked('TO_OBJECTIVE'))
             self.current_live_view = 'WIDEFIELD'
 
         elif view == 'TO_OBJECTIVE':
             self.active_camera_thread = self.objective_field_camera_thread
             self.camera_widget.image_queue = self.active_camera_thread.get_output_queue()
-            self.camera_widget.flip = True
             self.dispatch('switch_view', 'TO_OBJECTIVE')
             self.live_frame.configure(text="Objective FOV")
-            self.switch_view_button.configure(command= lambda: self.handle_switch_view('TO_WIDE'))
+            self.switch_view_button.configure(command= lambda: self.on_switch_view_button_clicked('TO_WIDE'))
             self.current_live_view = 'OBJECTIVE'
+
+    def handle_switch_view_during_aquisition(self, view):
+        self.on_switch_view_button_clicked(view)
+        self.dispatch('task_completed')
 
     def on_closing(self):
         print("Stopping image acquisition thread...")
@@ -500,6 +579,21 @@ class LiveViewModule(Publisher, tk.Frame):
         self.camera_manager.sdk.dispose()
         self.master.destroy()
 
+
+    def handle_activate_camera_autofocus_button(self):
+        self.camera_autofocus_button.configure(state=NORMAL)
+        return None
+
+    def handle_activate_switch_view_button(self):
+        self.switch_view_button.configure(state=NORMAL)
+        return None
+
+    def handle_check_current_camera_view(self, view_to_check):
+        if self.current_live_view == view_to_check:
+            self.dispatch('task_completed')
+        else:
+            self.dispatch('abort_aquisition')
+        return True
 
 if __name__ == "__main__":
     root = ttk.Window()

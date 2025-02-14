@@ -16,7 +16,7 @@ import threading
 import queue
 import ttkbootstrap as ttk
 import numpy as np
-from noodlepy.gui.edgedetector import EdgeDetector
+from noodlepy.gui.edgedetectorSAM import EdgeDetectorSAM
 import os
 from threading import Thread
 
@@ -276,7 +276,7 @@ class LiveViewApp(tk.Tk):
         self.camera_controller = CameraController(self.sdk)
         self.camera_controller.setup_cameras()
 
-        edge_detector = EdgeDetector(self.camera_controller.widefield_camera)
+        edge_detector = EdgeDetectorSAM(self.camera_controller.widefield_camera)
         edge_controller = EdgeDetectionController(edge_detector, self.captured_image_label)
 
         sampling_controller = SamplingProfileController(self.sampling_method_var, self.config_entries)

@@ -28,8 +28,7 @@ def is_image_blurry_opencv(images_folder):
         laplacian_var = cv2.Laplacian(image, cv2.CV_64F).var()
         var_arr.append(laplacian_var)
 
-        sobel_edges = filters.sobel(image)
-        sharpness = sobel_edges.var()
+        sharpness = filters.sobel(image).var()
         sharpness_arr.append(sharpness)
 
     # normalize the variance and sharpness values
