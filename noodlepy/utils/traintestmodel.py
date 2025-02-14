@@ -40,6 +40,13 @@ def train_model(model, train_dataloader, training_cfg):
             avg_loss = w * avg_loss + (1 - w) * loss.item()
             avg_output_std = w * avg_output_std + (1 - w) * output_std.item()
 
+            # log the loss and standard deviation to wandb
+            wandb.log({"loss": avg_loss, "output_std": avg_output_std}, step=epoch * len(train_dataloader) + i)
+            # print the loss and standard deviation every 100 steps
+        # print the loss and standard deviation every epoch
+        print(f"Epoch {epoch}, Loss: {avg_loss:.4f}, Output Std: {avg_output_std:.4f}")
+
+
     print("Finished Training")
     return model
 
