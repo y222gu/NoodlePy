@@ -238,7 +238,7 @@ class LiveViewModule(Publisher, tk.Frame):
         self.crop_height = 375
 
         # for the rings sampling method
-        self.offset_from_the_edge = 20
+        self.offset_from_the_edge = 40
 
         self.camera_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","camera_icon.png"))
         self.exchange_icon = self.load_icon(os.path.join(os.getcwd(), "noodlepy","assets","exchange_icon.png"))
