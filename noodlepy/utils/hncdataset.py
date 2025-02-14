@@ -293,7 +293,7 @@ class HNC_Dataset(Dataset):
             # copy the spectrum
             spectrum = copy.deepcopy(ori_spectrum)
             cropped_spectrum = spectrum.crop_spectrum(624.573, 1784.104)
-            cropped_spectrum = cropped_spectrum.normalize_spectrum()
+            #cropped_spectrum = cropped_spectrum.normalize_spectrum()
             cropped_spectra.append(cropped_spectrum.intensity)
         # convert to numpy array
         cropped_spectra = np.array(cropped_spectra)
@@ -307,7 +307,7 @@ class HNC_Dataset(Dataset):
         plt.figure(figsize=(10, 5))
         plt.title("Dendrogram of the dataset")
         dendrogram(Z, color_threshold= threshold,above_threshold_color="#808080")
-        plt.show()
+        plt.savefig(f'Dendrogram clustering with threshold {threshold}.png')
 
         ## Example spectra for each cluster
         fig, axes = plt.subplots(num_clusters, 1, sharex=True, figsize=(10, num_clusters * 2))
@@ -320,6 +320,9 @@ class HNC_Dataset(Dataset):
                 sns.lineplot(x=raman_shift, y=cluster_spectra[j], color=colors(i), alpha=0.5, ax=axes[i])
                 # add text to show the total number of spectra in the cluster
                 axes[i].text(0.05, 0.95, f"Cluster {i} Total spectra: {len(cluster_spectra)}", transform=axes[i].transAxes, fontsize=12, verticalalignment='top', color=colors(i))
+        plt.xlabel("Raman shift (cm^-1)")
+        plt.ylabel("Intensity (a.u.)")
+        plt.title("Example Spectra clustering")
         plt.tight_layout()
         plt.savefig(f'Example Spectra clustering with threshold {threshold}.png')
 
@@ -330,15 +333,14 @@ class HNC_Dataset(Dataset):
         plt.title("T-SNE of the dataset")
         plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=clusters.flatten(), cmap='tab20')
         plt.colorbar()
-        plt.show()
+        plt.savefig(f'T-SNE clustering with threshold {threshold}.png')
 
         # t-SNE of the dataset colored by staging in the metadata
         plt.figure(figsize=(10, 5))
         plt.title("T-SNE of the dataset colored by staging")
         plt.scatter(tsne_results[:, 0], tsne_results[:, 1], c=[s.metadata['staging'] for s in self.db], cmap='rainbow')
         plt.colorbar()
-        plt.show()
-
+        plt.savefig(f'T-SNE clustering with threshold {threshold} colored by staging.png')
 
         # add the clusters to the metadata in the database
         for i in range(len(self.db)):
@@ -424,8 +426,8 @@ if __name__ == "__main__":
 
     ######################################################
 
-    dataset.hierarchical_clustering(threshold=8)
-    dataset.remove_clusters_from_db([1,2,3,4,5,6])
+    dataset.hierarchical_clustering(threshold=10000)
+    dataset.remove_clusters_from_db([5,6])
 
     ######################################################
 

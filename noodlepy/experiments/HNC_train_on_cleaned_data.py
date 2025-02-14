@@ -16,11 +16,11 @@ if __name__ == "__main__":
     wandb.login()
     wandb.init(
         project="SimSiam", 
-        name=f"2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering", 
+        name=f"2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_on_unpreprocessed_data", 
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.001,
-            "epochs": 50,
+            "epochs": 100,
             "batch_size": 32,
             "backbone_dim": [1, 8, 16, 32, 64, 128],
             "random_seed" : 0,
@@ -47,8 +47,8 @@ if __name__ == "__main__":
 
 
     plasma_train_dataset = HNC_Dataset(plasma_train_dataset_path, annotation_file_path, train_preprocessor, train_augmentor)
-    plasma_train_dataset.hierarchical_clustering(threshold=8)
-    plasma_train_dataset.remove_clusters_from_db([1, 2, 3, 4,5,6])
+    plasma_train_dataset.hierarchical_clustering(threshold=10000)
+    plasma_train_dataset.remove_clusters_from_db([5,6])
  
     plasma_train_dataloaders = DataLoader(
         plasma_train_dataset,
@@ -71,7 +71,7 @@ if __name__ == "__main__":
     )
 
     ##### NAME OF THE MODEL
-    exp_name = "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering"
+    exp_name = "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_on_unpreprocessed_data"
     wandb.run.name = exp_name
 
     #### TRAIN THE MODEL
