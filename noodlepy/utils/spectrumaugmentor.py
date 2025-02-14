@@ -170,9 +170,13 @@ class SpectrumAugmentor:
                     **self.config["FPN_noise"]["sigma"])}
 
         if "cosmic_ray" in augmentation_steps_to_apply:
+            spike_number = np.random.choice(self.config["cosmic_ray"]["spike_number"], 
+                                            size=1, 
+                                            p=self.config["cosmic_ray"]["spike_number_prob"])
+
+            print('spike_number', spike_number)
             augmentation_par_dictionary["cosmic_ray"] = {  
-                "spike_number": np.random.randint(
-                    **self.config["cosmic_ray"]["spike_number"]),
+                "spike_number": spike_number,
                 "spike_amplitude": np.random.uniform(
                     **self.config["cosmic_ray"]["spike_amplitude"])}
 

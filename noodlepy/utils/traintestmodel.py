@@ -8,9 +8,9 @@ from noodlepy.utils.embeddingviewer import EmbeddingViewer
 def train_model(model, train_dataloader, training_cfg):
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
-    criterion = NegativeCosineSimilarity()
+    criterion = NegativeCosineSimilarity().to(device)
     # criterion = NTXentLoss() 
-    optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=training_cfg.learning_rate, momentum=0.9, weight_decay=1e-4)
 
         # training
     print("Starting Training")
@@ -18,7 +18,7 @@ def train_model(model, train_dataloader, training_cfg):
         avg_loss = 0.0
         avg_output_std = 0.0
         #total_loss = 0.0
-        for i, (x0, x1, labels) in enumerate(train_dataloader):
+        for i, (x0, x1, labels, raman_shift) in enumerate(train_dataloader):
             x0 = x0.to(device)
             x1 = x1.to(device)
             z0, p0 = model(x0)
@@ -40,11 +40,6 @@ def train_model(model, train_dataloader, training_cfg):
             avg_loss = w * avg_loss + (1 - w) * loss.item()
             avg_output_std = w * avg_output_std + (1 - w) * output_std.item()
 
-        # the level of collapse is large if the standard deviation of the l2
-        # normalized output is much smaller than 1 / sqrt(dim)
-        collapse_level = max(0.0, 1 - math.sqrt(64) * avg_output_std)
-        wandb.log({'epoch': epoch+1, 'loss': avg_loss, 'collapse_level': collapse_level})
-        print(f"epoch: {epoch:>02}, loss: {avg_loss:.5f}, collapse_level: {collapse_level:.5f}")
     print("Finished Training")
     return model
 
@@ -56,10 +51,13 @@ def test_model(model, test_dataloader, label_name_for_color='staging', label_nam
     model.to(device)
     model.eval()
     with torch.no_grad():
-        for i, (x, _, labels) in enumerate(test_dataloader):
+        for i, (x, _, labels, raman_shift) in enumerate(test_dataloader):
             x = x.to(device)
             y = model.backbone(x).flatten(start_dim=1)
             embeddings.append(y)
+            # add x to the list of labels as intensity
+            labels['intensity'] = x
+            labels['raman_shift'] = raman_shift
             label_dict_list.append(labels)
 
     embeddings = torch.cat(embeddings, dim=0)

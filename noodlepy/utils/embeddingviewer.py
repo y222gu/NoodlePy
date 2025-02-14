@@ -7,13 +7,14 @@ import plotly.graph_objects as go
 from sklearn.manifold import TSNE
 import torch
 import csv
+from sklearn.cluster import DBSCAN
 
 class EmbeddingViewer:
     def __init__(self, embeddings=None, label_dict_list=None, embeddings_file_path=None, metadata_file_path=None, map=None, exp_name = "test"):
 
         self.exp_name = exp_name
         if map is None:
-            self.map = {0:'lightskyblue', 1:'#deb209', 2:'#deb209', 3:'#e97132', 4:'#e97132', # staging gold mediumslateblue purple #a484df
+            self.map = {0:'lightskyblue', 1:'#deb209', 2:'#e97132', 3:'#e97132', 4:'#e97132', # staging gold mediumslateblue purple #a484df
                         'Male':'xkcd:blue', 'Female':'xkcd:golden brown', # gender
                         'White':'xkcd:salmon', # race
                         'plasma':"#de8749", 'saliva':"#8a75da",# ">", "x" 'plasma':"#de8749", 'saliva':"#8a75da"
@@ -97,19 +98,31 @@ class EmbeddingViewer:
         return embeddings_tsne
     
     def save_files_for_tf_embedding_projector(self):
-        embedding_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_embedding" + ".tsv")        
-        with open(embedding_file_name, 'w') as f:
-            for embedding in self.embeddings:
-                embedding_str = '\t'.join(map(str, embedding))
-                f.write(embedding_str + '\n')
+        # embedding_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_embedding" + ".txt")        
+        # with open(embedding_file_name, 'w') as f:
+        #     for embedding in self.embeddings:
+        #         embedding_str = '\t'.join(map(str, embedding))
+        #         f.write(embedding_str + '\n')
 
-        metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_metadata" + ".tsv")
-        with open(metadata_file_name, 'w', newline='\n') as tsvfile:
-            tsv_writer = csv.writer(tsvfile, delimiter='\t')
-            tsv_writer.writerow(self.labels.keys())
-            for row in zip(*self.labels.values()):
-                tsv_writer.writerow(row)
+        # metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_metadata" + ".txt")
+        # with open(metadata_file_name, 'w', newline='\n') as tsvfile:
+        #     tsv_writer = csv.writer(tsvfile, delimiter='\t')
+        #     tsv_writer.writerow(self.labels.keys())
+        #     for row in zip(*self.labels.values()):
+        #         tsv_writer.writerow(row)
     
+                # Create a DataFrame for metadata
+        metadata_df = pd.DataFrame(self.labels)
+
+        # Add embeddings to the DataFrame as a column
+        metadata_df['embeddings'] =  self.embeddings.tolist()
+
+        # Save the combined DataFrame to a file
+        # metadata_df.to_parquet('metadata_with_embeddings.parquet')  # Recommended for compact storage
+        # Alternatively: 
+        metadata_df.to_json('metadata_with_embeddings_cleaned_plasma.json', orient='records')
+
+
     @staticmethod
     def break_up_dictionary_list(input_list):
         def break_up_dictionary(input_dict):
@@ -151,10 +164,10 @@ class EmbeddingViewer:
     def tsne2d(self, label_name_for_color='staging', label_name_for_marker='sample_type'):
         embeddings_2d = EmbeddingViewer.compute_tsne(self.embeddings, dim=2)
 
-        ## Save the 2d embedding file
-        # embedding_file_name = os.path.join(os.getcwd(), "output_plots", exp_name +"_2d_embedding.tsv")        
+        # Save the 2d embedding file
+        # embedding_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name +"_embedding.tsv")        
         # with open(embedding_file_name, 'w') as f:
-        #     for embedding in embeddings_2d:
+        #     for embedding in self.embeddings:
         #         embedding_str = '\t'.join(map(str, embedding))
         #         f.write(embedding_str + '\n')
 
@@ -201,6 +214,36 @@ class EmbeddingViewer:
         fig.patch.set_facecolor('white')
         save_path = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_2d_tsne_plot_by_" + label_name_for_color + ".svg")
         plt.savefig(save_path, transparent=True)
+
+
+        dbscan = DBSCAN(eps=0.01, min_samples=5)
+        labels = dbscan.fit(self.embeddings)
+        labels = labels.labels_
+        # change -1 to  10
+        labels[labels == -1] = 10
+
+        # map the labels to colors 
+        # create a colormap
+        cmap = mpl.colormaps['gist_rainbow']
+        # create a list of colors
+        colors = cmap(np.linspace(0, 1, len(np.unique(labels))))
+        # create a dictionary to map the labels to colors
+        label_color_map = {}
+        for i, label in enumerate(np.unique(labels)):
+            label_color_map[label] = colors[i]
+
+        # find the unique labels
+        unique_labels = np.unique(labels)
+        print(unique_labels)
+        # visualize the clusters
+        plt.figure(figsize=(10, 8))
+        for i in range(len(embeddingsdf.x)): 
+            plt.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=label_color_map[labels[i]], marker=">", alpha=1, s=250) #marker=markers[i],
+        plt.title("DBSCAN Clustering")
+        plt.xlabel('Component 1')
+        plt.ylabel('Component 2')
+        plt.savefig(os.path.join(os.getcwd(), "output_plots", self.exp_name + "_dbscan_clustering" + ".png"))
+
 
     def tsne3d(self, embeddings_3d, labels_for_color, labels_for_marker):
         map = {0:'green', 1:'gold', 2:'orangered', 3:'red', 4:'purple', # staging
@@ -271,11 +314,22 @@ class EmbeddingViewer:
         
         return embeddings, labels
 
+    def dbscan(self, eps=0.5, min_samples=5):
+        dbscan = DBSCAN(eps=eps, min_samples=min_samples)
+        labels = dbscan.fit_predict(self.embeddings)
+        # visualize the clusters
+        plt.figure(figsize=(10, 8)) 
+        plt.scatter(self.embeddings[:, 0], self.embeddings[:, 1], c=labels, cmap='rainbow')
+        plt.title("DBSCAN Clustering")
+        plt.xlabel('Component 1')
+        plt.ylabel('Component 2')
+        plt.savefig(os.path.join(os.getcwd(), "output_plots", self.exp_name + "_dbscan_clustering" + ".png"))
+        return labels
 
 if __name__ == '__main__':
-    embedding_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/HNC_pretrained_embedding.tsv")
-    metadata_file_path = os.path.join("/mnt/c/Users/Yifei/Documents/NoodlePy/output_plots/HNC_pretrained_metadata.tsv")
-    embedding_viewer = EmbeddingViewer(embeddings_file_path = embedding_file_path, metadata_file_path = metadata_file_path, exp_name = "staging_svg")
+    embedding_file_path = os.path.join(r"C:\Users\Yifei\Documents\NoodlePy\output_plots\HNC_pretrained_embedding.tsv")
+    metadata_file_path = os.path.join(r"C:\Users\Yifei\Documents\NoodlePy\output_plots\HNC_pretrained_metadata.tsv")
+    embedding_viewer = EmbeddingViewer(embeddings_file_path = embedding_file_path, metadata_file_path = metadata_file_path, exp_name = "training_data")
     embedding_viewer.tsne2d(label_name_for_color='patient_id')
     embedding_viewer.tsne2d(label_name_for_color='staging')
     embedding_viewer.tsne2d(label_name_for_color='sample_type')
