@@ -43,14 +43,11 @@ def train_model(model, train_dataloader, training_cfg):
         # log the loss of every epoch
         wandb.log({"loss": avg_loss, "output_std": avg_output_std, "epoch": epoch})
         print(f"Epoch {epoch+1}/{training_cfg.epochs}, Loss: {avg_loss:.4f}, Output Std: {avg_output_std:.4f}")
-        # if the standard deviation of the output is too small, we stop training
-        if avg_output_std < 0.01:
-            print("Output std is too small, stopping training")
-            break
+        # save the model every 10 epochs
     print("Finished Training")
     return model
 
-def test_model(model, test_dataloader, label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None, exp_name = "test"):
+def test_model(model, test_dataloader, label_name_for_color='staging', map_for_color = None, exp_name = "test"):
     print("Visualizing inference...")
     device = "cuda" if torch.cuda.is_available() else "cpu"
     embeddings = []
@@ -70,6 +67,6 @@ def test_model(model, test_dataloader, label_name_for_color='staging', label_nam
     embeddings = torch.cat(embeddings, dim=0)
     embeddings = embeddings.cpu().numpy()
 
-    viewer = EmbeddingViewer(embeddings, label_dict_list, map=map_for_color_and_marker, exp_name=exp_name)
-    viewer.tsne2d(label_name_for_color=label_name_for_color, label_name_for_marker=label_name_for_marker)
+    viewer = EmbeddingViewer(embeddings, label_dict_list, map=map_for_color, exp_name=exp_name)
+    viewer.tsne2d(label_name_for_color=label_name_for_color)
     viewer.save_files_for_tf_embedding_projector()

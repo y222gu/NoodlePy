@@ -91,5 +91,5 @@ if __name__ == "__main__":
     map_for_color_and_marker = {'C': 'b', 'OC': 'r', 'EVs': 'x', 'serum': 'o', 'desalted1x': 'p', 'original': 'x', 'none': 'o', 'default_color':'teal', 'default_marker':'*'}
 
     ##### TEST A MODEL
-    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = map_for_color_and_marker, exp_name = exp_name)
+    test_model(model, test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color = map_for_color_and_marker, exp_name = exp_name)
    

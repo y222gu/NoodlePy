@@ -24,11 +24,11 @@ augmentation:
     - shot_noise
     - dark_current_noise
     - photo_response_non_uniformity
-    - cosmic_ray
+    # - cosmic_ray
     
   normalization: # normalization options
     normalization_type_options: # by_max or by_area
-      by_max
+      by_area
 
   amplification: # spectrum_amplifying_factor
     spectrum_amplifying_factor: 
@@ -38,32 +38,32 @@ augmentation:
   shot_noise: # photon shot noise
     noise_type: poisson
     lam: 
-      low: 5 # lambda for poisson noise
-      high: 15
+      low: 0 # lambda for poisson noise
+      high: 20
 
   dark_current_noise: #dark_current_shot_noise
     noise_type: poisson
     lam: 
-      low: 5 # lambda for poisson noise
-      high: 15
+      low: 0 # lambda for poisson noise
+      high: 20
 
   photo_response_non_uniformity: #photo_response_non_uniformity
     noise_type: gaussian
     mean: 
-      low: 0.005
-      high: 0.015
+      low: -30
+      high: 30
     std: 
-      low: 0.01
-      high: 0.05
+      low: 10
+      high: 20
 
   FPN_noise: #dark_signal_FPN_noise
     noise_type: lognormal
     mean: 
-      low: 0.1
-      high: 0.5
+      low: -10
+      high: 10
     sigma: 
-      low: 0.01
-      high: 0.05
+      low: 5
+      high: 10
 
   horizontal_shift: #instrumental_horizontal_shift
     low: 0.5
@@ -92,7 +92,7 @@ augmentation:
       - 0.000005
     spike_amplitude: 
       low: 2
-      high: 5
+      high: 3
 
   baseline: 
     baseline_type_options: 

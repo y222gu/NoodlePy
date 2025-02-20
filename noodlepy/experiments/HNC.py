@@ -88,5 +88,5 @@ if __name__ == "__main__":
     model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", exp_name + "_model_HNC.pth")))
 
     ##### TEST A MODEL
-    test_model(model, train_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None, exp_name = exp_name)
+    test_model(model, train_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color = None, exp_name = exp_name)
    

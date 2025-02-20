@@ -31,20 +31,13 @@ class EmbeddingViewer:
             raise ValueError("Provide either (embeddings and label_dict_list) or (embedding_file_name and metadata_file_name)")
 
     @staticmethod
-    def map_label(labels, map, type):
-        if type == 'to_color':
-            default_label = map['default_color']
-        elif type == 'to_marker':
-            default_label = map['default_marker']
-        else:
-            raise ValueError("Invalid type. Choose 'to_color' or 'to_marker'")
-        
+    def map_label(labels, map):
         mapped_labels = []
         for label in labels:
             if label in map:
                 mapped_labels.append(map[label])
             else:
-                mapped_labels.append(default_label)
+                raise ValueError("Label not found in the color map")
         return mapped_labels
     
     @staticmethod
@@ -161,7 +154,7 @@ class EmbeddingViewer:
                 reorganized_label_dict[key].extend(value)
         return reorganized_label_dict
     
-    def tsne2d(self, label_name_for_color='staging', label_name_for_marker='sample_type'):
+    def tsne2d(self, label_name_for_color='staging'):
         embeddings_2d = EmbeddingViewer.compute_tsne(self.embeddings, dim=2)
 
         # Save the 2d embedding file
@@ -180,15 +173,13 @@ class EmbeddingViewer:
         elif label_name_for_color == 'patient_id':
             colors = EmbeddingViewer.map_label_patient_id(self.labels[label_name_for_color])
         else:
-            colors = EmbeddingViewer.map_label(self.labels[label_name_for_color], self.map, type='to_color')
-        
-        # markers = EmbeddingViewer.map_label(self.labels[label_name_for_marker], self.map, type='to_marker')
+            colors = EmbeddingViewer.map_label(self.labels[label_name_for_color], self.map)
 
         fig, ax = plt.subplots(figsize=(14, 11))
 
         # Scatter points, set alpha low to make points translucent
         for i in range(len(embeddingsdf.x)):
-            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=">", alpha=1, s=250) #marker=markers[i],
+            ax.scatter(embeddingsdf.x[i], embeddingsdf.y[i], c=colors[i], marker=">", alpha=1, s=250)
         # plt.title(title)
         plt.xlabel('Component 1')
         plt.ylabel('Component 2')
@@ -333,6 +324,3 @@ if __name__ == '__main__':
     embedding_viewer.tsne2d(label_name_for_color='patient_id')
     embedding_viewer.tsne2d(label_name_for_color='staging')
     embedding_viewer.tsne2d(label_name_for_color='sample_type')
-    #embedding_viewer.tsne2d(label_name_for_color='sample_type', label_name_for_marker='staging')
-    #embedding_viewer.tsne2d_by_patient()
-    #embedding_viewer.tsne3d(embeddings_3d=embedding_viewer.embeddings, labels_for_color=embedding_viewer.labels['staging'], labels_for_marker=embedding_viewer.labels['sample_type'])

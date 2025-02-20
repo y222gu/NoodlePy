@@ -9,6 +9,7 @@ from noodlepy.ml.backbone import cnn_backbone
 import wandb
 from noodlepy.utils.seed import seed_all_random_process, seed_worker
 from noodlepy.utils.traintestmodel import train_model, test_model
+import matplotlib.pyplot as plt
 
 
 if __name__ == "__main__":
@@ -16,11 +17,11 @@ if __name__ == "__main__":
     wandb.login()
     wandb.init(
         project="SimSiam", 
-        name=f"2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_on_unpreprocessed_data", 
+        name=f"2025_2_13_HNC_plasma_hclustering_remove_3_5_6_augmented_preprocessed_continued_400epochs", 
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.001,
-            "epochs": 100,
+            "epochs": 400,
             "batch_size": 32,
             "backbone_dim": [1, 8, 16, 32, 64, 128],
             "random_seed" : 0,
@@ -36,19 +37,17 @@ if __name__ == "__main__":
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
-    train_preprocessor = SpectrumPreprocessor(cropping=True,
-                                        baseline_correction=False,
-                                        remove_cosmic_rays= False,
+    train_preprocessor = SpectrumPreprocessor(cropping=False,
+                                        baseline_correction=True,
+                                        remove_cosmic_rays= True,
                                         normalization=True,
-                                        smoothing=False)
+                                        smoothing=True)
     train_augmentor = SpectrumAugmentor(ramdom_augmentations=True,
                                   augmentation_step_list = None,
                                   config_path= None)
 
 
     plasma_train_dataset = HNC_Dataset(plasma_train_dataset_path, annotation_file_path, train_preprocessor, train_augmentor)
-    plasma_train_dataset.hierarchical_clustering(threshold=10000)
-    plasma_train_dataset.remove_clusters_from_db([5,6])
  
     plasma_train_dataloaders = DataLoader(
         plasma_train_dataset,
@@ -71,18 +70,27 @@ if __name__ == "__main__":
     )
 
     ##### NAME OF THE MODEL
-    exp_name = "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_on_unpreprocessed_data"
+    exp_name = "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_model_HNC_with_both_blob"
+    experiment_folder = os.path.join(os.getcwd(), "output_plots")
     wandb.run.name = exp_name
 
+    #### LOAD A SAVED MODEL
+    model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_model_HNC_with_both_blob.pth")))
+
     #### TRAIN THE MODEL
-    model = train_model(model, plasma_train_dataloaders, training_cfg)
+    # model = train_model(model, plasma_train_dataloaders, training_cfg)
 
     ##### SAVE THE MODEL
-    torch.save(model.state_dict(), os.path.join(os.getcwd(), "output_plots", exp_name + "_model_HNC.pth"))
+    # experiment_folder = os.path.join(os.getcwd(), "output_plots")
+    # os.makedirs(experiment_folder, exist_ok=True)
+    # torch.save(model.state_dict(), os.path.join(experiment_folder, exp_name + "model_HNC.pth"))
 
     # #### LOAD A SAVED MODEL
-    # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", exp_name + "_model_HNC.pth")))
+    # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "model_HNC.pth")))
 
-    # ##### TEST A MODEL
-    # test_model(model, plasma_test_dataloaders,  label_name_for_color='staging', label_name_for_marker='sample_type', map_for_color_and_marker = None, exp_name = exp_name)
+    ##### TEST A MODEL
+    colors = plt.cm.get_cmap('tab20', 2)
+    map_for_color = {0: colors(0), 1: colors(1)}
+    test_model(model, plasma_test_dataloaders,  label_name_for_color='cluster', map_for_color = map_for_color, exp_name = exp_name)
+    test_model(model, plasma_test_dataloaders,  label_name_for_color='staging', map_for_color = None, exp_name = exp_name)
    
