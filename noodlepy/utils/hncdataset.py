@@ -314,91 +314,91 @@ class HNC_Dataset(Dataset):
         Z = linkage(distance_matrix, method='complete')
         original_clusters = cut_tree(Z, height=threshold)
         original_num_clusters = np.max(original_clusters) + 1
-        # # plot the dendrogram
-        # plt.figure(figsize=(10, 5))
-        # plt.title("Dendrogram of the dataset")
-        # dendrogram(Z, color_threshold= threshold,above_threshold_color="#808080")
-        # plt.savefig(f'Dendrogram clustering with threshold {threshold}.png')
+        # plot the dendrogram
+        plt.figure(figsize=(10, 5))
+        plt.title("Dendrogram of the dataset")
+        dendrogram(Z, color_threshold= threshold,above_threshold_color="#808080")
+        plt.savefig(f'Dendrogram clustering with threshold {threshold}.png')
 
-        # ## Example spectra for each cluster
-        # fig, axes = plt.subplots(original_num_clusters, 1, sharex=True, figsize=(10, original_num_clusters * 2))
-        # original_colors = plt.cm.get_cmap('tab20', original_num_clusters)
-        # raman_shift = spectrum.raman_shift_cm
+        ## Example spectra for each cluster
+        fig, axes = plt.subplots(original_num_clusters, 1, sharex=True, figsize=(10, original_num_clusters * 2))
+        original_colors = plt.cm.get_cmap('tab20', original_num_clusters)
+        raman_shift = spectrum.raman_shift_cm
 
-        # for i in range(original_num_clusters):
-        #     original_cluster_spectra = cropped_spectra[original_clusters.flatten()== i]
-        #     for j in range(min(300, len(original_cluster_spectra))):
-        #         sns.lineplot(x=raman_shift, y=original_cluster_spectra[j], color=original_colors(i), alpha=0.5, ax=axes[i])
-        #         # add text to show the total number of spectra in the cluster
-        #         axes[i].text(0.05, 0.95, f"Cluster {i} Total spectra: {len(original_cluster_spectra)}", transform=axes[i].transAxes, fontsize=12, verticalalignment='top', color=original_colors(i))
-        # plt.xlabel("Raman shift (cm^-1)")
-        # plt.ylabel("Intensity (a.u.)")
-        # plt.title("Example Spectra clustering")
-        # plt.tight_layout()
-        # plt.savefig(f'Example Spectra clustering with threshold {threshold}.png')
+        for i in range(original_num_clusters):
+            original_cluster_spectra = cropped_spectra[original_clusters.flatten()== i]
+            for j in range(min(300, len(original_cluster_spectra))):
+                sns.lineplot(x=raman_shift, y=original_cluster_spectra[j], color=original_colors(i), alpha=0.5, ax=axes[i])
+                # add text to show the total number of spectra in the cluster
+                axes[i].text(0.05, 0.95, f"Cluster {i} Total spectra: {len(original_cluster_spectra)}", transform=axes[i].transAxes, fontsize=12, verticalalignment='top', color=original_colors(i))
+        plt.xlabel("Raman shift (cm^-1)")
+        plt.ylabel("Intensity (a.u.)")
+        plt.title("Example Spectra clustering")
+        plt.tight_layout()
+        plt.savefig(f'Example Spectra clustering with threshold {threshold}.png')
 
-        # # perform T-SNE on the dataset
-        # tsne = TSNE(n_components=2, random_state=0)
-        # original_tsne_results = tsne.fit_transform(cropped_spectra)
-        # plt.figure(figsize=(10, 5))
-        # plt.title("T-SNE of the dataset")
-        # plt.scatter(original_tsne_results[:, 0], original_tsne_results[:, 1], c=original_clusters.flatten(), cmap='tab20')
-        # plt.colorbar()
-        # plt.savefig(f'T-SNE clustering with threshold {threshold}.png')
+        # perform T-SNE on the dataset
+        tsne = TSNE(n_components=2, random_state=0)
+        original_tsne_results = tsne.fit_transform(cropped_spectra)
+        plt.figure(figsize=(10, 5))
+        plt.title("T-SNE of the dataset")
+        plt.scatter(original_tsne_results[:, 0], original_tsne_results[:, 1], c=original_clusters.flatten(), cmap='tab20')
+        plt.colorbar()
+        plt.savefig(f'T-SNE clustering with threshold {threshold}.png')
 
-        # # t-SNE of the dataset colored by staging in the metadata
-        # plt.figure(figsize=(10, 5))
-        # plt.title("T-SNE of the dataset colored by staging")
-        # plt.scatter(original_tsne_results[:, 0], original_tsne_results[:, 1], c=[s.metadata['staging'] for s in self.db], cmap='rainbow')
-        # plt.colorbar()
-        # plt.savefig(f'T-SNE clustering with threshold {threshold} colored by staging.png')
+        # t-SNE of the dataset colored by staging in the metadata
+        plt.figure(figsize=(10, 5))
+        plt.title("T-SNE of the dataset colored by staging")
+        plt.scatter(original_tsne_results[:, 0], original_tsne_results[:, 1], c=[s.metadata['staging'] for s in self.db], cmap='rainbow')
+        plt.colorbar()
+        plt.savefig(f'T-SNE clustering with threshold {threshold} colored by staging.png')
 
 ############################################################################################################
 
         # calculate the distance matrix for normalized spectra
         distance_matrix = pdist(normalized_spectra, metric='euclidean')
         Z = linkage(distance_matrix, method='complete')
-        normalized_clusters = cut_tree(Z, height=6)
+        normalized_clusters = cut_tree(Z, height=14)
         normalized_num_clusters = np.max(normalized_clusters) + 1
-        # # plot the dendrogram
-        # plt.figure(figsize=(10, 5))
-        # plt.title("Dendrogram of the normalized dataset")
-        # dendrogram(Z, color_threshold= 6, above_threshold_color="#808080")
-        # plt.savefig(f'Dendrogram clustering normalized data with threshold {6}.png')
+        # plot the dendrogram
+        plt.figure(figsize=(10, 5))
+        plt.title("Dendrogram of the normalized dataset")
+        dendrogram(Z, color_threshold= 14, above_threshold_color="#808080")
+        plt.savefig(f'Dendrogram clustering normalized data with threshold {14}.png')
 
-        # ## Example spectra for each cluster
-        # fig, axes = plt.subplots(normalized_num_clusters, 1, sharex=True, figsize=(10, normalized_num_clusters * 2))
-        # normalized_colors = plt.cm.get_cmap('tab20', normalized_num_clusters)
-        # raman_shift = spectrum.raman_shift_cm
+        ## Example spectra for each cluster
+        fig, axes = plt.subplots(normalized_num_clusters, 1, sharex=True, figsize=(10, normalized_num_clusters * 2))
+        normalized_colors = plt.cm.get_cmap('tab20', normalized_num_clusters)
+        raman_shift = spectrum.raman_shift_cm
 
-        # for i in range(normalized_num_clusters):
-        #     normalized_cluster_spectra = normalized_spectra[normalized_clusters.flatten()== i]
-        #     corresponding_original_cluster = original_clusters[normalized_clusters.flatten()== i]
-        #     for j in range(min(300, len(normalized_cluster_spectra))):
-        #         sns.lineplot(x=raman_shift, y=normalized_cluster_spectra[j], color=original_colors(corresponding_original_cluster[j]), alpha=0.5, ax=axes[i])
-        #         # add text to show the total number of spectra in the cluster
-        #         axes[i].text(0.05, 0.95, f"Cluster {i} Total spectra: {len(normalized_cluster_spectra)}", transform=axes[i].transAxes, fontsize=12, verticalalignment='top', color=normalized_colors(i))
-        # plt.xlabel("Raman shift (cm^-1)")
-        # plt.ylabel("Intensity (a.u.)")
-        # plt.title("Example Spectra clustering normalized data")
-        # plt.tight_layout()
-        # plt.savefig(f'Example Spectra clustering normalized data with threshold {6}.png')
+        for i in range(normalized_num_clusters):
+            normalized_cluster_spectra = normalized_spectra[normalized_clusters.flatten()== i]
+            corresponding_original_cluster = original_clusters[normalized_clusters.flatten()== i]
+            for j in range(min(300, len(normalized_cluster_spectra))):
+                sns.lineplot(x=raman_shift, y=normalized_cluster_spectra[j], color=original_colors(corresponding_original_cluster[j]), alpha=0.5, ax=axes[i])
+                # add text to show the total number of spectra in the cluster
+                axes[i].text(0.05, 0.95, f"Cluster {i} Total spectra: {len(normalized_cluster_spectra)}", transform=axes[i].transAxes, fontsize=12, verticalalignment='top', color=normalized_colors(i))
+        plt.xlabel("Raman shift (cm^-1)")
+        plt.ylabel("Intensity (a.u.)")
+        plt.title("Example Spectra clustering normalized data")
+        plt.tight_layout()
+        plt.savefig(f'Example Spectra clustering normalized data with threshold {6}.png')
 
-        # # perform T-SNE on the dataset
-        # tsne = TSNE(n_components=2, random_state=0)
-        # normalized_tsne_results = tsne.fit_transform(normalized_spectra)
-        # plt.figure(figsize=(10, 5))
-        # plt.title("T-SNE of the normalized dataset")
-        # plt.scatter(normalized_tsne_results[:, 0], normalized_tsne_results[:, 1], c=original_clusters.flatten(), cmap='tab20')
-        # plt.colorbar()
-        # plt.savefig(f'T-SNE clustering normalized data with threshold {6}.png')
+        # perform T-SNE on the dataset
+        tsne = TSNE(n_components=2, random_state=0)
+        normalized_tsne_results = tsne.fit_transform(normalized_spectra)
+        plt.figure(figsize=(10, 5))
+        plt.title("T-SNE of the normalized dataset")
+        plt.scatter(normalized_tsne_results[:, 0], normalized_tsne_results[:, 1], c=original_clusters.flatten(), cmap='tab20')
+        plt.colorbar()
+        plt.savefig(f'T-SNE clustering normalized data with threshold {6}.png')
 
-        # # t-SNE of the dataset colored by staging in the metadata
-        # plt.figure(figsize=(10, 5))
-        # plt.title("T-SNE of the normalized dataset colored by staging")
-        # plt.scatter(normalized_tsne_results[:, 0], normalized_tsne_results[:, 1], c=[s.metadata['staging'] for s in self.db], cmap='rainbow')
-        # plt.colorbar()
-        # plt.savefig(f'T-SNE clustering normalized data with threshold {6} colored by staging.png')
+        # t-SNE of the dataset colored by staging in the metadata
+        plt.figure(figsize=(10, 5))
+        plt.title("T-SNE of the normalized dataset colored by staging")
+        plt.scatter(normalized_tsne_results[:, 0], normalized_tsne_results[:, 1], c=[s.metadata['staging'] for s in self.db], cmap='rainbow')
+        plt.colorbar()
+        plt.savefig(f'T-SNE clustering normalized data with threshold {6} colored by staging.png')
 
         # add the clusters to the metadata in the database
         for i in range(len(self.db)):

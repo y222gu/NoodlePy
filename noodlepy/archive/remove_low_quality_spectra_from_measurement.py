@@ -4,7 +4,7 @@ import json
 import shutil
 
 def clean_files(data_folder = None,
-                 annotation_for_low_quality_spectra = None):
+                 annotation_for_low_quality_spectra = None, output_folder = None):
         """
         Load the database of spectra from the txt file 
 
@@ -16,48 +16,50 @@ def clean_files(data_folder = None,
         """
         print("Loading the Raman dataset")
 
-        list_of_file_names = sorted([f for f in os.listdir(data_folder) if f.endswith(('.txt'))])
+        list_of_file_names = []
+        for root, dirs, files in os.walk(data_folder):
+            for file in files:
+                if file.endswith('.txt'):
+                    list_of_file_names.append(os.path.join(root, file))
+        list_of_file_names = sorted(list_of_file_names)
 
         # Load json file in format of patient_id: [spectra_id]
         with open(annotation_for_low_quality_spectra) as f:
             low_quality_spectra = json.load(f)
 
-        for filename in list_of_file_names:
-            spectra_id_to_remove = []
-            cleaned_spectra = []
-            patient_id, sample_type = extract_patient_labels(filename)
-            data_folder_updated = os.path.join(data_folder, sample_type)
-            if not os.path.exists(data_folder_updated):
-                os.makedirs(data_folder_updated)
-            save_file_to_path = os.path.join(data_folder_updated, filename)
-
-            for entry in low_quality_spectra:
-                if entry[0] == patient_id and entry[1] == sample_type:
-                    spectra_id_to_remove = entry[2]
-                    print(spectra_id_to_remove)
-                    cleaned_spectra = remove_spectrum_id(data_folder, filename, spectra_id_to_remove)
-                    break
+            combined_low_quality_spectra = {}
+            for low_quality_spectrum in low_quality_spectra:
+                key = (low_quality_spectrum['patient_id'], low_quality_spectrum['date'], low_quality_spectrum['position'])
+                if key not in combined_low_quality_spectra:
+                    combined_low_quality_spectra[key] = []
+                combined_low_quality_spectra[key].append(low_quality_spectrum['spectrum_id'])
             
-            if len(cleaned_spectra) > 0:
-                save_to_file(cleaned_spectra, save_file_to_path)
-            
-            if len(cleaned_spectra) == 0 and spectra_id_to_remove != []:
-                print(f"File {filename} is empty after removing low quality spectra. File will not be saved.")
+            low_quality_spectra = combined_low_quality_spectra
 
-            if spectra_id_to_remove == []:
-                original_file_path = os.path.join(data_folder, filename)
-                shutil.copy(original_file_path, save_file_to_path)
+            for key, low_quality_spectra in low_quality_spectra.items():
+                patient_id, date, position = key
+                spectra_to_remove = low_quality_spectra
+
+                for file_name in list_of_file_names:
+                    file_name_base = os.path.basename(file_name)
+                    file_date, file_patient_id, file_position = extract_patient_labels(file_name_base)
+                    if file_patient_id == int(patient_id) and file_date == date and file_position == position:
+                        cleaned_spectra = remove_spectrum_id(file_name, spectra_to_remove)
+                        
+                        save_file_to_path = os.path.join(data_folder, file_name)
+                        save_to_file(cleaned_spectra, save_file_to_path)
+                        break
 
 def extract_patient_labels(spectrum_file_name):
         f_split = spectrum_file_name.split('_')
-        patient_id = int(f_split[0])
-        sample_type = f_split[1]
-        return patient_id, sample_type
+        date = f_split[0]
+        patient_id = int(f_split[1])
+        position = f_split[-1].split('.')[0]
+        return date, patient_id, position
     
-def remove_spectrum_id(data_folder:str,
-                               filename:str, 
+def remove_spectrum_id(file_path, 
                                spectra_id_to_remove:list):
-        with open(os.path.join(data_folder, filename)) as f:
+        with open(file_path) as f:
             data = pd.read_csv(f, sep=",", header=None)
 
             repeated_wavelengths = data.iloc[:,0].value_counts()
@@ -81,24 +83,22 @@ def remove_spectrum_id(data_folder:str,
                     
                     # append wavelength and intensity to the spectrum_list and separated by a comma
                     spectrum_list.append([wavelength_nm, intensity])
-            print(f'{spectra_id_to_remove} removed from {filename}')
+            print(f'{spectra_id_to_remove} removed from {os.path.basename(file_path)}')
             print("Number of spectra after removing low quality spectra: ", len(spectrum_list))
-            print(f"{len(spectrum_list)/1024} spectra left")
             return spectrum_list
 
 def save_to_file(cleaned_spectra, save_file_to_path:str):
-        with open(save_file_to_path, 'w') as f:
-            for i in range(len(cleaned_spectra)):
-                for j in range(len(cleaned_spectra[i][0])):
-                    f.write(str(cleaned_spectra[i][0][j]) + "," + str(cleaned_spectra[i][1][j]) + "\n")
-                if i != len(cleaned_spectra) - 1:
-                    f.write("\n")
-
-def main():
-    current_directory = os.getcwd()
-    data_folder = os.path.join(current_directory, "noodlepy","data", "head_and_neck_cancer", "plasma_cleaned")
-    annotation_for_low_quality_spectra = os.path.join(current_directory, "low_quality_spectra.json")
-    clean_files(data_folder, annotation_for_low_quality_spectra)
+    with open(save_file_to_path, 'w') as f:
+        for i in range(len(cleaned_spectra)):
+            for j in range(len(cleaned_spectra[i][0])):
+                f.write(str(cleaned_spectra[i][0][j]) + "," + str(cleaned_spectra[i][1][j]) + "\n")
+            if i != len(cleaned_spectra) - 1:
+                f.write("\n")
 
 if __name__ == "__main__":
-    main()
+    data_folder = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_copy"
+    output_folder = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_cleaned"
+    annotation_for_low_quality_spectra = r"C:\Users\Yifei\Documents\NoodlePy\quality_control\weird_spectra.json"
+    # if not os.path.exists(output_folder):
+    #     os.makedirs(output_folder)
+    clean_files(data_folder, annotation_for_low_quality_spectra, output_folder)
