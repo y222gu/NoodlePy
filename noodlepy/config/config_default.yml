@@ -10,8 +10,8 @@ preprocessing:
     max_iter: 15
     tol: 0.001
   cosmic_rays_removal: # WhitakerHayes's modified z-scores filtering
-    kernel_size: 2
-    threshold: 3.5
+    kernel_size: 7
+    threshold: 2
   smoothing: #Savitzky-Golay filter
     window_length: 9
     polyorder: 2
