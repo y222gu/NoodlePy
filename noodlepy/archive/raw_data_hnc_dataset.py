@@ -53,12 +53,13 @@ class HNC_Dataset(Dataset):
                 list_of_spectrum_objects+=spectrum_objects
 
         # preprocess the spectra
-        preprocessed_spectra = []
-        for spectrum in list_of_spectrum_objects:
-            spectrum = self.preprocessor.preprocess(spectrum)
-            preprocessed_spectra.append(spectrum)
+        # preprocessed_spectra = []
+        # for spectrum in list_of_spectrum_objects:
+        #     spectrum = self.preprocessor.preprocess(spectrum)
+        #     preprocessed_spectra.append(spectrum)
 
-        self.db = preprocessed_spectra
+        # self.db = preprocessed_spectra
+        self.db = list_of_spectrum_objects
 
         print(f"Loaded {len(self.db)} spectra")
 
@@ -526,10 +527,10 @@ if __name__ == "__main__":
     os.environ['PYTHONHASHSEED'] = str(seed)
 
     preprocessor = SpectrumPreprocessor(cropping=True,
-                                        baseline_correction=False,
+                                        baseline_correction=True,
                                         remove_cosmic_rays= True,
-                                        normalization= False,
-                                        smoothing=False)
+                                        normalization= True,
+                                        smoothing=True)
     
     augmentor = SpectrumAugmentor(ramdom_augmentations=True,
                                   augmentation_step_list = None,
@@ -549,7 +550,7 @@ if __name__ == "__main__":
     # dataset.check_specific_spectra(json_file)
 
     app = QApplication(sys.argv)
-    window = si.Spectra3DViewer(dataset.db)
+    window = si.SpectraViewer(dataset.db, preprocessor)
     window.resize(1000, 500)
     window.show()
     sys.exit(app.exec_())
