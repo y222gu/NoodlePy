@@ -210,6 +210,9 @@ class HNC_Dataset(Dataset):
             return []
         
         with open(os.path.join(data_folder, filename)) as f:
+            # if the file is empty, skip the file
+            if os.stat(os.path.join(data_folder, filename)).st_size == 0:
+                return []
             data = pd.read_csv(f, sep=",", header=None)
 
             repeated_wavelengths = data.iloc[:,0].value_counts()
@@ -508,7 +511,7 @@ class HNC_Dataset(Dataset):
 
     
 if __name__ == "__main__":
-    data_folder = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_high_quality"
+    data_folder = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_high_intensity_cleaned"
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
     output_folder = os.path.join(os.getcwd(), "quality_control")
     if not os.path.exists(output_folder):
