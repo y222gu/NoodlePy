@@ -511,7 +511,7 @@ class HNC_Dataset(Dataset):
 
     
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_intensity_cleaned")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
     # output_folder = os.path.join(os.getcwd(), "quality_control")
     # if not os.path.exists(output_folder):

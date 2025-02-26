@@ -35,12 +35,12 @@ class SpectrumPreprocessor:
         if self.cropping:
             preprocessed_spectrum.crop_spectrum(**self.config['cropping']) # Range temporary chosen by Victor
 
+        if self.remove_cosmic_rays:
+            preprocessed_spectrum.remove_cosmic_rays(**self.config['cosmic_rays_removal'])
+
         # Baseline correction from config
         if self.baseline_correction:
             preprocessed_spectrum.airPLS(**self.config['baseline_correction'])
-
-        if self.remove_cosmic_rays:
-            preprocessed_spectrum.remove_cosmic_rays(**self.config['cosmic_rays_removal'])
 
         # Normalization from config
         if self.normalization:

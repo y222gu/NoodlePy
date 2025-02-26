@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, 
-                             QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox, QDoubleSpinBox)
+                             QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox, QDoubleSpinBox, QSpinBox)
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -12,6 +12,7 @@ from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
+from sklearn.metrics import silhouette_score
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
@@ -81,7 +82,9 @@ class SpectraViewer(QMainWindow):
 
         # Parameters for outlier detection.
         self.n_iterations = 3
-        self.dbscan_eps = 0.5  # initial threshold
+        self.dbscan_eps = 0.5   # default eps
+        self.dbscan_min = 5     # default min_samples
+
 
         self.color_by = "None"
 
@@ -156,39 +159,98 @@ class SpectraViewer(QMainWindow):
         self.canvas_scatter.mpl_connect('motion_notify_event', self.on_pan_motion)
         self.canvas_scatter.mpl_connect('button_release_event', self.on_pan_release)
         
-        # Navigation Buttons.
-        nav_layout = QHBoxLayout()
+        # Home and Select Buttons.
+        button_layout = QHBoxLayout()
+        
         self.btn_home = QPushButton("Home")
         self.btn_home.clicked.connect(self.reset_view)
-        nav_layout.addWidget(self.btn_home)
+        button_layout.addWidget(self.btn_home)
+        
         self.btn_select = QPushButton("Select")
         self.btn_select.setCheckable(True)
         self.btn_select.toggled.connect(self.toggle_lasso)
-        nav_layout.addWidget(self.btn_select)
-        left_layout.addLayout(nav_layout)
-        
+        button_layout.addWidget(self.btn_select)
+               
         self.btn_clear = QPushButton("Clear Selection")
         self.btn_clear.clicked.connect(self.clear_selection)
-        left_layout.addWidget(self.btn_clear)
+        button_layout.addWidget(self.btn_clear)
+
+        # New: Select Outliers Button (disabled by default)
+        self.btn_select_outliers = QPushButton("Select Outliers")
+        self.btn_select_outliers.setEnabled(False)
+        self.btn_select_outliers.clicked.connect(self.select_outliers)
+        button_layout.addWidget(self.btn_select_outliers)
         
-        # Find Outliers Button.
-        self.btn_find_outliers = QPushButton("Find Outliers")
-        self.btn_find_outliers.clicked.connect(self.find_outliers)
-        left_layout.addWidget(self.btn_find_outliers)
+        left_layout.addLayout(button_layout)
+
+        # DBSCAN parameter entries.
+        dbscan_opt_layout = QHBoxLayout()
+
+        # Optimization range for eps.
+        opt_eps_label = QLabel("Optimize eps range:")
+        self.opt_eps_min_spin = QDoubleSpinBox()
+        self.opt_eps_min_spin.setRange(0.0, 10.0)
+        self.opt_eps_min_spin.setSingleStep(0.1)
+        self.opt_eps_min_spin.setValue(0.1)
+        self.opt_eps_max_spin = QDoubleSpinBox()
+        self.opt_eps_max_spin.setRange(0.0, 10.0)
+        self.opt_eps_max_spin.setSingleStep(0.1)
+        self.opt_eps_max_spin.setValue(2.0)
+        dbscan_opt_layout.addWidget(opt_eps_label)
+        dbscan_opt_layout.addWidget(self.opt_eps_min_spin)
+        dbscan_opt_layout.addWidget(self.opt_eps_max_spin)
+
+        # Optimization range for min_samples.
+        opt_min_label = QLabel("Optimize min_samples range:")
+        self.opt_min_min_spin = QSpinBox()
+        self.opt_min_min_spin.setRange(2, 50)
+        self.opt_min_min_spin.setSingleStep(1)
+        self.opt_min_min_spin.setValue(2)
+        self.opt_min_max_spin = QSpinBox()
+        self.opt_min_max_spin.setRange(2, 50)
+        self.opt_min_max_spin.setSingleStep(1)
+        self.opt_min_max_spin.setValue(20)
+        dbscan_opt_layout.addWidget(opt_min_label)
+        dbscan_opt_layout.addWidget(self.opt_min_min_spin)
+        dbscan_opt_layout.addWidget(self.opt_min_max_spin)
+
+        # Optimize DBSCAN button.
+        self.btn_optimize_dbscan = QPushButton("Optimize DBSCAN")
+        self.btn_optimize_dbscan.clicked.connect(self.optimize_dbscan_params)
+        dbscan_opt_layout.addWidget(self.btn_optimize_dbscan)
+
+        left_layout.addLayout(dbscan_opt_layout)
         
-        # New: DBSCAN Threshold Entry.
-        threshold_label = QLabel("DBSCAN eps:")
+        # DBSCAN parameter entries.
+        dbscan_params_row_layout = QHBoxLayout()
+
+        eps_label = QLabel("DBSCAN eps:")
         self.dbscan_spin = QDoubleSpinBox()
         self.dbscan_spin.setRange(0.0, 10.0)
         self.dbscan_spin.setSingleStep(0.1)
         self.dbscan_spin.setValue(self.dbscan_eps)
         self.dbscan_spin.valueChanged.connect(self.on_dbscan_threshold_change)
-        left_layout.addWidget(threshold_label)
-        left_layout.addWidget(self.dbscan_spin)
+        dbscan_params_row_layout.addWidget(eps_label)
+        dbscan_params_row_layout.addWidget(self.dbscan_spin)
+        
+        min_label = QLabel("DBSCAN min samples:")
+        self.dbscan_min_spin = QSpinBox()
+        self.dbscan_min_spin.setRange(2, 50)
+        self.dbscan_min_spin.setSingleStep(1)
+        self.dbscan_min_spin.setValue(self.dbscan_min)
+        self.dbscan_min_spin.valueChanged.connect(self.on_dbscan_min_change)
+        dbscan_params_row_layout.addWidget(min_label)
+        dbscan_params_row_layout.addWidget(self.dbscan_min_spin)
+
+        self.btn_find_outliers = QPushButton("Find Outliers")
+        self.btn_find_outliers.clicked.connect(self.find_outliers)
+        dbscan_params_row_layout.addWidget(self.btn_find_outliers)
+
+        left_layout.addLayout(dbscan_params_row_layout)     
         
         # Right panel for line plot and metadata.
         right_layout = QVBoxLayout()
-        self.fig_line = Figure(figsize=(5, 3))
+        self.fig_line = Figure(figsize=(8, 6))
         self.canvas_line = FigureCanvas(self.fig_line)
         self.ax_line = self.fig_line.add_subplot(111)
         self.ax_line.set_title("Select points to view spectra")
@@ -215,11 +277,43 @@ class SpectraViewer(QMainWindow):
 
     def on_dbscan_threshold_change(self, value):
         self.dbscan_eps = value
-        print(f"DBSCAN eps threshold updated to {self.dbscan_eps}")
+        print(f"DBSCAN eps updated to {self.dbscan_eps}")
 
-    # The rest of your functions remain unchanged.
-    # (populate_color_combo, update_preprocessing, compute_embedding, plot_embedding, etc.)
-    
+    def on_dbscan_min_change(self, value):
+        self.dbscan_min = value
+        print(f"DBSCAN min_samples updated to {self.dbscan_min}")
+
+    def optimize_dbscan_params(self):
+        # Use the PCA projection (first 2 components) for evaluation.
+        data_matrix = np.array([obj.intensity for obj in self.data_objects])
+        pca_data = PCA(n_components=2).fit_transform(data_matrix)
+        best_score = -1
+        best_eps = self.dbscan_eps
+        best_min = self.dbscan_min
+        # Define grid ranges (adjust as needed).
+        for eps in np.linspace(self.opt_eps_min_spin.value(), self.opt_eps_max_spin.value(), 10):
+            for min_samples in range(self.opt_min_min_spin.value(), self.opt_min_max_spin.value() + 1):
+                db = DBSCAN(eps=eps, min_samples=min_samples)
+                labels = db.fit_predict(pca_data)
+                # Exclude noise and require at least 2 clusters.
+                clusters = [l for l in set(labels) if l != -1]
+                if len(clusters) < 2:
+                    continue
+                try:
+                    score = silhouette_score(pca_data, labels)
+                    if score > best_score:
+                        best_score = score
+                        best_eps = eps
+                        best_min = min_samples
+                except Exception as e:
+                    pass
+        # Update parameters.
+        self.dbscan_eps = best_eps
+        self.dbscan_min = best_min
+        self.dbscan_spin.setValue(best_eps)
+        self.dbscan_min_spin.setValue(best_min)
+        print(f"Optimized DBSCAN: eps={best_eps:.3f}, min_samples={best_min}, silhouette={best_score:.3f}")
+
     def populate_color_combo(self):
         self.color_combo.clear()
         self.color_combo.addItem("None")
@@ -256,8 +350,6 @@ class SpectraViewer(QMainWindow):
         self.selected_indices = selected_indices
         if len(self.selected_indices) > 0:
             self.update_line_plot()
-
-
 
 
     def compute_embedding(self):
@@ -585,10 +677,21 @@ class SpectraViewer(QMainWindow):
             print(f"Iteration {iteration+1} found {len(iter_outliers)} outliers.")
         self.outlier_indices = outlier_indices
         print(f"Total outliers found: {len(outlier_indices)}")
+        
         if self.color_combo.findText("outlier") == -1:
             self.color_combo.addItem("outlier")
         self.color_combo.setCurrentText("outlier")
         self.plot_embedding()
+        
+        # Enable the Select Outliers button since we now have outlier information.
+        self.btn_select_outliers.setEnabled(True)
+
+    def select_outliers(self):
+        # Set the selected indices to all indices flagged as outliers.
+        if self.outlier_indices:
+            self.selected_indices = list(self.outlier_indices)
+            self.update_line_plot()
+
 
 if __name__ == "__main__":
     num_samples = 50

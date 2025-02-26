@@ -46,7 +46,7 @@ def clean_files(data_folder = None,
                     if file_patient_id == int(patient_id) and file_date == date and file_position == position:
                         cleaned_spectra = remove_spectrum_id(file_name, spectra_to_remove)
                         
-                        save_file_to_path = os.path.join(data_folder, file_name)
+                        save_file_to_path = os.path.join(output_folder, file_name_base)
                         save_to_file(cleaned_spectra, save_file_to_path)
                         break
 
@@ -96,9 +96,9 @@ def save_to_file(cleaned_spectra, save_file_to_path:str):
                 f.write("\n")
 
 if __name__ == "__main__":
-    data_folder = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_copy"
-    output_folder = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_cleaned"
-    annotation_for_low_quality_spectra = r"C:\Users\Yifei\Documents\NoodlePy\quality_control\weird_spectra.json"
-    # if not os.path.exists(output_folder):
-    #     os.makedirs(output_folder)
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality")
+    output_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality_cleaned")
+    annotation_for_low_quality_spectra = os.path.join(os.getcwd(), "quality_control", "outliers.json")
+    if not os.path.exists(output_folder):
+        os.makedirs(output_folder)
     clean_files(data_folder, annotation_for_low_quality_spectra, output_folder)
