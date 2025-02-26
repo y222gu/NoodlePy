@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, 
-                             QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox)
+                             QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox, QDoubleSpinBox)
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -37,7 +37,6 @@ class SpectrumPreprocessor:
         self.smoothing = smoothing
 
     def preprocess(self, obj):
-        # Dummy preprocessing: work on a copy.
         new_intensity = obj.intensity.copy()
         new_raman = obj.raman_shift_cm.copy()
         if self.cropping:
@@ -59,37 +58,35 @@ class SpectraData:
         self.metadata = metadata
 
 ########################################
-# Viewer class with Outlier Detection & Dynamic Metadata (all categorical)
+# Viewer class with Outlier Detection & DBSCAN Threshold Entry
 ########################################
+
 class SpectraViewer(QMainWindow):
     def __init__(self, data_objects, preprocessor):
         super().__init__()
         self.setWindowTitle("Spectra Viewer")
-        # Store the untouched data.
         self.original_data_objects = data_objects  
         self.preprocessor = preprocessor
-        # Preprocess initially.
         self.data_objects = [self.preprocessor.preprocess(obj) for obj in self.original_data_objects]
         
-        self.selected_indices = []          # indices selected from the scatter plot
-        self.selected_index_to_line = {}    # mapping from data index to its plotted spectrum line
-        self.hovered_index = None           # index of the spectrum currently hovered in the line plot
+        self.selected_indices = []
+        self.selected_index_to_line = {}
+        self.hovered_index = None
 
-        self.embedding_method = "T-SNE"     # default embedding method
-        self.embedding_dim = 2              # default dimension (2D)
-        self.embedding_result = None        # will hold computed embedding
-        self.embedding_cache = {}           # cache for embedding results
-        self.outlier_indices = set()        # set to store indices flagged as outlier
+        self.embedding_method = "T-SNE"
+        self.embedding_dim = 2
+        self.embedding_result = None
+        self.embedding_cache = {}
+        self.outlier_indices = set()
 
-        # Parameters for outlier detection
-        self.n_iterations = 3             # number of iterations
-        self.dbscan_eps = 0.5             # DBSCAN eps parameter
+        # Parameters for outlier detection.
+        self.n_iterations = 3
+        self.dbscan_eps = 0.5  # initial threshold
 
-        self.color_by = "None"              # default: no coloring
+        self.color_by = "None"
 
-        self.lasso = None  # Lasso instance (for 2D selection)
+        self.lasso = None
         
-        # Initialize panning attributes.
         self._pan_active = False
         self._pan_press_event = None
 
@@ -103,9 +100,6 @@ class SpectraViewer(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QHBoxLayout(central_widget)
         
-        ########################################
-        # LEFT PANEL: Preprocessing Options, Embedding & Color Controls, Scatter Plot, and Navigation Buttons.
-        ########################################
         left_layout = QVBoxLayout()
         
         # Preprocessing Options Group Box.
@@ -147,18 +141,16 @@ class SpectraViewer(QMainWindow):
         
         color_label = QLabel("Color by:")
         self.color_combo = QComboBox()
-        # We'll populate the combo dynamically.
         self.color_combo.currentIndexChanged.connect(self.on_color_change)
         control_layout.addWidget(color_label)
         control_layout.addWidget(self.color_combo)
         left_layout.addLayout(control_layout)
         
-        # Increase the size of the embedding scatter plot.
+        # Embedding Scatter Plot.
         self.fig_scatter = Figure(figsize=(7, 6))
         self.canvas_scatter = FigureCanvas(self.fig_scatter)
         left_layout.addWidget(self.canvas_scatter)
         
-        # Connect scroll and mouse events for zoom and pan.
         self.canvas_scatter.mpl_connect('scroll_event', self.on_scroll)
         self.canvas_scatter.mpl_connect('button_press_event', self.on_pan_press)
         self.canvas_scatter.mpl_connect('motion_notify_event', self.on_pan_motion)
@@ -175,19 +167,26 @@ class SpectraViewer(QMainWindow):
         nav_layout.addWidget(self.btn_select)
         left_layout.addLayout(nav_layout)
         
-        # Clear selection button.
         self.btn_clear = QPushButton("Clear Selection")
         self.btn_clear.clicked.connect(self.clear_selection)
         left_layout.addWidget(self.btn_clear)
         
-        # New: Find Outliers Button.
+        # Find Outliers Button.
         self.btn_find_outliers = QPushButton("Find Outliers")
         self.btn_find_outliers.clicked.connect(self.find_outliers)
         left_layout.addWidget(self.btn_find_outliers)
         
-        ########################################
-        # RIGHT PANEL: 2D Spectra Plot and Metadata List.
-        ########################################
+        # New: DBSCAN Threshold Entry.
+        threshold_label = QLabel("DBSCAN eps:")
+        self.dbscan_spin = QDoubleSpinBox()
+        self.dbscan_spin.setRange(0.0, 10.0)
+        self.dbscan_spin.setSingleStep(0.1)
+        self.dbscan_spin.setValue(self.dbscan_eps)
+        self.dbscan_spin.valueChanged.connect(self.on_dbscan_threshold_change)
+        left_layout.addWidget(threshold_label)
+        left_layout.addWidget(self.dbscan_spin)
+        
+        # Right panel for line plot and metadata.
         right_layout = QVBoxLayout()
         self.fig_line = Figure(figsize=(5, 3))
         self.canvas_line = FigureCanvas(self.fig_line)
@@ -212,11 +211,16 @@ class SpectraViewer(QMainWindow):
         main_layout.addLayout(left_layout)
         main_layout.addLayout(right_layout)
         
-        # For 3D selection via picking.
         self.canvas_scatter.mpl_connect('pick_event', self.on_scatter_pick)
 
+    def on_dbscan_threshold_change(self, value):
+        self.dbscan_eps = value
+        print(f"DBSCAN eps threshold updated to {self.dbscan_eps}")
+
+    # The rest of your functions remain unchanged.
+    # (populate_color_combo, update_preprocessing, compute_embedding, plot_embedding, etc.)
+    
     def populate_color_combo(self):
-        """Populate the 'Color by' combo box dynamically from the metadata keys."""
         self.color_combo.clear()
         self.color_combo.addItem("None")
         if self.data_objects:
@@ -225,30 +229,42 @@ class SpectraViewer(QMainWindow):
                 keys.update(obj.metadata.keys())
             for key in sorted(keys):
                 self.color_combo.addItem(key)
-        # The "outlier" option will be added later when outlier detection runs.
 
     def update_preprocessing(self):
+        # Update preprocessor settings from checkboxes.
         self.preprocessor.cropping = self.cb_cropping.isChecked()
         self.preprocessor.baseline_correction = self.cb_baseline.isChecked()
         self.preprocessor.remove_cosmic_rays = self.cb_cosmic.isChecked()
         self.preprocessor.normalization = self.cb_norm.isChecked()
         self.preprocessor.smoothing = self.cb_smooth.isChecked()
         
-        # Clear the embedding cache.
+        # Clear the embedding cache since data will change.
         self.embedding_cache = {}
         
+        # Save the currently selected indices (as a list).
+        selected_indices = self.selected_indices.copy()
+        
+        # Reprocess all data objects.
         self.data_objects = [self.preprocessor.preprocess(obj) for obj in self.original_data_objects]
+        
+        # Refresh metadata and recompute embedding.
         self.populate_color_combo()
         self.compute_embedding()
         self.plot_embedding()
-        self.clear_selection()
+        
+        # Restore selection and update the line plot for selected spectra.
+        self.selected_indices = selected_indices
+        if len(self.selected_indices) > 0:
+            self.update_line_plot()
+
+
+
 
     def compute_embedding(self):
         key = (self.embedding_method, self.embedding_dim)
         if key in self.embedding_cache:
             self.embedding_result = self.embedding_cache[key]
             return
-
         X = np.array([obj.intensity for obj in self.data_objects])
         n_components = self.embedding_dim
         if self.embedding_method == "T-SNE":
@@ -264,28 +280,21 @@ class SpectraViewer(QMainWindow):
             self.ax_scatter = self.fig_scatter.add_subplot(111)
         else:
             self.ax_scatter = self.fig_scatter.add_subplot(111, projection='3d')
-            
         if self.embedding_result is None:
             return
-
-        # Determine colors.
         if self.color_by == "None":
             point_colors = None
         elif self.color_by == "outlier":
-            # Use a numeric label: 1 for outlier, 0 for normal.
             outlier_labels = [1 if idx in self.outlier_indices else 0 for idx in range(len(self.data_objects))]
             cmap = ListedColormap(['blue', 'red'])
             norm = BoundaryNorm([-0.5, 0.5, 1.5], cmap.N)
             point_colors = outlier_labels
         else:
-            # Fetch metadata values and treat them as categorical.
             values = [obj.metadata.get(self.color_by, None) for obj in self.data_objects]
             unique_vals = sorted(set(values))
             cmap = plt.cm.get_cmap('cool', len(unique_vals))
             point_colors = [unique_vals.index(v) for v in values]
             cat_unique = unique_vals
-
-        # Plotting.
         if self.embedding_dim == 2:
             if self.color_by == "None":
                 self.ax_scatter.scatter(
@@ -371,6 +380,9 @@ class SpectraViewer(QMainWindow):
 
     def toggle_lasso(self, checked):
         if self.embedding_dim != 2:
+            if self.lasso is not None:
+                self.lasso.disconnect_events()
+                self.lasso = None
             return
         if checked:
             if self.lasso is None:
@@ -395,6 +407,9 @@ class SpectraViewer(QMainWindow):
     def on_dimension_change(self, index):
         text = self.dim_combo.currentText()
         self.embedding_dim = 2 if text == "2D" else 3
+        if self.embedding_dim != 2 and self.lasso is not None:
+            self.lasso.disconnect_events()
+            self.lasso = None
         self.clear_selection()
         self.compute_embedding()
         self.plot_embedding()
@@ -404,8 +419,9 @@ class SpectraViewer(QMainWindow):
             return
         path = Path(verts)
         ind = np.nonzero(path.contains_points(self.embedding_result))[0]
-        self.selected_indices = ind
+        self.selected_indices = ind.tolist()  # Convert to list.
         self.update_line_plot()
+
 
     def on_scatter_pick(self, event):
         if self.embedding_dim != 3:
@@ -479,7 +495,7 @@ class SpectraViewer(QMainWindow):
         self.selected_index_to_line = {}
         self.metadata_list.clear()
         if len(self.selected_indices) == 0:
-            self.ax_line.set_title("No points selected")
+            self.ax_line.setTitle("No points selected")
         else:
             for idx in self.selected_indices:
                 obj = self.data_objects[idx]
@@ -552,12 +568,8 @@ class SpectraViewer(QMainWindow):
                 json.dump(metadata_list, f, indent=4)
 
     def find_outliers(self):
-        """
-        Run iterative PCA + DBSCAN outlier detection over the current dataset.
-        """
         data_matrix = np.array([obj.intensity for obj in self.data_objects])
         outlier_indices = set()
-        
         for iteration in range(self.n_iterations):
             print(f"Running PCA + DBSCAN Outlier Detection - Iteration {iteration+1}/{self.n_iterations}")
             pca_data = PCA().fit_transform(data_matrix)
@@ -571,25 +583,19 @@ class SpectraViewer(QMainWindow):
             iter_outliers = {idx for idx, label in enumerate(cluster_labels) if label == -1}
             outlier_indices.update(iter_outliers)
             print(f"Iteration {iteration+1} found {len(iter_outliers)} outliers.")
-        
         self.outlier_indices = outlier_indices
         print(f"Total outliers found: {len(outlier_indices)}")
-        
-        # Add "outlier" as a coloring option if not already present.
         if self.color_combo.findText("outlier") == -1:
             self.color_combo.addItem("outlier")
-        # Automatically switch to outlier coloring.
         self.color_combo.setCurrentText("outlier")
         self.plot_embedding()
 
 if __name__ == "__main__":
-    # Create dummy data.
     num_samples = 50
     data_objects = []
     for i in range(num_samples):
         intensity = np.random.rand(100)
         raman_shift = np.linspace(100, 3000, 100)
-        # Example metadata; keys may vary over time.
         metadata = {
             "patient_id": np.random.randint(100, 600),
             "sample_type": "plasma",
