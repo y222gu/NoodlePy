@@ -164,8 +164,8 @@ class HNC_Dataset(Dataset):
 
         # Patient metatdata extraction
         patient_labels = {}
-        spectrum_file_name = spectrum_file_path.split('\\')
-        f_split = spectrum_file_name[-1].split('_')
+        spectrum_file_name = os.path.basename(spectrum_file_path)
+        f_split = spectrum_file_name.split('_')
         date = f_split[0]
         patient_id = int(f_split[1])
         sample_type = f_split[2]
@@ -508,11 +508,11 @@ class HNC_Dataset(Dataset):
 
     
 if __name__ == "__main__":
-    data_folder = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_high_quality"
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
-    output_folder = os.path.join(os.getcwd(), "quality_control")
-    if not os.path.exists(output_folder):
-        os.makedirs(output_folder)
+    # output_folder = os.path.join(os.getcwd(), "quality_control")
+    # if not os.path.exists(output_folder):
+    #     os.makedirs(output_folder)
 
     seed = 4
     random.seed(seed)

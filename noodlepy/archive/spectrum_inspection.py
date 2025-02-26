@@ -1,6 +1,7 @@
 import sys
 import json
 import numpy as np
+import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, 
                              QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox)
@@ -11,8 +12,10 @@ from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
+from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from matplotlib.ticker import MaxNLocator
+from matplotlib.colors import ListedColormap, BoundaryNorm
 
 # Use the "fast" style.
 plt.style.use('fast')
@@ -43,7 +46,6 @@ class SpectrumPreprocessor:
             new_raman = new_raman[:n]
         if self.remove_cosmic_rays:
             new_intensity = new_intensity - np.random.normal(0, 0.01, size=new_intensity.shape)
-        # Other options are left unchanged in this dummy.
         return SpectraData(new_intensity, new_raman, obj.metadata)
 
 ########################################
@@ -52,27 +54,12 @@ class SpectrumPreprocessor:
 
 class SpectraData:
     def __init__(self, intensity, raman_shift_cm, metadata):
-        """
-        intensity: 1D numpy array of intensity values
-        raman_shift_cm: 1D numpy array of Raman shift values (in cm^-1)
-        metadata: dictionary, e.g.
-            {
-                "patient_id": 489,
-                "sample_type": "plasma",
-                "date": "20230622",
-                "position": "16",
-                "staging": 0,
-                "gender": "Male",
-                "race": "White",
-                "spectrum_id": 2
-            }
-        """
         self.intensity = intensity
         self.raman_shift_cm = raman_shift_cm
         self.metadata = metadata
 
 ########################################
-# Viewer class
+# Viewer class with Outlier Detection & Dynamic Metadata (all categorical)
 ########################################
 
 class SpectraViewer(QMainWindow):
@@ -92,16 +79,23 @@ class SpectraViewer(QMainWindow):
         self.embedding_method = "T-SNE"     # default embedding method
         self.embedding_dim = 2              # default dimension (2D)
         self.embedding_result = None        # will hold computed embedding
+        self.embedding_cache = {}           # cache for embedding results
+        self.outlier_indices = set()        # set to store indices flagged as outlier
+
+        # Parameters for outlier detection
+        self.n_iterations = 3             # number of iterations
+        self.dbscan_eps = 0.5             # DBSCAN eps parameter
+
         self.color_by = "None"              # default: no coloring
 
-        # Lasso instance (for 2D selection); initially None.
-        self.lasso = None
-
-        # For panning in 2D.
+        self.lasso = None  # Lasso instance (for 2D selection)
+        
+        # Initialize panning attributes.
         self._pan_active = False
         self._pan_press_event = None
 
         self.initUI()
+        self.populate_color_combo()
         self.compute_embedding()
         self.plot_embedding()
 
@@ -111,8 +105,7 @@ class SpectraViewer(QMainWindow):
         main_layout = QHBoxLayout(central_widget)
         
         ########################################
-        # LEFT PANEL: Preprocessing Options, 
-        # Embedding & Color Controls, Scatter Plot, and Navigation Buttons.
+        # LEFT PANEL: Preprocessing Options, Embedding & Color Controls, Scatter Plot, and Navigation Buttons.
         ########################################
         left_layout = QVBoxLayout()
         
@@ -155,7 +148,7 @@ class SpectraViewer(QMainWindow):
         
         color_label = QLabel("Color by:")
         self.color_combo = QComboBox()
-        self.color_combo.addItems(["None", "staging", "position", "patient_id", "date"])
+        # We'll populate the combo dynamically.
         self.color_combo.currentIndexChanged.connect(self.on_color_change)
         control_layout.addWidget(color_label)
         control_layout.addWidget(self.color_combo)
@@ -188,6 +181,11 @@ class SpectraViewer(QMainWindow):
         self.btn_clear.clicked.connect(self.clear_selection)
         left_layout.addWidget(self.btn_clear)
         
+        # New: Find Outliers Button.
+        self.btn_find_outliers = QPushButton("Find Outliers")
+        self.btn_find_outliers.clicked.connect(self.find_outliers)
+        left_layout.addWidget(self.btn_find_outliers)
+        
         ########################################
         # RIGHT PANEL: 2D Spectra Plot and Metadata List.
         ########################################
@@ -215,53 +213,51 @@ class SpectraViewer(QMainWindow):
         main_layout.addLayout(left_layout)
         main_layout.addLayout(right_layout)
         
-        # For 3D selection via picking, connect pick events.
+        # For 3D selection via picking.
         self.canvas_scatter.mpl_connect('pick_event', self.on_scatter_pick)
 
-    def reset_view(self):
-        """Reset the view by replotting the embedding (restoring original view)."""
-        self.plot_embedding()
-
-    def toggle_lasso(self, checked):
-        """Toggle the lasso tool in 2D mode. When off, panning is active."""
-        if self.embedding_dim != 2:
-            return
-        if checked:
-            # Activate lasso selection.
-            if self.lasso is None:
-                self.lasso = LassoSelector(self.ax_scatter, onselect=self.onselect)
-                if hasattr(self.lasso, 'line'):
-                    self.lasso.line.set_color('gold')
-        else:
-            # Deactivate lasso.
-            if self.lasso is not None:
-                self.lasso.disconnect_events()
-                self.lasso = None
-
-    def on_color_change(self, index):
-        self.color_by = self.color_combo.currentText()
-        self.plot_embedding()
+    def populate_color_combo(self):
+        """Populate the 'Color by' combo box dynamically from the metadata keys."""
+        self.color_combo.clear()
+        self.color_combo.addItem("None")
+        if self.data_objects:
+            keys = set()
+            for obj in self.data_objects:
+                keys.update(obj.metadata.keys())
+            for key in sorted(keys):
+                self.color_combo.addItem(key)
+        # The "outlier" option will be added later when outlier detection runs.
 
     def update_preprocessing(self):
-        """Update preprocessor settings and reapply preprocessing when Recalculate is clicked."""
         self.preprocessor.cropping = self.cb_cropping.isChecked()
         self.preprocessor.baseline_correction = self.cb_baseline.isChecked()
         self.preprocessor.remove_cosmic_rays = self.cb_cosmic.isChecked()
         self.preprocessor.normalization = self.cb_norm.isChecked()
         self.preprocessor.smoothing = self.cb_smooth.isChecked()
         
+        # Clear the embedding cache.
+        self.embedding_cache = {}
+        
         self.data_objects = [self.preprocessor.preprocess(obj) for obj in self.original_data_objects]
+        self.populate_color_combo()
         self.compute_embedding()
         self.plot_embedding()
         self.clear_selection()
 
     def compute_embedding(self):
+        key = (self.embedding_method, self.embedding_dim)
+        if key in self.embedding_cache:
+            self.embedding_result = self.embedding_cache[key]
+            return
+
         X = np.array([obj.intensity for obj in self.data_objects])
         n_components = self.embedding_dim
         if self.embedding_method == "T-SNE":
-            self.embedding_result = TSNE(n_components=n_components, random_state=42).fit_transform(X)
+            embedding = TSNE(n_components=n_components, random_state=42).fit_transform(X)
         else:
-            self.embedding_result = PCA(n_components=n_components).fit_transform(X)
+            embedding = PCA(n_components=n_components).fit_transform(X)
+        self.embedding_cache[key] = embedding
+        self.embedding_result = embedding
 
     def plot_embedding(self):
         self.fig_scatter.clear()
@@ -274,43 +270,45 @@ class SpectraViewer(QMainWindow):
             return
 
         # Determine colors.
-        categorical = False
         if self.color_by == "None":
             point_colors = None
-        elif self.color_by in ["staging", "position", "date", "patient_id"]:
-            categorical = True
+        elif self.color_by == "outlier":
+            # Use a numeric label: 1 for outlier, 0 for normal.
+            outlier_labels = [1 if idx in self.outlier_indices else 0 for idx in range(len(self.data_objects))]
+            cmap = ListedColormap(['blue', 'red'])
+            norm = BoundaryNorm([-0.5, 0.5, 1.5], cmap.N)
+            point_colors = outlier_labels
+        else:
+            # Fetch metadata values and treat them as categorical.
             values = [obj.metadata.get(self.color_by, None) for obj in self.data_objects]
             unique_vals = sorted(set(values))
-            cmap = plt.cm.get_cmap('viridis_r', len(unique_vals))
+            cmap = plt.cm.get_cmap('cool', len(unique_vals))
             point_colors = [unique_vals.index(v) for v in values]
             cat_unique = unique_vals
-        # elif self.color_by == "patient_id":
-        #     values = [obj.metadata.get(self.color_by, None) for obj in self.data_objects]
-        #     try:
-        #         numeric_values = [float(v) for v in values]
-        #         point_colors = numeric_values
-        #     except Exception:
-        #         categorical = True
-        #         unique_vals = sorted(set(values))
-        #         cmap = plt.cm.get_cmap('viridis_r', len(unique_vals))
-        #         point_colors = [unique_vals.index(v) for v in values]
-        #         cat_unique = unique_vals
 
-        # Plot scatter.
+        # Plotting.
         if self.embedding_dim == 2:
-            if not categorical and point_colors is not None:
+            if self.color_by == "None":
+                self.ax_scatter.scatter(
+                    self.embedding_result[:, 0],
+                    self.embedding_result[:, 1],
+                    color='C0',
+                    alpha=0.6,
+                    picker=True
+                )
+            elif self.color_by == "outlier":
                 sc = self.ax_scatter.scatter(
                     self.embedding_result[:, 0],
                     self.embedding_result[:, 1],
                     c=point_colors,
-                    cmap='viridis',
+                    cmap=cmap,
+                    norm=norm,
                     alpha=0.6,
                     picker=True
                 )
-                cbar = self.fig_scatter.colorbar(sc, ax=self.ax_scatter)
-                cbar.ax.yaxis.set_major_locator(MaxNLocator(integer=True))
-                cbar.set_label(self.color_by)
-            elif categorical:
+                cbar = self.fig_scatter.colorbar(sc, ax=self.ax_scatter, ticks=[0, 1])
+                cbar.ax.set_yticklabels(['normal', 'outlier'])
+            else:
                 sc = self.ax_scatter.scatter(
                     self.embedding_result[:, 0],
                     self.embedding_result[:, 1],
@@ -320,52 +318,39 @@ class SpectraViewer(QMainWindow):
                     picker=True
                 )
                 cbar = self.fig_scatter.colorbar(sc, ax=self.ax_scatter, ticks=range(len(cat_unique)))
-                if self.color_by == "staging":
-                    ticklabels = []
-                    for v in cat_unique:
-                        if v == 0:
-                            ticklabels.append("healthy")
-                        elif v == 1:
-                            ticklabels.append("early stage")
-                        elif v == 2:
-                            ticklabels.append("late stage")
-                        else:
-                            ticklabels.append(str(v))
-                else:
-                    ticklabels = [str(v) for v in cat_unique]
-                cbar.set_ticks(range(len(cat_unique)))
-                cbar.set_ticklabels(ticklabels)
+                cbar.set_ticklabels([str(v) for v in cat_unique])
                 cbar.ax.tick_params(labelsize=10)
                 cbar.set_label(self.color_by)
-            else:
-                self.ax_scatter.scatter(
-                    self.embedding_result[:, 0],
-                    self.embedding_result[:, 1],
-                    color='C0',
-                    alpha=0.6,
-                    picker=True
-                )
             self.ax_scatter.set_title(f"2D {self.embedding_method} of Spectra Intensities")
             self.canvas_scatter.draw()
-            # In 2D, if the Select button is toggled, add the lasso.
             if self.btn_select.isChecked():
                 self.lasso = LassoSelector(self.ax_scatter, onselect=self.onselect)
                 if hasattr(self.lasso, 'line'):
                     self.lasso.line.set_color('gold')
         else:
-            if not categorical and point_colors is not None:
+            if self.color_by == "None":
+                self.ax_scatter.scatter(
+                    self.embedding_result[:, 0],
+                    self.embedding_result[:, 1],
+                    self.embedding_result[:, 2],
+                    color='C0',
+                    alpha=0.6,
+                    picker=True
+                )
+            elif self.color_by == "outlier":
                 sc = self.ax_scatter.scatter(
                     self.embedding_result[:, 0],
                     self.embedding_result[:, 1],
                     self.embedding_result[:, 2],
                     c=point_colors,
-                    cmap='viridis',
+                    cmap=cmap,
+                    norm=norm,
                     alpha=0.6,
                     picker=True
                 )
-                cbar = self.fig_scatter.colorbar(sc, ax=self.ax_scatter)
-                cbar.set_label(self.color_by)
-            elif categorical:
+                cbar = self.fig_scatter.colorbar(sc, ax=self.ax_scatter, ticks=[0, 1])
+                cbar.ax.set_yticklabels(['normal', 'outlier'])
+            else:
                 sc = self.ax_scatter.scatter(
                     self.embedding_result[:, 0],
                     self.embedding_result[:, 1],
@@ -376,34 +361,31 @@ class SpectraViewer(QMainWindow):
                     picker=True
                 )
                 cbar = self.fig_scatter.colorbar(sc, ax=self.ax_scatter, ticks=range(len(cat_unique)))
-                if self.color_by == "staging":
-                    ticklabels = []
-                    for v in cat_unique:
-                        if v == 0:
-                            ticklabels.append("healthy")
-                        elif v == 1:
-                            ticklabels.append("early stage")
-                        elif v == 2:
-                            ticklabels.append("late stage")
-                        else:
-                            ticklabels.append(str(v))
-                else:
-                    ticklabels = [str(v) for v in cat_unique]
-                cbar.set_ticks(range(len(cat_unique)))
-                cbar.set_ticklabels(ticklabels)
+                cbar.set_ticklabels([str(v) for v in cat_unique])
                 cbar.ax.tick_params(labelsize=10)
                 cbar.set_label(self.color_by)
-            else:
-                self.ax_scatter.scatter(
-                    self.embedding_result[:, 0],
-                    self.embedding_result[:, 1],
-                    self.embedding_result[:, 2],
-                    color='C0',
-                    alpha=0.6,
-                    picker=True
-                )
             self.ax_scatter.set_title(f"3D {self.embedding_method} of Spectra Intensities")
             self.canvas_scatter.draw()
+
+    def reset_view(self):
+        self.plot_embedding()
+
+    def toggle_lasso(self, checked):
+        if self.embedding_dim != 2:
+            return
+        if checked:
+            if self.lasso is None:
+                self.lasso = LassoSelector(self.ax_scatter, onselect=self.onselect)
+                if hasattr(self.lasso, 'line'):
+                    self.lasso.line.set_color('gold')
+        else:
+            if self.lasso is not None:
+                self.lasso.disconnect_events()
+                self.lasso = None
+
+    def on_color_change(self, index):
+        self.color_by = self.color_combo.currentText()
+        self.plot_embedding()
 
     def on_embedding_change(self, index):
         self.embedding_method = self.embedding_combo.currentText()
@@ -427,7 +409,6 @@ class SpectraViewer(QMainWindow):
         self.update_line_plot()
 
     def on_scatter_pick(self, event):
-        # Process pick events only in 3D mode when the "Select" button is active.
         if self.embedding_dim != 3:
             return
         if not self.btn_select.isChecked():
@@ -445,13 +426,13 @@ class SpectraViewer(QMainWindow):
         if self.embedding_dim == 2:
             cur_xlim = ax.get_xlim()
             cur_ylim = ax.get_ylim()
-            xdata = event.xdata
-            ydata = event.ydata
+            center_x = (cur_xlim[0] + cur_xlim[1]) / 2
+            center_y = (cur_ylim[0] + cur_ylim[1]) / 2
             scale_factor = 0.9 if event.button == 'up' else 1.1
             new_width = (cur_xlim[1] - cur_xlim[0]) * scale_factor
             new_height = (cur_ylim[1] - cur_ylim[0]) * scale_factor
-            ax.set_xlim([xdata - new_width/2, xdata + new_width/2])
-            ax.set_ylim([ydata - new_height/2, ydata + new_height/2])
+            ax.set_xlim([center_x - new_width/2, center_x + new_width/2])
+            ax.set_ylim([center_y - new_height/2, center_y + new_height/2])
         else:
             if hasattr(ax, 'dist'):
                 if event.button == 'up':
@@ -461,7 +442,6 @@ class SpectraViewer(QMainWindow):
         self.canvas_scatter.draw_idle()
 
     def on_pan_press(self, event):
-        # If in 2D mode and not in lasso mode, start panning.
         if self.embedding_dim != 2:
             return
         if self.btn_select.isChecked():
@@ -480,7 +460,6 @@ class SpectraViewer(QMainWindow):
             return
         if event.inaxes != self.ax_scatter:
             return
-        # Calculate shift.
         dx = event.xdata - self._pan_press_event.xdata
         dy = event.ydata - self._pan_press_event.ydata
         cur_xlim = self.ax_scatter.get_xlim()
@@ -573,6 +552,37 @@ class SpectraViewer(QMainWindow):
             with open(filename, "w") as f:
                 json.dump(metadata_list, f, indent=4)
 
+    def find_outliers(self):
+        """
+        Run iterative PCA + DBSCAN outlier detection over the current dataset.
+        """
+        data_matrix = np.array([obj.intensity for obj in self.data_objects])
+        outlier_indices = set()
+        
+        for iteration in range(self.n_iterations):
+            print(f"Running PCA + DBSCAN Outlier Detection - Iteration {iteration+1}/{self.n_iterations}")
+            pca_data = PCA().fit_transform(data_matrix)
+            if iteration == 0:
+                pca_data = pca_data[:, :2]
+            else:
+                pcstart, pcend = 3, 5
+                pca_data = pca_data[:, pcstart:pcend]
+            dbscan = DBSCAN(eps=self.dbscan_eps, min_samples=5)
+            cluster_labels = dbscan.fit_predict(pca_data)
+            iter_outliers = {idx for idx, label in enumerate(cluster_labels) if label == -1}
+            outlier_indices.update(iter_outliers)
+            print(f"Iteration {iteration+1} found {len(iter_outliers)} outliers.")
+        
+        self.outlier_indices = outlier_indices
+        print(f"Total outliers found: {len(outlier_indices)}")
+        
+        # Add "outlier" as a coloring option if not already present.
+        if self.color_combo.findText("outlier") == -1:
+            self.color_combo.addItem("outlier")
+        # Automatically switch to outlier coloring.
+        self.color_combo.setCurrentText("outlier")
+        self.plot_embedding()
+
 if __name__ == "__main__":
     # Create dummy data.
     num_samples = 50
@@ -580,12 +590,13 @@ if __name__ == "__main__":
     for i in range(num_samples):
         intensity = np.random.rand(100)
         raman_shift = np.linspace(100, 3000, 100)
+        # Example metadata; keys may vary over time.
         metadata = {
             "patient_id": np.random.randint(100, 600),
             "sample_type": "plasma",
             "date": "20230622",
             "position": str(np.random.randint(1, 20)),
-            "staging": np.random.choice([0,1,2]),
+            "staging": np.random.choice([0, 1, 2]),
             "gender": "Male",
             "race": "White",
             "spectrum_id": i
