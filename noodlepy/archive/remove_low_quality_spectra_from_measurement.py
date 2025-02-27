@@ -42,11 +42,13 @@ def clean_files(data_folder = None,
 
                 for file_name in list_of_file_names:
                     file_name_base = os.path.basename(file_name)
+                    # folder name in each layer
+                    subfolder_name = os.path.basename(os.path.dirname(file_name))
                     file_date, file_patient_id, file_position = extract_patient_labels(file_name_base)
                     if file_patient_id == int(patient_id) and file_date == date and file_position == position:
                         cleaned_spectra = remove_spectrum_id(file_name, spectra_to_remove)
                         
-                        save_file_to_path = os.path.join(output_folder, file_name_base)
+                        save_file_to_path = os.path.join(output_folder, subfolder_name, file_name_base)
                         save_to_file(cleaned_spectra, save_file_to_path)
                         break
 
@@ -88,6 +90,9 @@ def remove_spectrum_id(file_path,
             return spectrum_list
 
 def save_to_file(cleaned_spectra, save_file_to_path:str):
+    if not os.path.exists(os.path.dirname(save_file_to_path)):
+        os.makedirs(os.path.dirname(save_file_to_path))
+    
     with open(save_file_to_path, 'w') as f:
         for i in range(len(cleaned_spectra)):
             for j in range(len(cleaned_spectra[i][0])):
@@ -97,8 +102,10 @@ def save_to_file(cleaned_spectra, save_file_to_path:str):
 
 if __name__ == "__main__":
     data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality")
-    output_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality_cleaned")
-    annotation_for_low_quality_spectra = os.path.join(os.getcwd(), "quality_control", "outliers.json")
+    output_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality")
+    annotation_for_low_quality_spectra = os.path.join(os.getcwd(), "quality_control", "outliers_1.json")
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     clean_files(data_folder, annotation_for_low_quality_spectra, output_folder)
+
+
