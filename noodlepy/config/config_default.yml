@@ -38,13 +38,13 @@ augmentation:
   shot_noise: # photon shot noise
     noise_type: poisson
     lam: 
-      low: 0 # lambda for poisson noise
+      low: 1 # lambda for poisson noise
       high: 20
 
   dark_current_noise: #dark_current_shot_noise
     noise_type: poisson
     lam: 
-      low: 0 # lambda for poisson noise
+      low: 1 # lambda for poisson noise
       high: 20
 
   photo_response_non_uniformity: #photo_response_non_uniformity

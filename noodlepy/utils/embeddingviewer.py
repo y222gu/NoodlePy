@@ -91,30 +91,14 @@ class EmbeddingViewer:
         return embeddings_tsne
     
     def save_files_for_tf_embedding_projector(self):
-        # embedding_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_embedding" + ".txt")        
-        # with open(embedding_file_name, 'w') as f:
-        #     for embedding in self.embeddings:
-        #         embedding_str = '\t'.join(map(str, embedding))
-        #         f.write(embedding_str + '\n')
-
-        # metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_metadata" + ".txt")
-        # with open(metadata_file_name, 'w', newline='\n') as tsvfile:
-        #     tsv_writer = csv.writer(tsvfile, delimiter='\t')
-        #     tsv_writer.writerow(self.labels.keys())
-        #     for row in zip(*self.labels.values()):
-        #         tsv_writer.writerow(row)
-    
-                # Create a DataFrame for metadata
         metadata_df = pd.DataFrame(self.labels)
 
         # Add embeddings to the DataFrame as a column
         metadata_df['embeddings'] =  self.embeddings.tolist()
 
-        # Save the combined DataFrame to a file
-        # metadata_df.to_parquet('metadata_with_embeddings.parquet')  # Recommended for compact storage
-        # Alternatively: 
-        metadata_df.to_json('metadata_with_embeddings_cleaned_plasma.json', orient='records')
-
+        # save to output_plots folder as a json file
+        metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_model_embeddings.json")
+        metadata_df.to_json(metadata_file_name, orient='records')
 
     @staticmethod
     def break_up_dictionary_list(input_list):
