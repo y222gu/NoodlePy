@@ -1,7 +1,7 @@
 import os
 import torch
 from torch.utils.data import DataLoader
-from noodlepy.utils.hncdataset import HNC_Dataset
+from noodlepy.archive.raw_data_hnc_dataset import HNC_Dataset
 from noodlepy.utils.spectrumpreprocessor import SpectrumPreprocessor
 from noodlepy.utils.spectrumaugmentor import SpectrumAugmentor
 from noodlepy.ml.simsiam import SimSiam
@@ -17,11 +17,11 @@ if __name__ == "__main__":
     wandb.login()
     wandb.init(
         project="SimSiam", 
-        name=f"2025_2_13_HNC_plasma_hclustering_remove_3_5_6_augmented_preprocessed_continued_400epochs", 
+        name=f"2025_2_23_HNC_plasma_high_intensity_cleaned", 
         # Track hyperparameters and run metadata
         config={
             "learning_rate": 0.001,
-            "epochs": 400,
+            "epochs": 200,
             "batch_size": 32,
             "backbone_dim": [1, 8, 16, 32, 64, 128],
             "random_seed" : 0,
@@ -33,7 +33,7 @@ if __name__ == "__main__":
     cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
 
-    plasma_train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer","plasma_cleaned")
+    plasma_train_dataset_path = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_high_intensity_cleaned"
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
@@ -70,20 +70,20 @@ if __name__ == "__main__":
     )
 
     ##### NAME OF THE MODEL
-    exp_name = "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_model_HNC_with_both_blob"
+    exp_name = "2025_2_23_HNC_plasma_high_intensity_cleaned"
     experiment_folder = os.path.join(os.getcwd(), "output_plots")
     wandb.run.name = exp_name
 
-    #### LOAD A SAVED MODEL
-    model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_model_HNC_with_both_blob.pth")))
+    # #### LOAD A SAVED MODEL
+    # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "2025_2_23_HNC_plasma_high_intensity_cleaned.pth")))
 
-    #### TRAIN THE MODEL
-    # model = train_model(model, plasma_train_dataloaders, training_cfg)
+    ### TRAIN THE MODEL
+    model = train_model(model, plasma_train_dataloaders, training_cfg)
 
-    ##### SAVE THE MODEL
-    # experiment_folder = os.path.join(os.getcwd(), "output_plots")
-    # os.makedirs(experiment_folder, exist_ok=True)
-    # torch.save(model.state_dict(), os.path.join(experiment_folder, exp_name + "model_HNC.pth"))
+    #### SAVE THE MODEL
+    experiment_folder = os.path.join(os.getcwd(), "output_plots")
+    os.makedirs(experiment_folder, exist_ok=True)
+    torch.save(model.state_dict(), os.path.join(experiment_folder, exp_name + "model_HNC.pth"))
 
     # #### LOAD A SAVED MODEL
     # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "model_HNC.pth")))

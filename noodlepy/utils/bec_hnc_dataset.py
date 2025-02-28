@@ -14,6 +14,7 @@ from PyQt5.QtWidgets import QApplication
 import sys
 from noodlepy.archive import spectrum_inspection as si
 from combat.pycombat import pycombat
+from sklearn.decomposition import PCA
 
 class Bec_HNC_Dataset(Dataset):
     def __init__(self, data_folder = None,
@@ -92,7 +93,7 @@ class Bec_HNC_Dataset(Dataset):
         preprocessed_spectrum_intensity_1 = torch.tensor(preprocessed_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         preprocessed_spectrum_intensity_2 = torch.tensor(preprocessed_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
 
-        return preprocessed_spectrum_intensity_1, preprocessed_spectrum_intensity_2, chosen_spectrum.metadata, cropped_spectrum.raman_shift_cm
+        return preprocessed_spectrum_intensity_1, preprocessed_spectrum_intensity_2, chosen_spectrum.metadata
     
     def _extract_patient_labels(spectrum_file_path:str, 
                                 r_filter: np.array,
@@ -127,7 +128,7 @@ class Bec_HNC_Dataset(Dataset):
                 elif patient_metadata_row['Staging'].values[0] == 1 or patient_metadata_row['Staging'].values[0] == 2:
                     patient_labels['staging'] = int(1)
                 elif patient_metadata_row['Staging'].values[0] == 3 or patient_metadata_row['Staging'].values[0] == 4:
-                    patient_labels['staging'] = int(2)
+                    patient_labels['staging'] = int(1)
 
                 patient_labels['gender'] = patient_metadata_row['Gender'].values[0]
                 patient_labels['race'] = patient_metadata_row['Race'].values[0]
@@ -207,6 +208,14 @@ class Bec_HNC_Dataset(Dataset):
             self.db[i].intensity = corrected_intensity_matrix[i]  # Update intensity
 
         print("Batch effect correction using ComBat has been applied successfully.")
+
+        # Plot PCA of corrected data color coded by batch. 
+        pca = PCA(n_components=2)
+        pca_data = pca.fit_transform(corrected_intensity_matrix)
+        plt.scatter(pca_data[:, 0], pca_data[:, 1], c=batch_categories)
+        plt.title("PCA of corrected data color coded by batch")
+        plt.savefig("PCA_corrected_data.png")
+        
         return self.db  # Return corrected dataset
     
 if __name__ == "__main__":

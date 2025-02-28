@@ -81,13 +81,18 @@ def make_r_filters(num_groups):
     return r_filter
 
 def prepare_data(train_dataset_path,test_dataset_path, annotation_file_path, r_filter, generator):
-    preprocessor = SpectrumPreprocessor(cropping=True,
+    preprocessor = SpectrumPreprocessor(cropping=False,
                                         baseline_correction=True,
                                         remove_cosmic_rays= True,
                                         normalization=True,
                                         smoothing=True)
     train_dataset = Bec_HNC_Dataset(train_dataset_path, annotation_file_path, r_filter = r_filter, preprocessor=preprocessor, augmentor=None)
     test_dataset = Bec_HNC_Dataset(test_dataset_path, annotation_file_path, r_filter = r_filter, preprocessor=preprocessor, augmentor=None)
+    
+    # combat batch correction
+    train_dataset.combat_batch_correction()
+    test_dataset.combat_batch_correction()
+    
     train_dataloaders = DataLoader(
         train_dataset,
         batch_size=50,
@@ -110,9 +115,11 @@ def prepare_data(train_dataset_path,test_dataset_path, annotation_file_path, r_f
 
 
 if __name__ == "__main__":
+    exp_name = "2025_2_27_bec_hnc_5_group_of_rings"
+
     # track experiment
     wandb.login()
-    wandb.init(project="bec_hnc_cnn_trained_by_group_of_rings")
+    wandb.init(project=exp_name)
 
     track_accuracy = []
     # prepare data
@@ -126,19 +133,23 @@ if __name__ == "__main__":
     for group_i in range(number_of_groups):
         model = None
         train_dataloaders, test_dataloaders = prepare_data(train_dataset_path, test_dataset_path, annotation_file_path, r_filters[group_i], generator)
-        num_classes = 3
+        num_classes = 2
         # start a new model and make sure the previous model is not used
         cnn_backbone_1d = cnn_backbone([1, 8, 16, 32, 64, 128]) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
         model = Classifier(cnn_backbone_1d, num_classes)
         criterion = nn.CrossEntropyLoss()
-        optimizer = optim.Adam(model.parameters(), lr=0.001)
+        optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
 
         # Train model
-        num_epochs = 100
+        num_epochs = 200
         model = train_model(model, train_dataloaders, num_epochs, criterion, optimizer)
 
         # save model
-        torch.save(model.state_dict(), f"model_trained_on_ring_group_{group_i+1}.pt")
+        exp_folder = os.path.join(os.getcwd(), "output_plots", exp_name)
+        if not os.path.exists(exp_folder):
+            os.makedirs(exp_folder)
+        file_path = os.path.join(exp_folder, f"group_{group_i}_model.pth")
+        torch.save(model.state_dict(), file_path)
 
         # Evaluate model
         accuracy = evaluate_model(model, test_dataloaders)

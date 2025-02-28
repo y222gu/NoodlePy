@@ -48,7 +48,7 @@ class HNC_Dataset(Dataset):
                 list_of_spectrum_objects+=spectrum_objects
 
         self.db = list_of_spectrum_objects
-        self.hierarchical_clustering(40000)
+        # self.hierarchical_clustering(40000)
         print(f"Loaded {len(self.db)} spectra")
 
     def __len__(self):
