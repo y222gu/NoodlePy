@@ -4,19 +4,25 @@ import numpy as np
 import pandas as pd
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                              QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, 
-                             QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox, QDoubleSpinBox, QSpinBox)
+                             QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox, QDoubleSpinBox, QSpinBox, QRadioButton, QButtonGroup)
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from sklearn.manifold import TSNE
+from combat.pycombat import pycombat
+import scanpy as sc
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
-from matplotlib.ticker import MaxNLocator
 from matplotlib.colors import ListedColormap, BoundaryNorm
+from sklearn.linear_model import LinearRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.metrics import r2_score
+from typing import List
+import seaborn as sns
 
 # Use the "fast" style.
 plt.style.use('fast')
@@ -105,6 +111,9 @@ class SpectraViewer(QMainWindow):
         
         left_layout = QVBoxLayout()
         
+        # Create a horizontal layout for preprocessing and DBSCAN groups.
+        preproc_dbscan_layout = QHBoxLayout()
+        
         # Preprocessing Options Group Box.
         preproc_group = QGroupBox("Preprocessing Options")
         preproc_layout = QVBoxLayout()
@@ -120,12 +129,107 @@ class SpectraViewer(QMainWindow):
         self.cb_smooth.setChecked(self.preprocessor.smoothing)
         for cb in [self.cb_cropping, self.cb_baseline, self.cb_cosmic, self.cb_norm, self.cb_smooth]:
             preproc_layout.addWidget(cb)
-        self.btn_recalculate = QPushButton("Recalculate")
+        # New: Batch Correction check box.
+        self.cb_batch = QCheckBox("Apply Batch Correction")
+        self.cb_batch.setChecked(False)
+        preproc_layout.addWidget(self.cb_batch)
+
+        # New: Radio buttons for selecting the batch correction method.
+        self.rbg_batch = QButtonGroup(self)
+        self.rb_combat = QRadioButton("ComBat")
+        self.rb_combat.setChecked(True)  # default selection
+        self.rbg_batch.addButton(self.rb_combat)
+        
+        # Create a new layout for the radio buttons and add indentation.
+        batch_radio_layout = QVBoxLayout()
+        batch_radio_layout.addWidget(self.rb_combat)
+        batch_radio_column_layout = QVBoxLayout()
+        batch_radio_column_layout.addLayout(batch_radio_layout)
+        batch_radio_column_layout.setContentsMargins(20, 0, 0, 0)  # Add indentation
+        
+        preproc_layout.addLayout(batch_radio_column_layout)
+
+        self.btn_recalculate = QPushButton("Re-process")
         self.btn_recalculate.clicked.connect(self.update_preprocessing)
         preproc_layout.addWidget(self.btn_recalculate)
+
         preproc_group.setLayout(preproc_layout)
-        left_layout.addWidget(preproc_group)
+        preproc_dbscan_layout.addWidget(preproc_group)
+
+        # DBSCAN parameter entries group box.
+        dbscan_group = QGroupBox("DBSCAN Parameters")
+        dbscan_layout = QVBoxLayout()
+
+        # Optimization range for eps.
+        dbscan_opt_layout = QHBoxLayout()
+        opt_eps_label = QLabel("Optimize eps range:")
+        self.opt_eps_min_spin = QDoubleSpinBox()
+        self.opt_eps_min_spin.setRange(0.0, 10.0)
+        self.opt_eps_min_spin.setSingleStep(0.1)
+        self.opt_eps_min_spin.setValue(0.1)
+        self.opt_eps_max_spin = QDoubleSpinBox()
+        self.opt_eps_max_spin.setRange(0.0, 10.0)
+        self.opt_eps_max_spin.setSingleStep(0.1)
+        self.opt_eps_max_spin.setValue(2.0)
+        dbscan_opt_layout.addWidget(opt_eps_label)
+        dbscan_opt_layout.addWidget(self.opt_eps_min_spin)
+        dbscan_opt_layout.addWidget(self.opt_eps_max_spin)
+        dbscan_layout.addLayout(dbscan_opt_layout)
+
+        # Optimization range for min_samples.
+        dbscan_min_opt_layout = QHBoxLayout()
+        opt_min_label = QLabel("Optimize min_samples range:")
+        self.opt_min_min_spin = QSpinBox()
+        self.opt_min_min_spin.setRange(2, 50)
+        self.opt_min_min_spin.setSingleStep(1)
+        self.opt_min_min_spin.setValue(2)
+        self.opt_min_max_spin = QSpinBox()
+        self.opt_min_max_spin.setRange(2, 50)
+        self.opt_min_max_spin.setSingleStep(1)
+        self.opt_min_max_spin.setValue(20)
+        dbscan_min_opt_layout.addWidget(opt_min_label)
+        dbscan_min_opt_layout.addWidget(self.opt_min_min_spin)
+        dbscan_min_opt_layout.addWidget(self.opt_min_max_spin)
+        dbscan_layout.addLayout(dbscan_min_opt_layout)
+
+        # Optimize DBSCAN button.
+        self.btn_optimize_dbscan = QPushButton("Optimize DBSCAN")
+        self.btn_optimize_dbscan.clicked.connect(self.optimize_dbscan_params)
+        dbscan_layout.addWidget(self.btn_optimize_dbscan)
+
+        # DBSCAN parameter entries.
+        dbscan_params_row_layout = QHBoxLayout()
+        eps_label = QLabel("DBSCAN eps:")
+        self.dbscan_spin = QDoubleSpinBox()
+        self.dbscan_spin.setRange(0.0, 10.0)
+        self.dbscan_spin.setSingleStep(0.1)
+        self.dbscan_spin.setValue(self.dbscan_eps)
+        self.dbscan_spin.valueChanged.connect(self.on_dbscan_threshold_change)
+        dbscan_params_row_layout.addWidget(eps_label)
+        dbscan_params_row_layout.addWidget(self.dbscan_spin)
         
+        min_label = QLabel("DBSCAN min samples:")
+        self.dbscan_min_spin = QSpinBox()
+        self.dbscan_min_spin.setRange(2, 50)
+        self.dbscan_min_spin.setSingleStep(1)
+        self.dbscan_min_spin.setValue(self.dbscan_min)
+        self.dbscan_min_spin.valueChanged.connect(self.on_dbscan_min_change)
+        dbscan_params_row_layout.addWidget(min_label)
+        dbscan_params_row_layout.addWidget(self.dbscan_min_spin)
+
+        self.btn_find_outliers = QPushButton("Find Outliers")
+        self.btn_find_outliers.clicked.connect(self.find_outliers)
+        dbscan_params_row_layout.addWidget(self.btn_find_outliers)
+
+        dbscan_layout.addLayout(dbscan_params_row_layout)
+        dbscan_group.setLayout(dbscan_layout)
+
+        # Add the DBSCAN group box to the horizontal layout.
+        preproc_dbscan_layout.addWidget(dbscan_group)
+
+        # Add the horizontal layout to the left layout.
+        left_layout.addLayout(preproc_dbscan_layout)
+
         # Embedding and Color Controls.
         control_layout = QHBoxLayout()
         method_label = QLabel("Embedding:")
@@ -148,7 +252,7 @@ class SpectraViewer(QMainWindow):
         control_layout.addWidget(color_label)
         control_layout.addWidget(self.color_combo)
         left_layout.addLayout(control_layout)
-        
+
         # Embedding Scatter Plot.
         self.fig_scatter = Figure(figsize=(7, 6))
         self.canvas_scatter = FigureCanvas(self.fig_scatter)
@@ -180,74 +284,13 @@ class SpectraViewer(QMainWindow):
         self.btn_select_outliers.setEnabled(False)
         self.btn_select_outliers.clicked.connect(self.select_outliers)
         button_layout.addWidget(self.btn_select_outliers)
+
+        self.btn_draw_heatmap = QPushButton("Draw Heatmap")
+        self.btn_draw_heatmap.clicked.connect(self.compute_pca_metadata_correlation_heatmap)
+        left_layout.addWidget(self.btn_draw_heatmap)
         
         left_layout.addLayout(button_layout)
 
-        # DBSCAN parameter entries.
-        dbscan_opt_layout = QHBoxLayout()
-
-        # Optimization range for eps.
-        opt_eps_label = QLabel("Optimize eps range:")
-        self.opt_eps_min_spin = QDoubleSpinBox()
-        self.opt_eps_min_spin.setRange(0.0, 10.0)
-        self.opt_eps_min_spin.setSingleStep(0.1)
-        self.opt_eps_min_spin.setValue(0.1)
-        self.opt_eps_max_spin = QDoubleSpinBox()
-        self.opt_eps_max_spin.setRange(0.0, 10.0)
-        self.opt_eps_max_spin.setSingleStep(0.1)
-        self.opt_eps_max_spin.setValue(2.0)
-        dbscan_opt_layout.addWidget(opt_eps_label)
-        dbscan_opt_layout.addWidget(self.opt_eps_min_spin)
-        dbscan_opt_layout.addWidget(self.opt_eps_max_spin)
-
-        # Optimization range for min_samples.
-        opt_min_label = QLabel("Optimize min_samples range:")
-        self.opt_min_min_spin = QSpinBox()
-        self.opt_min_min_spin.setRange(2, 50)
-        self.opt_min_min_spin.setSingleStep(1)
-        self.opt_min_min_spin.setValue(2)
-        self.opt_min_max_spin = QSpinBox()
-        self.opt_min_max_spin.setRange(2, 50)
-        self.opt_min_max_spin.setSingleStep(1)
-        self.opt_min_max_spin.setValue(20)
-        dbscan_opt_layout.addWidget(opt_min_label)
-        dbscan_opt_layout.addWidget(self.opt_min_min_spin)
-        dbscan_opt_layout.addWidget(self.opt_min_max_spin)
-
-        # Optimize DBSCAN button.
-        self.btn_optimize_dbscan = QPushButton("Optimize DBSCAN")
-        self.btn_optimize_dbscan.clicked.connect(self.optimize_dbscan_params)
-        dbscan_opt_layout.addWidget(self.btn_optimize_dbscan)
-
-        left_layout.addLayout(dbscan_opt_layout)
-        
-        # DBSCAN parameter entries.
-        dbscan_params_row_layout = QHBoxLayout()
-
-        eps_label = QLabel("DBSCAN eps:")
-        self.dbscan_spin = QDoubleSpinBox()
-        self.dbscan_spin.setRange(0.0, 10.0)
-        self.dbscan_spin.setSingleStep(0.1)
-        self.dbscan_spin.setValue(self.dbscan_eps)
-        self.dbscan_spin.valueChanged.connect(self.on_dbscan_threshold_change)
-        dbscan_params_row_layout.addWidget(eps_label)
-        dbscan_params_row_layout.addWidget(self.dbscan_spin)
-        
-        min_label = QLabel("DBSCAN min samples:")
-        self.dbscan_min_spin = QSpinBox()
-        self.dbscan_min_spin.setRange(2, 50)
-        self.dbscan_min_spin.setSingleStep(1)
-        self.dbscan_min_spin.setValue(self.dbscan_min)
-        self.dbscan_min_spin.valueChanged.connect(self.on_dbscan_min_change)
-        dbscan_params_row_layout.addWidget(min_label)
-        dbscan_params_row_layout.addWidget(self.dbscan_min_spin)
-
-        self.btn_find_outliers = QPushButton("Find Outliers")
-        self.btn_find_outliers.clicked.connect(self.find_outliers)
-        dbscan_params_row_layout.addWidget(self.btn_find_outliers)
-
-        left_layout.addLayout(dbscan_params_row_layout)     
-        
         # Right panel for line plot and metadata.
         right_layout = QVBoxLayout()
         self.fig_line = Figure(figsize=(8, 6))
@@ -325,31 +368,126 @@ class SpectraViewer(QMainWindow):
                 self.color_combo.addItem(key)
 
     def update_preprocessing(self):
-        # Update preprocessor settings from checkboxes.
         self.preprocessor.cropping = self.cb_cropping.isChecked()
         self.preprocessor.baseline_correction = self.cb_baseline.isChecked()
         self.preprocessor.remove_cosmic_rays = self.cb_cosmic.isChecked()
         self.preprocessor.normalization = self.cb_norm.isChecked()
         self.preprocessor.smoothing = self.cb_smooth.isChecked()
-        
-        # Clear the embedding cache since data will change.
         self.embedding_cache = {}
-        
-        # Save the currently selected indices (as a list).
+
+        # Save the current selection as a list.
         selected_indices = self.selected_indices.copy()
         
-        # Reprocess all data objects.
+        # Reprocess all data objects from the original dataset.
         self.data_objects = [self.preprocessor.preprocess(obj) for obj in self.original_data_objects]
         
-        # Refresh metadata and recompute embedding.
+        # If the batch correction check box is checked, apply the selected method.
+        if self.cb_batch.isChecked():
+            if self.rb_combat.isChecked():
+                self.data_objects = self.combat_batch_correction()
+        
         self.populate_color_combo()
         self.compute_embedding()
         self.plot_embedding()
         
-        # Restore selection and update the line plot for selected spectra.
         self.selected_indices = selected_indices
         if len(self.selected_indices) > 0:
             self.update_line_plot()
+
+    def combat_batch_correction(self):
+        """
+        Applies ComBat batch correction to the intensity values of all spectra in the dataset.
+        This function modifies the dataset's intensities while keeping Raman shift and metadata intact.
+        """
+        if not self.data_objects:
+            print("Dataset is empty. No batch correction applied.")
+            return
+
+        # Extract intensity values and batch labels (using 'date' as batch label).
+        intensity_matrix = np.array([spectrum.intensity for spectrum in self.data_objects])
+        batch_labels = pd.Series([spectrum.metadata['date'] for spectrum in self.data_objects])  # Convert to Pandas Series
+
+        # Convert batch labels to categorical numeric labels.
+        batch_categories = pd.factorize(batch_labels)[0]
+
+        # Transpose data so that features are rows.
+        data_transposed = pd.DataFrame(intensity_matrix.T)  # Convert NumPy array to DataFrame
+
+        print("Data transposed shape:", data_transposed.shape)
+        print("Batch categories shape:", len(batch_categories))
+
+        # Apply ComBat for batch effect correction.
+        corrected_data_transposed = pycombat(data_transposed, batch_categories)  # Now using a DataFrame
+
+        # Convert back to NumPy array and transpose to original shape.
+        corrected_intensity_matrix = corrected_data_transposed.to_numpy().T  # Convert DataFrame to NumPy and transpose back
+
+        # Replace original intensity values while keeping metadata and Raman shift intact.
+        for i, spectrum in enumerate(self.data_objects):
+            self.data_objects[i].intensity = corrected_intensity_matrix[i]  # Update intensity
+
+        print("Batch effect correction using ComBat has been applied successfully.")
+        return self.data_objects  # Return corrected dataset
+
+    def compute_pca_metadata_correlation_heatmap(self):
+        """
+        Perform PCA on intensity data and compute adjusted R² values between PCs and metadata variables.
+
+        Parameters:
+        - spectra_list (List[SpectraData]): List of SpectraData objects.
+        - n_components (int): Number of principal components to retain.
+
+        Returns:
+        - None (Displays a heatmap of adjusted R² values)
+        """
+        n_components = 5
+
+        # Extract intensity data and metadata
+        intensity_data = np.array([spectrum.intensity for spectrum in self.data_objects])  # Shape: (samples, features)
+        metadata_list = [spectrum.metadata for spectrum in self.data_objects]
+
+        # Convert metadata to DataFrame
+        metadata_df = pd.DataFrame(metadata_list)
+
+        # Keep date and patient_id as numerical values
+        numeric_cols = ['date', 'patient_id', 'ring', 'line', 'staging', 'spectrum_id']
+        metadata_encoded = metadata_df[numeric_cols].copy()
+        metadata_encoded[numeric_cols] = metadata_df[numeric_cols].astype(float)
+
+        # Perform PCA
+        scaler = StandardScaler()
+        data_scaled = scaler.fit_transform(intensity_data)
+        pca = PCA(n_components=n_components)
+        principal_components = pca.fit_transform(data_scaled)
+        pc_df = pd.DataFrame(principal_components, columns=[f'PC{i+1}' for i in range(n_components)])
+
+        # Function to calculate adjusted R²
+        def adjusted_r2_score(y_true, y_pred, n, p):
+            r2 = r2_score(y_true, y_pred)
+            return 1 - (1 - r2) * (n - 1) / (n - p - 1)
+
+        # Compute adjusted R² values
+        adj_r2_results = np.zeros((metadata_encoded.shape[1], n_components))
+
+        for i, meta_col in enumerate(metadata_encoded.columns):
+            for j in range(n_components):
+                model = LinearRegression()
+                X = metadata_encoded[[meta_col]]
+                y = pc_df.iloc[:, j]
+                model.fit(X, y)
+                y_pred = model.predict(X)
+                adj_r2_results[i, j] = adjusted_r2_score(y, y_pred, len(y), X.shape[1])
+
+        # Convert to DataFrame
+        adj_r2_df = pd.DataFrame(adj_r2_results, index=metadata_encoded.columns, columns=pc_df.columns)
+
+        # Plot heatmap
+        plt.figure(figsize=(10, 6))
+        sns.heatmap(adj_r2_df, annot=True, cmap='RdYlGn', center=0)
+        plt.title("Adjusted R² of Association between PCs and Metadata")
+        plt.xlabel("Principal Components")
+        plt.ylabel("Metadata Variables")
+        plt.show()
 
 
     def compute_embedding(self):
@@ -587,7 +725,7 @@ class SpectraViewer(QMainWindow):
         self.selected_index_to_line = {}
         self.metadata_list.clear()
         if len(self.selected_indices) == 0:
-            self.ax_line.setTitle("No points selected")
+            self.ax_line.set_title("Select points to view spectra")
         else:
             for idx in self.selected_indices:
                 obj = self.data_objects[idx]

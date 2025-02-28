@@ -77,113 +77,28 @@ class Spectrum:
             raise ValueError(f'Normalization method is not defined')
         return self
 
-    def remove_cosmic_rays(self, 
-                kernel_size: int = 7, 
-                threshold: float = 2
-                ):
+    def remove_cosmic_rays(self, threshold: float = 10) -> np.ndarray:
         """
-        Despike the spectrum using WhitakerHayes's modified z-scores filtering.
+        Removes cosmic ray spikes using median filtering and thresholding.
 
-        Parameters:
-        kernel_size (int): The size of the kernel to average to replace the spike. (The spike itself is not included in the average.)
-        threshold (float): The modified z_score threshold to use to identify spikes.
+        Args:
+            intensity (np.ndarray): 1D intensity array.
+            threshold (float): Multiplier of local standard deviation for detecting outliers.
 
         Returns:
-        Spectrum: The despike spectrum object.
-
-        References:
-        Whitaker, D.A. and Hayes, K., 2018. A simple algorithm for despiking Raman spectra. Chemometrics and Intelligent Laboratory Systems, 179, pp.82-84.
-        
-        https://towardsdatascience.com/removing-spikes-from-raman-spectra-8a9fdda0ac22
+            np.ndarray: Corrected intensity array with cosmic rays removed.
         """
-        # print('Despiking spectrum with kernal size:' , kernel_size, 'and threshold:', threshold, '...')
+        median_filtered = medfilt(self.intensity, kernel_size=5)  # Apply median filter to get local baseline
+        residual = self.intensity - median_filtered  # Difference between raw and filtered data
+        std_dev = np.std(residual)  # Compute standard deviation of residuals
 
-        def modified_z_score(delta_intensity: np.array):
-            median_int = np.median(delta_intensity)
-            mad_int = np.median([np.abs(delta_intensity - median_int)])
-            modified_z_scores = 0.6745 * (delta_intensity - median_int) / mad_int
-            return np.array(modified_z_scores)
-        
-        # plot the spectrum before despiking
-        # plt.figure()
-        # plt.plot(self.raman_shift_cm, self.intensity)
-        # plt.title('Before Despiking')
-        # plt.show()
+        cosmic_ray_mask = np.abs(residual) > (threshold * std_dev)  # Identify spikes
 
-        # kernel_size = 5
-        # threshold = 3.5
-        # delta_intensity = np.diff(self.intensity)
-        # spikes = abs(modified_z_score(delta_intensity)) > threshold
+        # Replace cosmic ray spikes with median-filtered values
+        self.intensity[cosmic_ray_mask] = median_filtered[cosmic_ray_mask]
 
-        # while any(spike for spike in spikes if spike):
-        #     changes = False
-
-        #     for i in range(len(spikes)):
-        #         if spikes[i]:
-        #             # print spike index and intensity
-        #             print(f'Spike at index {i} with intensity {self.intensity[i]}')
-        #             neighbours = np.arange(max(0, i - kernel_size),
-        #                                 min(len(self.intensity) - 1, i + 1 + kernel_size))
-        #             fixed_value = np.median(self.intensity[neighbours[spikes[neighbours] == 0]])
-        #             print(f'now replaced with {fixed_value}')
-
-        #             if np.isnan(fixed_value):
-        #                 continue
-
-        #             self.intensity[i] = fixed_value
-        #             spikes[i] = 0
-        #             changes = True
-
-        #     if not changes:
-        #         break
-        # Apply a median filter to get a smoothed version of the spectrum
-        smoothed_spectrum = medfilt(self.intensity, kernel_size=kernel_size)
-
-        # Compute the difference between the original spectrum and the smoothed version
-        residuals = self.intensity - smoothed_spectrum
-
-        # Identify cosmic rays: points where the deviation is above the threshold times standard deviation
-        std_dev = np.std(residuals)
-        cosmic_ray_indices = np.where(np.abs(residuals) > threshold * std_dev)[0]
-
-        # Find contiguous regions of cosmic rays (handle wide spikes)
-        if len(cosmic_ray_indices) > 0:
-            diff = np.diff(cosmic_ray_indices)
-            breaks = np.where(diff > 1)[0]  # Identify breaks in the indices
-
-            # Group the indices into contiguous segments
-            segments = np.split(cosmic_ray_indices, breaks + 1)
-
-            # Create a copy of the spectrum to modify
-            cleaned_spectrum = self.intensity.copy()
-
-            for segment in segments:
-                if len(segment) > 0:
-                    # Interpolate over the affected region using surrounding points
-                    left = segment[0] - 1 if segment[0] > 0 else segment[0]
-                    right = segment[-1] + 1 if segment[-1] < len(cleaned_spectrum) - 1 else segment[-1]
-
-                    # Interpolation using linear fit
-                    x_interp = [left, right]
-                    y_interp = [cleaned_spectrum[left], cleaned_spectrum[right]]
-                    interp_func = interp1d(x_interp, y_interp, kind="linear")
-
-                    # Replace cosmic ray values with interpolated values
-                    cleaned_spectrum[segment] = interp_func(segment)
-
-            # Update the spectrum with the cleaned version
-            self.intensity = cleaned_spectrum
-
-
-        # plot the spectrum after despiking
-        # plt.figure()
-        # plt.plot(self.raman_shift_cm, self.intensity)
-        # plt.title('After Despiking')
-        # plt.show()
         return self
 
-
-        
     def airPLS(self, lam = 1E3, diff_order=1, max_iter=15, tol=1e-3, weights=None):
         '''
         Baseline removal algorithm.
