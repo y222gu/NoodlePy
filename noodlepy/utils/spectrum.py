@@ -132,6 +132,8 @@ class Spectrum:
         Spectrum: The spectrum object with added noise."""
         rng = np.random.default_rng()
         noise_type = noise_pars["noise_type"]
+        
+        self.intensity = self.intensity.astype(np.float64)
 
         if noise_type == "poisson":
             self.intensity += 0.001 * rng.poisson(noise_pars["lam"], len(self.intensity))

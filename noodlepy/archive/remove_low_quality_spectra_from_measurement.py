@@ -18,9 +18,11 @@ def clean_files(data_folder = None,
 
         list_of_file_names = []
         for root, dirs, files in os.walk(data_folder):
-            for file in files:
-                if file.endswith('.txt'):
-                    list_of_file_names.append(os.path.join(root, file))
+            # Limit to one subfolder down
+            if root[len(data_folder):].count(os.sep) < 2:
+                for file in files:
+                    if file.endswith('.txt'):
+                        list_of_file_names.append(os.path.join(root, file))
         list_of_file_names = sorted(list_of_file_names)
 
         # Load json file in format of patient_id: [spectra_id]
@@ -29,7 +31,7 @@ def clean_files(data_folder = None,
 
             combined_low_quality_spectra = {}
             for low_quality_spectrum in low_quality_spectra:
-                key = (low_quality_spectrum['patient_id'], low_quality_spectrum['date'], low_quality_spectrum['position'])
+                key = (low_quality_spectrum['patient_id'], low_quality_spectrum['date'], low_quality_spectrum['line'], low_quality_spectrum['ring'])
                 if key not in combined_low_quality_spectra:
                     combined_low_quality_spectra[key] = []
                 combined_low_quality_spectra[key].append(low_quality_spectrum['spectrum_id'])
@@ -37,15 +39,15 @@ def clean_files(data_folder = None,
             low_quality_spectra = combined_low_quality_spectra
 
             for key, low_quality_spectra in low_quality_spectra.items():
-                patient_id, date, position = key
+                patient_id, date, line, ring = key
                 spectra_to_remove = low_quality_spectra
 
                 for file_name in list_of_file_names:
                     file_name_base = os.path.basename(file_name)
                     # folder name in each layer
                     subfolder_name = os.path.basename(os.path.dirname(file_name))
-                    file_date, file_patient_id, file_position = extract_patient_labels(file_name_base)
-                    if file_patient_id == int(patient_id) and file_date == date and file_position == position:
+                    file_date, file_patient_id, file_line, file_ring = extract_patient_labels(file_name_base)
+                    if file_patient_id == int(patient_id) and file_date == date and file_line == line and file_ring == ring:
                         cleaned_spectra = remove_spectrum_id(file_name, spectra_to_remove)
                         
                         save_file_to_path = os.path.join(output_folder, subfolder_name, file_name_base)
@@ -56,8 +58,9 @@ def extract_patient_labels(spectrum_file_name):
         f_split = spectrum_file_name.split('_')
         date = f_split[0]
         patient_id = int(f_split[1])
-        position = f_split[-1].split('.')[0]
-        return date, patient_id, position
+        line = int(f_split[-2])
+        ring = int(f_split[-1].split('.')[0])
+        return date, patient_id, line, ring
     
 def remove_spectrum_id(file_path, 
                                spectra_id_to_remove:list):
@@ -101,9 +104,9 @@ def save_to_file(cleaned_spectra, save_file_to_path:str):
                 f.write("\n")
 
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality")
-    output_folder = os.path.join(os.getcwd(), "noodlepy", "data", "hnc_raw_data_high_quality")
-    annotation_for_low_quality_spectra = os.path.join(os.getcwd(), "quality_control", "outliers_1.json")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc")
+    output_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc")
+    annotation_for_low_quality_spectra = os.path.join(os.getcwd(), "quality_control", "outliers.json")
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     clean_files(data_folder, annotation_for_low_quality_spectra, output_folder)
