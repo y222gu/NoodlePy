@@ -522,7 +522,7 @@ class SpectraViewer(QMainWindow):
         else:
             values = [obj.metadata.get(self.color_by, None) for obj in self.data_objects]
             unique_vals = sorted(set(values))
-            cmap = plt.cm.get_cmap('cool', len(unique_vals))
+            cmap = plt.cm.get_cmap('gist_rainbow', len(unique_vals))
             point_colors = [unique_vals.index(v) for v in values]
             cat_unique = unique_vals
         if self.embedding_dim == 2:
