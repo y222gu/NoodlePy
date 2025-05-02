@@ -54,10 +54,10 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.img_home_icon = ImageTk.PhotoImage(self.home_icon)
        
         self.safety_height = 20 # calibrated on 1/4/2025
-        self.home_position = [145.54, 181.62, self.safety_height]
-        self.calibration_from_widefield_to_objective_x = -60.38 # calibrated on 2/06/2025
-        self.calibration_from_widefield_to_objective_y = -5.9 # calibrated on 2/06/2025
-        self.calibration_from_widefield_to_objective_z = - 0.82 #  in mm calibrated on 1/4/2025
+        self.home_position = [118.58, 181.94, self.safety_height]
+        self.calibration_from_widefield_to_objective_x = -61.12 # calibrated on 2/06/2025
+        self.calibration_from_widefield_to_objective_y = -3.72 # calibrated on 2/06/2025
+        self.calibration_from_widefield_to_objective_z = - 1.44 #  in mm calibrated on 1/4/2025
         self.initial_nanodrive_position = 50
         self.small_step_size_xy_mm = 0.06 #firmware seems to limit the smallest step size to 0.06 (60 um)
         self.medium_step_size_xy_mm = 0.5
@@ -69,8 +69,8 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
         self.prusa_fine_focus_step_number = 20 # in objective view
         self.prusa_rough_focus_step_number = 20 # in widefield view
-        self.nanodrive_movement_stabilization_time = 1.5
-        self.prusa_movement_stabilization_time = 3
+        self.nanodrive_movement_stabilization_time = 0.5
+        self.prusa_movement_stabilization_time = 1
         self.prusa_rough_fine_focus_overlap_step_number = 4 # the actual number of steps to overlap between rough and fine focus is double this number
         self.focus_upper_limit = None
         self.focus_lower_limit = None
@@ -320,63 +320,45 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             return
         if option == "UP SMALL":
             self.prusa_go_by_xyz(z=self.small_step_size_z_mm)
-            print("Moving up small")
         elif option == "UP MEDIUM":
             self.prusa_go_by_xyz(z=self.medium_step_size_z_mm)
-            print("Moving up medium")
         elif option == "UP LARGE":
             self.prusa_go_by_xyz(z=self.large_step_size_z_mm)
-            print("Moving up large")
 
         elif option == "DOWN SMALL":
             self.prusa_go_by_xyz(z=-self.small_step_size_z_mm)
-            print("Moving down small")
         elif option == "DOWN MEDIUM":
             self.prusa_go_by_xyz(z=-self.medium_step_size_z_mm)
-            print("Moving down medium")
         elif option == "DOWN LARGE":
             self.prusa_go_by_xyz(z=-self.large_step_size_z_mm)
-            print("Moving down large")
 
         elif option == "LEFT SMALL":
             self.prusa_go_by_xyz(x=-self.small_step_size_xy_mm)
-            print("Moving left small")
         elif option == "LEFT MEDIUM":
             self.prusa_go_by_xyz(x=-self.medium_step_size_xy_mm)
-            print("Moving left medium")
         elif option == "LEFT LARGE":
             self.prusa_go_by_xyz(x=-self.large_step_size_xy_mm)
-            print("Moving left large")
 
         elif option == "RIGHT SMALL":
             self.prusa_go_by_xyz(x=self.small_step_size_xy_mm)
-            print("Moving right small")
         elif option == "RIGHT MEDIUM":
             self.prusa_go_by_xyz(x=self.medium_step_size_xy_mm)
-            print("Moving right medium")
         elif option == "RIGHT LARGE":
             self.prusa_go_by_xyz(x=self.large_step_size_xy_mm)
-            print("Moving right large")
 
         elif option == "BACK SMALL":
             self.prusa_go_by_xyz(y=self.small_step_size_xy_mm)
-            print("Moving back small")
         elif option == "BACK MEDIUM":
             self.prusa_go_by_xyz(y=self.medium_step_size_xy_mm)
-            print("Moving back medium")
         elif option == "BACK LARGE":
             self.prusa_go_by_xyz(y=self.large_step_size_xy_mm)
-            print("Moving back large")
 
         elif option == "FRONT SMALL":
             self.prusa_go_by_xyz(y=-self.small_step_size_xy_mm)
-            print("Moving front small")
         elif option == "FRONT MEDIUM":
             self.prusa_go_by_xyz(y=-self.medium_step_size_xy_mm)
-            print("Moving front medium")
         elif option == "FRONT LARGE":
             self.prusa_go_by_xyz(y=-self.large_step_size_xy_mm)
-            print("Moving front large")
         elif option == "GO":
             p2_x = self.target_x_entry.get()
             p2_y = self.target_y_entry.get()
@@ -479,7 +461,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             self.update_prusa_position()
 
     def prusa_go_by_xyz(self, x=None, y=None, z=None):
-        print('Go by button is clicked')
         self.ser.write(str.encode("G91\r\n"))
         gcode = "G0"
         if x is not None:
@@ -495,7 +476,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         if x is not None or y is not None or z is not None:
             gcode += f" F{self.speed}\r\n"
             self.ser.write(str.encode(gcode))
-            print('g code is sent')
             self.update_prusa_position()
 
     def find_prusa_com_ports(self):
@@ -765,8 +745,11 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         lower_limit, upper_limit = self.calculate_focus_range_at_position(current_x, current_y)
     
         if upper_limit and lower_limit:
+
             self.best_prusa_focus_position_widefield, self.best_prusa_focus_position_widefield_refine_min, self.best_prusa_focus_position_widefield_refine_max = self.focus_prusa(lower_limit, upper_limit, self.prusa_rough_focus_step_number)
+            print(f"Widefield pursa focus [{lower_limit}, {upper_limit}] with {self.prusa_rough_focus_step_number} steps")
             print(f"Best focus position for widefield camera: {self.best_prusa_focus_position_widefield}")
+            print(f"Refined focus range: {self.best_prusa_focus_position_widefield_refine_min} - {self.best_prusa_focus_position_widefield_refine_max}")
             return True
         else:
             print("Please interpolate the focus range first")
@@ -780,7 +763,9 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         # round up the z range to 2 decimal places
         z_range = np.round(z_range, 2)
 
-        print(f"Focusing prusa in z range: {z_range}")
+        print(f"Pursa z focus within [{lower_limit}, {upper_limit}]mm with {step_number} steps")
+        print(f"z positions: {z_range}")
+
         for z in z_range:
             self.prusa_go_to_xyz(z=z)
 
@@ -807,12 +792,11 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             focus_score.append(self.focus_score_at_current_z_position)
 
         best_prusa_focus_position, best_prusa_focus_refine_min, best_prusa_focus_refine_max= self.refine_focus_range(focus_score, z_range, self.prusa_rough_fine_focus_overlap_step_number)
+        print(f"Best focus position for prusa: {best_prusa_focus_position}")
+        print(f"Refined focus range for prusa: {best_prusa_focus_refine_min} - {best_prusa_focus_refine_max}")
 
         self.prusa_go_to_xyz(z=best_prusa_focus_position)
         time.sleep(self.prusa_movement_stabilization_time)
-
-        print(f'focus score at each z position: {focus_score}')
-        print(f"The best focus position for prusa is {best_prusa_focus_position}, with the focus score of {max(focus_score)}")
         return best_prusa_focus_position, best_prusa_focus_refine_min, best_prusa_focus_refine_max
     
     def focus_nanodrive(self, lower_limit, upper_limit, step_number):
@@ -891,11 +875,11 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                     break
 
             # calculate the refined prusa focus range in the objective view
-            print('Refining the prusa focus position in the objective camera')
-            print(f"focus plane offset widefield to objective: {self.calibration_from_widefield_to_objective_z}")
             prusa_focus_position_objective_refine_max = round(self.best_prusa_focus_position_widefield_refine_max + self.calibration_from_widefield_to_objective_z, 2)
             prusa_focus_position_objective_refine_min = round(self.best_prusa_focus_position_widefield_refine_min + self.calibration_from_widefield_to_objective_z, 2)
-            print(f"Refined focus range for objective camera: {prusa_focus_position_objective_refine_min} - {prusa_focus_position_objective_refine_max}")
+            print('Converting focus range from widefield camera for the objective camera')
+            print(f"focus plane offset widefield to objective: {self.calibration_from_widefield_to_objective_z}")
+            print(f"Converted range for objective camera: {prusa_focus_position_objective_refine_min} - {prusa_focus_position_objective_refine_max}")
 
             # fine the best focus position in the objective view with the refined range
             self.best_prusa_focus_position_objective, _, _ = self.focus_prusa(prusa_focus_position_objective_refine_min, prusa_focus_position_objective_refine_max, self.prusa_fine_focus_step_number)

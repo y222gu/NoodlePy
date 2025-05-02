@@ -92,7 +92,7 @@ class Bec_HNC_Dataset(Dataset):
         preprocessed_spectrum_intensity_1 = torch.tensor(preprocessed_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         preprocessed_spectrum_intensity_2 = torch.tensor(preprocessed_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
 
-        return preprocessed_spectrum_intensity_1, preprocessed_spectrum_intensity_2, chosen_spectrum.metadata, cropped_spectrum.raman_shift_cm
+        return preprocessed_spectrum_intensity_1, preprocessed_spectrum_intensity_2, chosen_spectrum.metadata['staging'], cropped_spectrum.raman_shift_cm
     
     def _extract_patient_labels(spectrum_file_path:str, 
                                 r_filter: np.array,

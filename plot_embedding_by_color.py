@@ -6,7 +6,7 @@ from sklearn.manifold import TSNE
 from collections import defaultdict
 
 # Load JSON file
-file_path = r'C:\Users\yifei\Documents\NoodlePy\output_plots\2023_03_02_Bec_HNC_batch_corrected_model_embeddings.json'
+file_path = r'C:\Users\yifei\Documents\NoodlePy\output_plots\2023_03_03_Bec_HNC_batch_corrected_model_embeddings.json'
 with open(file_path, 'r') as file:
     data = json.load(file)
 
@@ -24,7 +24,7 @@ embeddings_2d = tsne.fit_transform(embeddings)
 def plot_tsne(embeddings_2d, labels, title):
     values = labels
     unique_vals = sorted(set(values))
-    cmap = plt.cm.get_cmap('turbo', len(unique_vals))
+    cmap = plt.cm.get_cmap('cool', len(unique_vals))
     point_colors = [unique_vals.index(v) for v in values]
     
     fig, ax = plt.subplots(figsize=(10, 6))
@@ -48,6 +48,6 @@ def plot_tsne(embeddings_2d, labels, title):
     plt.show()
 
 # Plot with different label groupings
-plot_tsne(embeddings_2d, dates, "Date")
+# plot_tsne(embeddings_2d, dates, "Date")
 plot_tsne(embeddings_2d, staging, "Staging")
-plot_tsne(embeddings_2d, patient_ids, "Patient ID")
+# plot_tsne(embeddings_2d, patient_ids, "Patient ID")

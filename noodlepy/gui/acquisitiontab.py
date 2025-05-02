@@ -17,7 +17,9 @@ class AcquisitionGUI(ttk.Frame):
 
         first_column = ttk.Frame(self)
         first_column.grid(row=0, column=0, sticky="nsew")
+  
 
+    
         middle_column = ttk.Frame(self)
         middle_column.grid(row=0, column=1, rowspan=4, sticky="nsew")
         

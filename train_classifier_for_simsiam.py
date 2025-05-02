@@ -11,6 +11,7 @@ import os
 import random
 import wandb
 from noodlepy.utils.seed import seed_all_random_process, seed_worker
+import matplotlib.pyplot as plt
 
 if __name__ == "__main__":
     seed = 4
@@ -37,7 +38,7 @@ if __name__ == "__main__":
             "random_seed": 42,
             "number_of_workers": 8,
             "num_classes": 3,
-            "patience": 4  # Early stopping patience
+            "patience": 5  # Early stopping patience
         })
     
     training_cfg = wandb.config
@@ -97,9 +98,14 @@ if __name__ == "__main__":
     patience = training_cfg.patience
     patience_counter = 0
 
+    # Lists to store losses
+    train_losses = []
+    val_losses = []
+
     # Training loop with early stopping
     for epoch in range(training_cfg.epochs):
         classifier.train()
+        train_loss = 0.0
         for i, (x0, x1, labels, raman_shift) in enumerate(train_dataloader):
             x0, labels = x0.to(device), labels.to(device)
             optimizer.zero_grad()
@@ -107,6 +113,10 @@ if __name__ == "__main__":
             loss = criterion(outputs, labels)
             loss.backward()
             optimizer.step()
+            train_loss += loss.item() * x0.size(0)
+
+        train_loss /= len(train_dataloader.dataset)
+        train_losses.append(train_loss)
 
         # Validation loop
         classifier.eval()
@@ -123,11 +133,12 @@ if __name__ == "__main__":
                 total += labels.size(0)
         
         val_loss /= total
+        val_losses.append(val_loss)
         val_accuracy = correct / total
-        print(f"Epoch {epoch + 1}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}")
+        print(f"Epoch {epoch + 1}, Training Loss: {train_loss:.4f}, Validation Loss: {val_loss:.4f}, Validation Accuracy: {val_accuracy:.4f}")
 
         # Log results in wandb
-        wandb.log({"epoch": epoch + 1, "val_loss": val_loss, "val_accuracy": val_accuracy})
+        wandb.log({"epoch": epoch + 1, "train_loss": train_loss, "val_loss": val_loss, "val_accuracy": val_accuracy})
 
         # Step scheduler
         scheduler.step()
@@ -137,7 +148,8 @@ if __name__ == "__main__":
             best_val_loss = val_loss
             patience_counter = 0
             # Save the best model
-            torch.save(classifier.state_dict(), "best_finetuned_model.pth")
+            file_path = os.path.join(os.getcwd(), "output_plots", "2023_03_03_Bec_HNC_batch_corrected", "finetuned_model.pth")
+            torch.save(classifier.state_dict(), file_path)
             print(f"Model saved at epoch {epoch + 1} with val_loss: {val_loss:.4f}")
         else:
             patience_counter += 1
@@ -146,3 +158,13 @@ if __name__ == "__main__":
         if patience_counter >= patience:
             print("Early stopping triggered. Training stopped.")
             break  # Stop training
+
+    # Plot training and validation loss
+    plt.figure()
+    plt.plot(train_losses, label='Training Loss')
+    plt.plot(val_losses, label='Validation Loss')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss')
+    plt.legend()
+    plt.title('Training and Validation Loss')
+    plt.savefig(os.path.join(os.getcwd(), "output_plots", "2023_03_03_Bec_HNC_batch_corrected", "training_validation_loss.png"))

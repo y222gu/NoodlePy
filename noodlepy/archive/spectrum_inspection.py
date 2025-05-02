@@ -12,7 +12,6 @@ from matplotlib.widgets import LassoSelector
 from matplotlib.path import Path
 from sklearn.manifold import TSNE
 from combat.pycombat import pycombat
-import scanpy as sc
 from sklearn.decomposition import PCA
 from sklearn.metrics import silhouette_score
 from sklearn.cluster import DBSCAN
