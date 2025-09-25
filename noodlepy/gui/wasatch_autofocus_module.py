@@ -36,9 +36,10 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.integ_time_spinbox_upper_limit = 100000
         self.integ_time_spinbox_increment = 5
 
-        self.nanodrive_movement_stabilization_time = 1.5 # seconds
+        self.nanodrive_movement_stabilization_time = 0.2 # seconds
+        self.wasatch_rough_fine_focus_overlap_step_number = 1 # number of steps to overlap in the fine autofocus
 
-        self.keep_refreshing_live_spectrum = False
+        self.playing_live_spectrum_plot = False
         self.units = "wavelength"
         self.nano_drive = NanoDrive()
         self.create_live_spectrum_widgets()  
@@ -48,7 +49,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.wasatch_manager = WasatchManager(self.initial_integ_time_ms, self.initial_laser_power_mW)
         if self.wasatch_manager.connect():
             self.start_spectrum_thread()
-            self.update_live_spectrum()
+            self.update_live_spectrum_plot()
         else:
             logging.error('Failed to connect to Wasatch spectrometer. Check connection')
 
@@ -83,7 +84,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.laser_button = ttk.Button(self.spectrum_frame, text="Laser On", command=self.turn_laser_on, bootstyle ='info-outline', width=5)
         self.laser_button.grid(row=1, column=2, rowspan=2, sticky='nsew', pady=5, padx=5)
 
-        self.play_button = ttk.Button(self.spectrum_frame, image=self.play_icon, command=self.start_to_play_live_spectrum, bootstyle ='dark', width=5)
+        self.play_button = ttk.Button(self.spectrum_frame, image=self.play_icon, command=self.start_to_play_live_spectrum_plot, bootstyle ='dark', width=5)
         self.play_button.grid(row=1, column=3, rowspan =2, sticky='ew', pady=5, padx=5)
 
         self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='info-outline', command=self.capture_live_spectrum)
@@ -183,14 +184,14 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.wasatch_autofocus_button = ttk.Button(self.nanodrive_frame, text="Focus", command=self.start_autofocus, bootstyle="info", width=5)
         self.wasatch_autofocus_button.grid(row=2, column=4, rowspan=2, padx=5, pady=5, sticky="news")
 
-    def start_to_play_live_spectrum(self):
-        self.keep_refreshing_live_spectrum = True
-        self.play_button.config(image=self.pause_icon, command=self.stop_to_play_live_spectrum, bootstyle ='info')
-        self.update_live_spectrum()
+    def start_to_play_live_spectrum_plot(self):
+        self.playing_live_spectrum_plot = True
+        self.play_button.config(image=self.pause_icon, command=self.stop_to_play_live_spectrum_plot, bootstyle ='info')
+        self.update_live_spectrum_plot()
 
-    def stop_to_play_live_spectrum(self):
-        self.keep_refreshing_live_spectrum = False
-        self.play_button.config(image=self.play_icon, command=self.start_to_play_live_spectrum, bootstyle ='dark')
+    def stop_to_play_live_spectrum_plot(self):
+        self.playing_live_spectrum_plot = False
+        self.play_button.config(image=self.play_icon, command=self.start_to_play_live_spectrum_plot, bootstyle ='dark')
 
     def initialize_wasatch_autofocus_figure(self):
                 # Create the figure and axes
@@ -239,7 +240,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.live_spectrum_ax.autoscale_view()
         self.live_spectrum_canvas.draw()
 
-    def update_live_spectrum(self):
+    def update_live_spectrum_plot(self):
         """Update the spectrum plot with the latest data from the queue."""
 
         try:
@@ -262,8 +263,8 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
 
         except queue.Empty:
             pass
-        if self.keep_refreshing_live_spectrum:
-            self.after(self.wasatch_manager.integ_time_ms, self.update_live_spectrum)
+        if self.playing_live_spectrum_plot:
+            self.after(self.wasatch_manager.integ_time_ms, self.update_live_spectrum_plot)
         
     def start_spectrum_thread(self):
         """Start a thread to collect spectrum data."""
@@ -271,7 +272,6 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             self.spectrum_thread = Thread(target=self.collect_spectrum)
             self.spectrum_thread.daemon = True
             self.spectrum_thread.start()
-            print("Started spectrum thread")
 
     def collect_spectrum(self):
         # print("Collecting spectrum:", threading.current_thread().name)
@@ -395,18 +395,13 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.wasatch_manager.turn_laser_off()
         self.laser_button.config(text="Laser On", command=self.turn_laser_on, bootstyle ='info-outline')
 
-    def run_in_thread(self, func):
-        thread = Thread(target=func)
-        thread.daemon = True
-        thread.start()
-
     def start_autofocus(self):
         # Stop the live spectrum and set up parameters
-        self.stop_to_play_live_spectrum()
-        self.autofocus_worker_thread = threading.Thread(target=self.perform_rough_autofocus_step)
+        self.stop_to_play_live_spectrum_plot()
+        self.autofocus_worker_thread = threading.Thread(target=self.perform_rough_autofocus)
         self.autofocus_worker_thread.start()
 
-    def perform_rough_autofocus_step(self):
+    def perform_rough_autofocus(self):
         print("Starting rough autofocus for Wasatch")
         self.min = float(self.wasatch_autofocus_range_low_var.get())
         self.max = float(self.wasatch_autofocus_range_high_var.get())
@@ -428,6 +423,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             
             time.sleep(self.nanodrive_movement_stabilization_time)
             self.dispatch("update_nanodrive_position", position)
+            print("Current position:", position)
 
             # Measure spectra in the background thread (self.num_rep reps)
             wavelength, wavelengths, intensities = self.measure_spectra(self.num_rep)
@@ -444,13 +440,13 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             self.current_step += 1
 
         # Once done with rough autofocus, proceed to fine autofocus
-        fineMin, fineMax = self.refine_focus_range(self.y1_data, self.z_axis_range)
-        fine_focus = self.start_fine_autofocus(fineMin, fineMax, self.num_rep)
+        fineMin, fineMax = self.refine_focus_range(self.y1_data, self.z_axis_range, self.wasatch_rough_fine_focus_overlap_step_number)
+        fine_focus = self.perform_fine_autofocus(fineMin, fineMax, self.num_rep)
         if fine_focus:
             print("Autofocus complete")
             return True
 
-    def start_fine_autofocus(self, fineMin, fineMax, num_rep):
+    def perform_fine_autofocus(self, fineMin, fineMax, num_rep):
         print("Starting fine autofocus for Wasatch")
         self.z_axis_range =  np.round(np.linspace(fineMin, fineMax, 20))
         self.x2_data, self.y2_data = [], []
@@ -468,6 +464,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
 
             self.dispatch("update_nanodrive_position", position)
             time.sleep(self.nanodrive_movement_stabilization_time)
+            print("Current position:", position)
 
             # Measure spectra in the background thread
             wavelength, wavelengths, intensities = self.measure_spectra(self.num_rep)
@@ -500,8 +497,8 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
                 self.dispatch('abort_aquisition')
 
         # Call the thread-running function, passing the callback
-        self.stop_to_play_live_spectrum()
-        self.run_in_thread_with_callback(self.perform_rough_autofocus_step, on_focus_complete)
+        self.stop_to_play_live_spectrum_plot()
+        self.run_in_thread_with_callback(self.perform_rough_autofocus, on_focus_complete)
 
 
     def run_in_thread_with_callback(self, func, callback, *args):
@@ -516,7 +513,6 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         thread.start()
 
     def measure_spectra(self, num_rep):
-        print("Measuring spectra:", threading.current_thread().name)
         intensities = []
         wavelengths = []
         wavelength = self.wasatch_manager.settings.wavelengths
@@ -527,22 +523,29 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             intensities.append(spectrum)
             wavelengths.append(wavelength)
 
+            print('Spectrum acquired:', i + 1)
+            print('Intensity:', spectrum)
+
         return wavelength, wavelengths, intensities
 
     def calculate_entropy(self, intensities):
         normalized_int = intensities / np.sum(intensities)
         entropy = -np.sum(normalized_int * np.log2(normalized_int))
+        print("Entropy:", entropy)
         return entropy
 
-    def refine_focus_range(self, entropy_list, z_axis_range):
+    def refine_focus_range(self, entropy_list, z_axis_range, overlap_step_number):
         k = np.argmin(entropy_list)
-        fineMin = z_axis_range[max(k - 1, 0)]
-        fineMax = z_axis_range[min(k + 1, len(z_axis_range) - 1)]
+        print('During the rough autofocus, the best position is:', z_axis_range[k])
+        print('The entropy is:', entropy_list[k])
+        print('--------------------')
+        print('Refining the focus range...')
+        fineMin = z_axis_range[max(k - overlap_step_number, 0)]
+        fineMax = z_axis_range[min(k + overlap_step_number, len(z_axis_range) - 1)]
         print("The fine range is:", fineMin, fineMax)
         return fineMin, fineMax
 
     def plot_autofocus_data(self, x_data, y_data, wavelengths, intensities):
-        print("Plotting autofocus data:", threading.current_thread().name)
         self.entropy_ax.clear()
         self.intensity_ax.clear()
         self.entropy_ax.set_xlabel('Z-axis position', fontsize=6, color='white')
@@ -617,5 +620,6 @@ if __name__ == "__main__":
     root = ttk.Window(themename="noodlepy")
     root.title("Wasatch Raman Spectrometer")
     root.geometry("800x400")
-    WasatchAutofocusModule(root).pack(fill='both', expand=True)
+    wasatch_autofocus_frame = WasatchAutofocusModule(root)
+    wasatch_autofocus_frame.grid(row=0, column=0, sticky="nsew")
     root.mainloop()

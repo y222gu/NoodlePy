@@ -33,7 +33,7 @@ if __name__ == "__main__":
     cnn_backbone_1d = cnn_backbone(training_cfg.backbone_dim) # 1D spectral data start with 1 channel, RGB 2D image start with 3 channels
     model = SimSiam(cnn_backbone_1d)
 
-    plasma_train_dataset_path = r"C:\Users\Yifei\Documents\NoodlePy\noodlepy\data\hnc_raw_data_high_intensity_cleaned"
+    plasma_train_dataset_path = os.path.join(os.getcwd(), "noodlepy", "data", "head_and_neck_cancer","plasma_cleaned")
 
     annotation_file_path = os.path.join(os.getcwd(), "noodlepy", "data", "Biofluid_list_annotated_v4.xlsx")
 
@@ -56,7 +56,7 @@ if __name__ == "__main__":
         drop_last=False,
         num_workers=training_cfg.number_of_workers,
         worker_init_fn=seed_worker,
-        generator=generator
+        generator=generator=
     )
 
     plasma_test_dataloaders = DataLoader(
@@ -74,8 +74,8 @@ if __name__ == "__main__":
     experiment_folder = os.path.join(os.getcwd(), "output_plots")
     wandb.run.name = exp_name
 
-    # #### LOAD A SAVED MODEL
-    # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "2025_2_23_HNC_plasma_high_intensity_cleaned.pth")))
+    #### LOAD A SAVED MODEL
+    model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "2025_2_13_HNC_train_on_plasma_after_cleaning_hierarchical_clustering_model_HNC_with_both_blob.pth")))
 
     ### TRAIN THE MODEL
     model = train_model(model, plasma_train_dataloaders, training_cfg)
@@ -89,8 +89,5 @@ if __name__ == "__main__":
     # model.load_state_dict(torch.load(os.path.join(os.getcwd(), "output_plots", "model_HNC.pth")))
 
     ##### TEST A MODEL
-    colors = plt.cm.get_cmap('tab20', 2)
-    map_for_color = {0: colors(0), 1: colors(1)}
-    test_model(model, plasma_test_dataloaders,  label_name_for_color='cluster', map_for_color = map_for_color, exp_name = exp_name)
     test_model(model, plasma_test_dataloaders,  label_name_for_color='staging', map_for_color = None, exp_name = exp_name)
    

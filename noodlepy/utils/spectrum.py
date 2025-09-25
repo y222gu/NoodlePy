@@ -135,6 +135,8 @@ class Spectrum:
         
         self.intensity = self.intensity.astype(np.float64)
 
+        self.intensity = self.intensity.astype(np.float64)
+
         if noise_type == "poisson":
             self.intensity += 0.001 * rng.poisson(noise_pars["lam"], len(self.intensity))
         elif noise_type == "gaussian":

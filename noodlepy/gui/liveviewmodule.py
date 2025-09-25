@@ -231,8 +231,8 @@ class LiveViewModule(Publisher, tk.Frame):
         self.y_pixel_size_widefield_camera = 2.967 #um
 
         # crop the objective camera image to the center
-        self.crop_center_x = 833 # calibrated on 2/5/2025
-        self.crop_center_y = 326 # calibrated on 2/5/2025
+        self.crop_center_x = 860 # calibrated on 2/5/2025
+        self.crop_center_y = 428 # calibrated on 2/5/2025
 
         self.crop_width=500
         self.crop_height = 375
@@ -246,6 +246,7 @@ class LiveViewModule(Publisher, tk.Frame):
         self.camera_manager = CameraManger()
 
         self.objective_field_camera, self.objective_field_camera_thread = self.camera_manager.open_camera('14628', flip=True, crop=True, center_x=self.crop_center_x, center_y=self.crop_center_y, crop_width=self.crop_width, crop_height=self.crop_height)
+        # self.objective_field_camera, self.objective_field_camera_thread = self.camera_manager.open_camera('14628', flip=True)
         self.widefield_camera, self.widefield_camera_thread = self.camera_manager.open_camera('14938', flip=False) 
         self.active_camera_thread = self.widefield_camera_thread
         self.current_live_view = 'WIDEFIELD'

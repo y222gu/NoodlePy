@@ -110,11 +110,9 @@ class EmbeddingViewer:
         # Add embeddings to the DataFrame as a column
         metadata_df['embeddings'] =  self.embeddings.tolist()
 
-        # Save the combined DataFrame to a file
-        # metadata_df.to_parquet('metadata_with_embeddings.parquet')  # Recommended for compact storage
-        # Alternatively: 
-        metadata_df.to_json('metadata_with_embeddings_cleaned_plasma.json', orient='records')
-
+        # save to output_plots folder as a json file
+        metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_model_embeddings.json")
+        metadata_df.to_json(metadata_file_name, orient='records')
 
     @staticmethod
     def break_up_dictionary_list(input_list):
