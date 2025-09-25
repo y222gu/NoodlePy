@@ -2,13 +2,13 @@
 # parameters for preprocessing
 preprocessing:
   cropping: # cropping options
-    start_raman_shift_cm: 624.573
+    start_raman_shift_cm: 662.697 #624.573
     end_raman_shift_cm: 1784.104
   baseline_correction: #airPLS
     lam: 1000
     diff_order: 1
     max_iter: 15
-    tol: 0.001
+    tol: 0.005
   cosmic_rays_removal: # WhitakerHayes's modified z-scores filtering
     threshold: 10
   smoothing: #Savitzky-Golay filter
