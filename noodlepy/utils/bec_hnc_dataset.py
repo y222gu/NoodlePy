@@ -39,7 +39,7 @@ class Bec_HNC_Dataset(Dataset):
         list_of_spectrum_objects = []
         list_of_file_paths = []
         for root, dirs, files in os.walk(data_folder):
-            if root == data_folder or root.count(os.sep) == data_folder.count(os.sep) + 1:
+            if root == data_folder or root.count(os.sep) == data_folder.count(os.sep) + 2:
                 list_of_file_paths += [os.path.relpath(os.path.join(root, f), data_folder) for f in files if f.endswith('.txt')]
         list_of_file_paths = sorted(list_of_file_paths)
 
@@ -93,7 +93,7 @@ class Bec_HNC_Dataset(Dataset):
         preprocessed_spectrum_intensity_1 = torch.tensor(preprocessed_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
         preprocessed_spectrum_intensity_2 = torch.tensor(preprocessed_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
 
-        return preprocessed_spectrum_intensity_1, preprocessed_spectrum_intensity_2, chosen_spectrum.metadata
+        return preprocessed_spectrum_intensity_1, preprocessed_spectrum_1.raman_shift_cm, chosen_spectrum.metadata
     
     def _extract_patient_labels(spectrum_file_path:str, 
                                 r_filter: np.array,
@@ -219,7 +219,7 @@ class Bec_HNC_Dataset(Dataset):
         return self.db  # Return corrected dataset
     
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc_train")
     metadata_file = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc_patient_annotations.xlsx")
 
     seed = 4
@@ -234,7 +234,7 @@ if __name__ == "__main__":
     np.random.seed(seed)
     os.environ['PYTHONHASHSEED'] = str(seed)
 
-    preprocessor = SpectrumPreprocessor(cropping=True,
+    preprocessor = SpectrumPreprocessor(cropping=False,
                                         baseline_correction=True,
                                         remove_cosmic_rays= True,
                                         normalization=True,
@@ -245,7 +245,7 @@ if __name__ == "__main__":
                                   config_path= None)
 
     r_filter = None
-    dataset = Bec_HNC_Dataset(data_folder, metadata_file, r_filter, preprocessor, augmentor)
+    dataset = Bec_HNC_Dataset(data_folder, metadata_file, r_filter, preprocessor, augmentor= None)
 
     # for i in range(50):
     #     ## get a random spectrum

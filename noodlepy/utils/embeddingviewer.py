@@ -91,18 +91,18 @@ class EmbeddingViewer:
         return embeddings_tsne
     
     def save_files_for_tf_embedding_projector(self):
-        # embedding_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_embedding" + ".txt")        
-        # with open(embedding_file_name, 'w') as f:
-        #     for embedding in self.embeddings:
-        #         embedding_str = '\t'.join(map(str, embedding))
-        #         f.write(embedding_str + '\n')
+        embedding_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_embedding" + ".txt")        
+        with open(embedding_file_name, 'w') as f:
+            for embedding in self.embeddings:
+                embedding_str = '\t'.join(map(str, embedding))
+                f.write(embedding_str + '\n')
 
-        # metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_metadata" + ".txt")
-        # with open(metadata_file_name, 'w', newline='\n') as tsvfile:
-        #     tsv_writer = csv.writer(tsvfile, delimiter='\t')
-        #     tsv_writer.writerow(self.labels.keys())
-        #     for row in zip(*self.labels.values()):
-        #         tsv_writer.writerow(row)
+        metadata_file_name = os.path.join(os.getcwd(), "output_plots", self.exp_name + "_metadata" + ".txt")
+        with open(metadata_file_name, 'w', newline='\n') as tsvfile:
+            tsv_writer = csv.writer(tsvfile, delimiter='\t')
+            tsv_writer.writerow(self.labels.keys())
+            for row in zip(*self.labels.values()):
+                tsv_writer.writerow(row)
     
                 # Create a DataFrame for metadata
         metadata_df = pd.DataFrame(self.labels)
