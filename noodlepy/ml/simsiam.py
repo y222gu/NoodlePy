@@ -8,27 +8,35 @@ import torchvision
 from torch import nn
 from lightly.loss import NegativeCosineSimilarity
 from lightly.models.modules import SimSiamPredictionHead, SimSiamProjectionHead
+import torch.nn.functional as F
 
 class cnn_backbone(nn.Module):
     def __init__(self, layer_channel_sizes):
         super(cnn_backbone, self).__init__()
         layers = []
-        in_channels = layer_channel_sizes[0] #intialize the input channel size with the first element of the list
+        in_channels = layer_channel_sizes[0]  # input channel size
 
         for out_channels in layer_channel_sizes[1:]:
+            # 1) Conv layer
             conv_layer = nn.Conv1d(in_channels, out_channels, kernel_size=4)
-            torch.nn.init.kaiming_uniform_(conv_layer.weight, nonlinearity='relu') # weights initialization using kaiming uniform
+
             layers.append(conv_layer)
+
+            # 2) Batch Normalization
+            layers.append(nn.BatchNorm1d(out_channels))
+
+            # 3) Activation
             layers.append(nn.ReLU())
-            layers.append(nn.AvgPool1d(kernel_size=3)) # layers.append(nn.MaxPool1d(kernel_size=2))
+
+            # 4) Pooling
+            layers.append(nn.AvgPool1d(kernel_size=3))
+
             in_channels = out_channels
-        #layers.append(nn.Linear(512 * block.expansion, num_classes))
+
         self.layers = nn.Sequential(*layers)
 
     def forward(self, x):
-        for layer in self.layers:
-            x = layer(x)
-        return x
+        return self.layers(x)
 
 class resnet_backbone(nn.Module):
     def __init__(self):
@@ -54,14 +62,3 @@ class SimSiam(pl.LightningModule):
         p = self.prediction_head(z)
         z = z.detach()
         return z, p
-
-    def training_step(self, batch, batch_idx):
-        (x0, x1) = batch
-        z0, p0 = self.forward(x0)
-        z1, p1 = self.forward(x1)
-        loss = 0.5 * (self.criterion(z0, p1) + self.criterion(z1, p0))
-        return loss
-
-    def configure_optimizers(self):
-        optim = torch.optim.SGD(self.parameters(), lr=0.06)
-        return optim

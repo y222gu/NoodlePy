@@ -104,9 +104,9 @@ def save_to_file(cleaned_spectra, save_file_to_path:str):
                 f.write("\n")
 
 if __name__ == "__main__":
-    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc")
-    output_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc")
-    annotation_for_low_quality_spectra = os.path.join(os.getcwd(), "quality_control", "outliers.json")
+    data_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc_train")
+    output_folder = os.path.join(os.getcwd(), "noodlepy", "data", "bec_hnc_train")
+    annotation_for_low_quality_spectra = os.path.join(os.getcwd(), "outliers.json")
     if not os.path.exists(output_folder):
         os.makedirs(output_folder)
     clean_files(data_folder, annotation_for_low_quality_spectra, output_folder)
