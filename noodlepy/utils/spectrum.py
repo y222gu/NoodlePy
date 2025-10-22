@@ -47,8 +47,9 @@ class Spectrum:
         if start_raman_shift_cm in spectrum_raman_shift_cm and end_raman_shift_cm in spectrum_raman_shift_cm:
             start_index = np.where(spectrum_raman_shift_cm == start_raman_shift_cm)[0][0]
             end_index = np.where(spectrum_raman_shift_cm == end_raman_shift_cm)[0][0]
-            self.raman_shift_cm = self.raman_shift_cm[start_index:end_index]
-            self.intensity = self.intensity[start_index:end_index]
+            # Include the end index in the slice
+            self.raman_shift_cm = self.raman_shift_cm[start_index:end_index+1]
+            self.intensity = self.intensity[start_index:end_index+1]
         else:
             raise ValueError('Wavenumber range could not be aligned to the specified range')
         
