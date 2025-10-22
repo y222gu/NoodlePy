@@ -50,38 +50,36 @@ class OC_Dataset(Dataset):
     
     def __getitem__(self, 
                     idx:int
-                    )-> tuple[Spectrum, Spectrum]:
+                    ) -> tuple[torch.Tensor, torch.Tensor, dict]:
         """
-        Return 2 augmented spectra from the chosen spectrum
+        Return 2 augmented spectra from the chosen spectrum along with its wavenumber
 
         Args:
         idx (int): The index of the spectrum to augment
-        preprocessing_flag (bool): Whether to apply preprocessing to the chosen_spectrum
-        augmentation_step_option_list (list[str]): The list of augmentation steps to choose and apply randomly
 
-        returns:
-        augmented_spectrum_list (list[Spectrum]): a tuple of 2 augmented Spectrum objects
+        Returns:
+        A tuple containing:
+          - preprocessed spectrum intensity tensor (torch.Tensor)
+          - preprocessed spectrum wavenumber tensor (torch.Tensor)
+          - metadata dictionary (dict)
         """
         chosen_spectrum:Spectrum = self.db[idx]
-        # chosen_spectrum.display("raw_spectrum")
-
+        
         if self.preprocessor is not None:
-            preprocessor = self.preprocessor
-            preprocessed_spectrum = preprocessor.preprocess(chosen_spectrum)
+            preprocessed_spectrum = self.preprocessor.preprocess(chosen_spectrum)
         else:
             preprocessed_spectrum = chosen_spectrum
         
         if self.augmentor is not None:
-            augmentor = self.augmentor
-            augmented_spectrum_1,augmented_spectrum_2 = augmentor.augment(preprocessed_spectrum, 2) # REQ: Only need 2 children of the chosen_spectrum
+            augmented_spectrum_1, augmented_spectrum_2 = self.augmentor.augment(preprocessed_spectrum, 2)
         else:
             augmented_spectrum_1 = preprocessed_spectrum
             augmented_spectrum_2 = preprocessed_spectrum
 
-        augmented_spectrum_intensity_1 = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
-        augmented_spectrum_intensity_2 = torch.tensor(augmented_spectrum_2.intensity, dtype=torch.float32).unsqueeze(0)
+        intensity_tensor = torch.tensor(augmented_spectrum_1.intensity, dtype=torch.float32).unsqueeze(0)
+        raman_shift_tensor = torch.tensor(augmented_spectrum_1.raman_shift_cm, dtype=torch.float32).unsqueeze(0)
 
-        return preprocessed_spectrum.intensity, chosen_spectrum.metadata
+        return intensity_tensor, raman_shift_tensor, chosen_spectrum.metadata
 
     def _extract_patient_labels(spectrum_file_name:str):
 
@@ -153,29 +151,38 @@ if __name__ == "__main__":
 
     print(len(dataset))
 
-    plt.figure(figsize=(12, 6))
-
+    fig, (ax_cancer, ax_control) = plt.subplots(1, 2, figsize=(12, 6))
+    
     for i in range(len(dataset)):
-        preprocessed_spectrum, labels = dataset.__getitem__(idx=i)
-
-        # Create a simple x-axis assuming the points correspond to sequential indices
+        preprocessed_spectrum, labels = dataset.__getitem__(i)
         x_axis = range(len(preprocessed_spectrum))
         
-        # Determine color based on patient staging:
-        # Use red for cancer and blue for control. (Case insensitive comparison)
+        # Determine which subplot to use based on patient staging (case insensitive)
         stage = labels.get('staging', '').lower()
         if stage == "cancer":
-            c = "red"
+            ax_cancer.plot(x_axis, preprocessed_spectrum, color="red", alpha=0.7,
+                           label=f"Index {i} (staging: {labels['staging']})" if i == 0 else "")
         elif stage == "control":
-            c = "blue"
-        else:
-            c = "gray"  # fallback color
-        
-        # Plot the preprocessed spectrum for this sample using the determined color
-        plt.plot(x_axis, preprocessed_spectrum, color=c, alpha=0.7, label=f"Index {i} (staging: {labels['staging']})" if i == 0 else "")
+            ax_control.plot(x_axis, preprocessed_spectrum, color="blue", alpha=0.7,
+                            label=f"Index {i} (staging: {labels['staging']})" if i == 0 else "")
+    
+    # Set axis labels, titles, and limits for cancer subplot
+    ax_cancer.set_title("Cancer")
+    ax_cancer.set_xlabel("Measurement Index")
+    ax_cancer.set_ylabel("Intensity")
+    ax_cancer.set_ylim(-0.3, 1.3)
+    ax_cancer.legend(loc="upper right", fontsize='small')
+    
+    # Set axis labels, titles, and limits for control subplot
+    ax_control.set_title("Control")
+    ax_control.set_xlabel("Measurement Index")
+    ax_control.set_ylabel("Intensity")
+    ax_control.set_ylim(-0.3, 1.3)
+    ax_control.legend(loc="upper right", fontsize='small')
 
     plt.title("Overlay of Preprocessed Spectra (Red: Cancer, Blue: Control)")
     plt.xlabel("Measurement Index")
     plt.ylabel("Intensity")
+    plt.ylim(-0.3, 1.3)
     plt.legend(loc="upper right", fontsize='small')
     plt.show()
