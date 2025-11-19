@@ -86,8 +86,8 @@ class OC_Dataset(Dataset):
         # Patient metatdata extraction
         patient_labels = {}
         f_split = spectrum_file_name.split('_')
-        patient_id = f_split[0]
-        staging = f_split[1]
+        patient_id = f_split[1]
+        staging = f_split[2]
 
         patient_labels['patient_id'] = patient_id
         patient_labels['staging'] = staging
@@ -99,7 +99,7 @@ class OC_Dataset(Dataset):
     def _load_files_to_spectrum_objects(file_path: str,
                                patient_annotations:dict):
         with open(file_path) as f:
-            data = pd.read_csv(f, sep="\t", header=None)
+            data = pd.read_csv(f, sep=",", header=None) # sep="\t"
 
             repeated_wavelengths = data.iloc[:,0].value_counts()
             first_repeated_wavelength = repeated_wavelengths.idxmax()
