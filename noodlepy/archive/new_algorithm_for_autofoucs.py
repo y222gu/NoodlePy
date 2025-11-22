@@ -129,7 +129,7 @@ with open(reference_path, 'r') as f:
 
 # Smooth reference spectrum
 ref_intensities_array = np.array(ref_intensities)
-window_size = 1
+window_size = 3
 ref_smoothed_intensities = np.convolve(ref_intensities_array, np.ones(window_size)/window_size, mode='valid')
 
 # Normalize reference spectrum
@@ -140,14 +140,21 @@ focus_scores_convolution = []
 focus_scores_correlation = []
 focus_scores_sharpness = []
 
+# Collect smoothed spectra and compute focus scores, then plot all smoothed spectra together
+all_smoothed_wavelengths = []
+all_smoothed_intensities = []
+
+# Reset positions to align with focus scores (this won't affect earlier plots already created)
+positions = []
+
 for filename in sorted_files:
     file_path = os.path.join(folder_path, filename)
     position = extract_position(filename)
+    positions.append(position)
     
     # Read the data
     wavelengths = []
     intensities = []
-    
     with open(file_path, 'r') as f:
         for line in f:
             parts = line.strip().split(',')
@@ -157,33 +164,79 @@ for filename in sorted_files:
                     intensities.append(float(parts[1]))
                 except ValueError:
                     continue
-    
-    # Smooth spectrum
+
+    if len(intensities) == 0:
+        # skip empty files
+        focus_scores_convolution.append(0.0)
+        focus_scores_correlation.append(0.0)
+        focus_scores_sharpness.append(0.0)
+        all_smoothed_wavelengths.append(np.array([]))
+        all_smoothed_intensities.append(np.array([]))
+        continue
+
+    # Smooth spectrum (use same window as reference smoothing for consistency)
+    window_size = 3
     intensities_array = np.array(intensities)
-    smoothed_intensities = np.convolve(intensities_array, np.ones(window_size)/window_size, mode='valid')
-    
-    # Normalize spectrum
-    smoothed_intensities_norm = smoothed_intensities / np.max(np.abs(smoothed_intensities))
-    
+    smoothed_intensities = np.convolve(intensities_array, np.ones(window_size) / window_size, mode='valid')
+    smoothed_wavelengths = np.array(wavelengths[window_size//2 : window_size//2 + len(smoothed_intensities)])
+
+    # Normalize spectrum (avoid division by zero)
+    max_abs = np.max(np.abs(smoothed_intensities))
+    if max_abs == 0:
+        smoothed_intensities_norm = smoothed_intensities
+    else:
+        smoothed_intensities_norm = smoothed_intensities / max_abs
+
+    # Store for combined plotting
+    all_smoothed_wavelengths.append(smoothed_wavelengths)
+    all_smoothed_intensities.append(smoothed_intensities_norm)
+
     # Focus Score 1: Convolution with reference spectrum (alignment/match)
-    # Pad or trim to same length
     min_len = min(len(ref_smoothed_intensities), len(smoothed_intensities_norm))
-    conv_score = np.max(np.correlate(smoothed_intensities_norm[:min_len], 
-                                      ref_smoothed_intensities[:min_len], mode='valid'))
+    if min_len > 0:
+        conv_score = np.max(np.correlate(smoothed_intensities_norm[:min_len],
+                                          ref_smoothed_intensities[:min_len], mode='valid'))
+    else:
+        conv_score = 0.0
     focus_scores_convolution.append(conv_score)
-    
+
     # Focus Score 2: Cross-correlation with reference spectrum
-    corr_score = np.corrcoef(smoothed_intensities_norm[:min_len], 
-                             ref_smoothed_intensities[:min_len])[0, 1]
-    if np.isnan(corr_score):
-        corr_score = 0
+    if min_len > 1:
+        corr_score = np.corrcoef(smoothed_intensities_norm[:min_len],
+                                 ref_smoothed_intensities[:min_len])[0, 1]
+        if np.isnan(corr_score):
+            corr_score = 0.0
+    else:
+        corr_score = 0.0
     focus_scores_correlation.append(corr_score)
-    
-    # Focus Score 3: Sharpness/contrast (higher sharpness = better focus)
-    # Calculate variance of intensity gradients (Laplacian)
-    intensity_gradient = np.gradient(smoothed_intensities_norm)
-    sharpness = np.var(intensity_gradient)
+
+    # Focus Score 3: Sharpness/contrast (variance of gradient)
+    if len(smoothed_intensities_norm) > 1:
+        intensity_gradient = np.gradient(smoothed_intensities_norm)
+        sharpness = np.var(intensity_gradient)
+    else:
+        sharpness = 0.0
     focus_scores_sharpness.append(sharpness)
+
+# Plot all smoothed spectra on one axes
+fig_all, ax_all = plt.subplots(figsize=(10, 6))
+cmap = plt.get_cmap('viridis')
+N = len(all_smoothed_intensities)
+for i, (wl, inten, pos) in enumerate(zip(all_smoothed_wavelengths, all_smoothed_intensities, positions)):
+    if len(wl) == 0:
+        continue
+    color = cmap(i / max(1, N-1))
+    ax_all.plot(wl, inten, color=color, alpha=0.7, linewidth=1)
+    # small text label at left of each trace
+    ax_all.text(wl[0], inten[0], f'{pos:.2f}', fontsize=8, verticalalignment='bottom', color=color)
+
+ax_all.set_xlabel('Wavelength')
+ax_all.set_ylabel('Normalized Intensity')
+ax_all.set_title('All Smoothed Spectra (normalized)')
+ax_all.grid(True, alpha=0.25)
+plt.tight_layout()
+plt.savefig('all_smoothed_spectra.png', dpi=150, bbox_inches='tight')
+plt.show()
 
 # Plot focus scores
 fig3, axes3 = plt.subplots(3, 1, figsize=(10, 10))
