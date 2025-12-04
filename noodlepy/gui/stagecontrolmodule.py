@@ -14,7 +14,7 @@ from noodlepy.gui.publisher_subscriber import Subscriber, Publisher
 from noodlepy.gui.calibrationmodule import CalibrationModule
 
 class StageControlModule(ttk.Frame, Publisher, Subscriber):
-    def __init__(self, parent):
+    def __init__(self, parent, settings):
         ttk.Frame.__init__(self, parent)
         Publisher.__init__(self, ['move_nanodrive_by', 
                                   'move_nanodrive_to', 
@@ -25,10 +25,14 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                                   'activate_protocol_module_state',
                                   'get_nanodrive_min_max',
                                   'task_completed',
-                                  'abort_aquisition'])
+                                  'abort_aquisition',
+                                  'update_prusa_focus_range_for_wasatch',
+                                  'update_home_position'])
         Subscriber.__init__(self)
         self.name = 'StageControlModule_obserableobserver'
         self.parent = parent
+        self.settings = settings
+        self.apply_settings()
 
         self.img_small_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","small_step.png")).resize((20, 20))
         self.img_medium_step = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","medium_step.png")).resize((20, 20))
@@ -52,28 +56,9 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.img_up_nano = ImageTk.PhotoImage(self.nanodrive_icon.rotate(180))
         self.img_down_nano = ImageTk.PhotoImage(self.nanodrive_icon)
         self.img_home_icon = ImageTk.PhotoImage(self.home_icon)
-       
-        self.safety_height = 20 # calibrated on 1/4/2025
-        self.home_position = [118.58, 181.94, self.safety_height]
-        self.calibration_from_widefield_to_objective_x = -61.12 # calibrated on 2/06/2025
-        self.calibration_from_widefield_to_objective_y = -3.72 # calibrated on 2/06/2025
-        self.calibration_from_widefield_to_objective_z = - 1.44 #  in mm calibrated on 1/4/2025
-        self.initial_nanodrive_position = 50
-        self.small_step_size_xy_mm = 0.06 #firmware seems to limit the smallest step size to 0.06 (60 um)
-        self.medium_step_size_xy_mm = 0.5
-        self.large_step_size_xy_mm = 4.5
-        self.small_step_size_z_mm = 0.02
-        self.medium_step_size_z_mm = 0.1
-        self.large_step_size_z_mm = 1
-        self.nanodrive_step_size_um = 1
 
-        self.prusa_fine_focus_step_number = 20 # in objective view
-        self.prusa_rough_focus_step_number = 20 # in widefield view
-        self.nanodrive_movement_stabilization_time = 0.5
-        self.prusa_movement_stabilization_time = 1
-        self.prusa_rough_fine_focus_overlap_step_number = 4 # the actual number of steps to overlap between rough and fine focus is double this number
-        self.focus_upper_limit = None
-        self.focus_lower_limit = None
+        self.widefield_focus_prusa_upper_limit = None
+        self.widefield_focus_prusa_lower_limit = None
         self.focus_score_at_current_z_position = None
         self.current_nanodrive_position = None #um
         self.prusa_x_referenced = False
@@ -84,21 +69,10 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.capture_frame_center_objective_x= None
         self.capture_frame_center_objective_y = None
         self.ser = None
-        self.lower_limit_p1 = None
-        self.upper_limit_p1 = None
-        self.lower_limit_p2 = None
-        self.upper_limit_p2 = None
-        self.lower_limit_p3 = None
-        self.upper_limit_p3 = None
-        
-        # parameters for the sample drop panel
-        self.interval_between_drop_x = 4.5 # mm
-        self.interval_between_drop_y = 4.5 # mm 
-        self.offset_home_to_p1_x = 8.28 # mm
-        self.offset_home_to_p1_y = -8.64 # mm
-        self.sample_drop_panel_circle_radius = 15 # pixels
-        self.sample_drop_panel_spacing = 40 # pixels
-        self.sample_drop_panel_grid_pattern = [5, 5, 5, 5]  # Column-wise circle counts for symmetry
+
+        self.sample_drop_panel_circle_radius = 15
+        self.sample_drop_panel_spacing = 40
+        self.sample_drop_panel_grid_pattern = [4, 4, 4, 4, 4]  # Column-wise circle counts for symmetry
         self.sample_drop_panel_max_rows = max(self.sample_drop_panel_grid_pattern)
         self.sample_drop_panel_total_width = len(self.sample_drop_panel_grid_pattern) * self.sample_drop_panel_spacing
         self.sample_drop_panel_total_height = self.sample_drop_panel_max_rows * self.sample_drop_panel_spacing
@@ -110,6 +84,55 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
         # parameters for the protocol module
         self.selected_circle_positions = []
+
+    def apply_settings(self):
+        s = self.settings
+
+        # Safety / home
+        self.safety_height = s.safety_height
+        self.home_position = [s.home_x, s.home_y, s.home_z]
+
+        # Calibration
+        self.calibration_from_widefield_to_objective_x = s.calib_wide_to_obj_x
+        self.calibration_from_widefield_to_objective_y = s.calib_wide_to_obj_y
+        self.calibration_from_widefield_to_objective_z = s.calib_wide_to_obj_z
+
+        # Steps / nanodrive
+        self.initial_nanodrive_position = s.initial_nanodrive_position
+        self.small_step_size_xy_mm = s.small_step_xy_mm
+        self.medium_step_size_xy_mm = s.medium_step_xy_mm
+        self.large_step_size_xy_mm = s.large_step_xy_mm
+        self.small_step_size_z_mm = s.small_step_z_mm
+        self.medium_step_size_z_mm = s.medium_step_z_mm
+        self.large_step_size_z_mm = s.large_step_z_mm
+        self.nanodrive_step_size_um = s.nanodrive_step_size_um
+
+        # Focus & stabilization
+        self.nanodrive_movement_stabilization_time = s.nanodrive_movement_stabilization_time
+        self.prusa_movement_stabilization_time = s.prusa_movement_stabilization_time
+
+        # Sample drop panel
+        self.interval_between_drop_x = s.interval_between_drop_x
+        self.interval_between_drop_y = s.interval_between_drop_y
+        self.offset_home_to_p1_x = s.offset_home_to_p1_x
+        self.offset_home_to_p1_y = s.offset_home_to_p1_y
+        self.interval_between_quartz_slides_x = s.interval_between_quartz_slides_x
+        self.interval_between_quartz_slides_y = s.interval_between_quartz_slides_y
+
+    def handle_update_settings(self, new_settings):
+        self.settings = new_settings.stage
+        self.apply_settings()
+        
+        ttk.Label(self.direction_frame, text=f"{self.large_step_size_xy_mm} mm").grid(row=1, column=3, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.medium_step_size_xy_mm} mm").grid(row=2, column=3, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.small_step_size_xy_mm} mm").grid(row=3, column=3,  pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.large_step_size_z_mm} mm").grid(row=1, column=9, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.medium_step_size_z_mm} mm").grid(row=2, column=9, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.small_step_size_z_mm} mm").grid(row=3, column=9, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.nanodrive_step_size_um} um").grid(row=4, column=11, pady=3)
+
+        if hasattr(self, 'sample_drop_panel_grid_pattern') and self.sample_drop_panel_grid_pattern is not None:
+            self.sample_drop_panel_calculate_circle_pursa_coordinates()
 
     def create_widgets(self):
 
@@ -192,87 +215,94 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.speed_slider.bind("<ButtonRelease-1>", lambda e: self.update_prusa_speed())
 
         # Frame for direction buttons
-        direction_frame = ttk.Frame(movement_frame, padding=3)
-        direction_frame.grid(row=5, column=0, columnspan=10, pady=3, padx=3)
-        ttk.Label(direction_frame, text="Y").grid(row=0, column=4, pady=3)
-        ttk.Label(direction_frame, text="X").grid(row=4, column=0, padx=3)
-        ttk.Label(direction_frame, text="Z (up)").grid(row=0, column=10, pady=3)
-        ttk.Label(direction_frame, text="Z (down)").grid(row=8, column=10, pady=3)
-        ttk.Label(direction_frame, text="ND Z (up)").grid(row=0, column=11, pady=3)
-        ttk.Label(direction_frame, text="ND Z (down)").grid(row=8, column=11, pady=3)
-        ttk.Label(direction_frame, text="").grid(row=2, column=9,columnspan=2, padx=50)
-        ttk.Label(direction_frame, text=f"{self.large_step_size_xy_mm} mm").grid(row=1, column=3, pady=3)
-        ttk.Label(direction_frame, text=f"{self.medium_step_size_xy_mm} mm").grid(row=2, column=3, pady=3)
-        ttk.Label(direction_frame, text=f"{self.small_step_size_xy_mm} mm").grid(row=3, column=3,  pady=3)
+        self.direction_frame = ttk.Frame(movement_frame, padding=3)
+        self.direction_frame.grid(row=5, column=0, columnspan=10, pady=3, padx=3)
+        ttk.Label(self.direction_frame, text="Y").grid(row=0, column=4, pady=3)
+        ttk.Label(self.direction_frame, text="X").grid(row=4, column=0, padx=3)
+        ttk.Label(self.direction_frame, text="Z (up)").grid(row=0, column=10, pady=3)
+        ttk.Label(self.direction_frame, text="Z (down)").grid(row=8, column=10, pady=3)
+        ttk.Label(self.direction_frame, text="ND Z (up)").grid(row=0, column=11, pady=3)
+        ttk.Label(self.direction_frame, text="ND Z (down)").grid(row=8, column=11, pady=3)
+        ttk.Label(self.direction_frame, text="").grid(row=2, column=9,columnspan=2, padx=50)
+        ttk.Label(self.direction_frame, text=f"{self.large_step_size_xy_mm} mm").grid(row=1, column=3, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.medium_step_size_xy_mm} mm").grid(row=2, column=3, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.small_step_size_xy_mm} mm").grid(row=3, column=3,  pady=3)
 
-        ttk.Label(direction_frame, text=f"{self.large_step_size_z_mm} mm").grid(row=1, column=9, pady=3)
-        ttk.Label(direction_frame, text=f"{self.medium_step_size_z_mm} mm").grid(row=2, column=9, pady=3)
-        ttk.Label(direction_frame, text=f"{self.small_step_size_z_mm} mm").grid(row=3, column=9, pady=3)
-        ttk.Label(direction_frame, text=f"{self.nanodrive_step_size_um} um").grid(row=4, column=11, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.large_step_size_z_mm} mm").grid(row=1, column=9, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.medium_step_size_z_mm} mm").grid(row=2, column=9, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.small_step_size_z_mm} mm").grid(row=3, column=9, pady=3)
+        ttk.Label(self.direction_frame, text=f"{self.nanodrive_step_size_um} um").grid(row=4, column=11, pady=3)
 
 
-        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.move_prusa("BACK SMALL"), bootstyle="light").grid(row=3, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.move_prusa("BACK MEDIUM"), bootstyle="secondary").grid(row=2, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.move_prusa("BACK LARGE"), bootstyle="dark").grid(row=1, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_left_low, command=lambda: self.move_prusa("LEFT SMALL"), bootstyle="light").grid(row=4, column=3, padx=3)
-        ttk.Button(direction_frame, image=self.img_left_medium, command=lambda: self.move_prusa("LEFT MEDIUM"), bootstyle="secondary").grid(row=4, column=2, padx=3)
-        ttk.Button(direction_frame, image=self.img_left_high, command=lambda: self.move_prusa("LEFT LARGE"), bootstyle="dark").grid(row=4, column=1, padx=3)
-        ttk.Button(direction_frame, image=self.img_right_low, command=lambda: self.move_prusa("RIGHT SMALL"),bootstyle="light").grid(row=4, column=5, padx=3)
-        ttk.Button(direction_frame, image=self.img_right_medium, command=lambda: self.move_prusa("RIGHT MEDIUM"), bootstyle="secondary").grid(row=4, column=6, padx=3)
-        ttk.Button(direction_frame, image=self.img_right_high, command=lambda: self.move_prusa("RIGHT LARGE"), bootstyle="dark").grid(row=4, column=7, padx=3, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.move_prusa("FRONT SMALL"), bootstyle="light").grid(row=5, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.move_prusa("FRONT MEDIUM"), bootstyle="secondary").grid(row=6, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.move_prusa("FRONT LARGE"), bootstyle="dark").grid(row=7, column=4, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_low, command=lambda: self.move_prusa("UP SMALL"), bootstyle="light").grid(row=3, column=10)
-        ttk.Button(direction_frame, image=self.img_up_medium, command=lambda: self.move_prusa("UP MEDIUM"), bootstyle="secondary").grid(row=2, column=10, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_high, command=lambda: self.move_prusa("UP LARGE"), bootstyle="dark").grid(row=1, column=10, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_low, command=lambda: self.move_prusa("DOWN SMALL"), bootstyle="light").grid(row=5, column=10)
-        ttk.Button(direction_frame, image=self.img_down_medium, command=lambda: self.move_prusa("DOWN MEDIUM"), bootstyle="secondary").grid(row=6, column=10, pady=3)
-        ttk.Button(direction_frame, image=self.img_down_high, command=lambda: self.move_prusa("DOWN LARGE"), bootstyle="dark").grid(row=7, column=10, pady=3)
-        ttk.Button(direction_frame, image=self.img_up_nano, command=lambda: self.move_nanodrive("UP"), bootstyle="light").grid(row=3, column=11)
-        ttk.Button(direction_frame, image=self.img_down_nano, command=lambda: self.move_nanodrive("DOWN"), bootstyle="light").grid(row=5, column=11)
+        ttk.Button(self.direction_frame, image=self.img_up_low, command=lambda: self.move_prusa("BACK SMALL"), bootstyle="light").grid(row=3, column=4, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_up_medium, command=lambda: self.move_prusa("BACK MEDIUM"), bootstyle="secondary").grid(row=2, column=4, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_up_high, command=lambda: self.move_prusa("BACK LARGE"), bootstyle="dark").grid(row=1, column=4, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_left_low, command=lambda: self.move_prusa("LEFT SMALL"), bootstyle="light").grid(row=4, column=3, padx=3)
+        ttk.Button(self.direction_frame, image=self.img_left_medium, command=lambda: self.move_prusa("LEFT MEDIUM"), bootstyle="secondary").grid(row=4, column=2, padx=3)
+        ttk.Button(self.direction_frame, image=self.img_left_high, command=lambda: self.move_prusa("LEFT LARGE"), bootstyle="dark").grid(row=4, column=1, padx=3)
+        ttk.Button(self.direction_frame, image=self.img_right_low, command=lambda: self.move_prusa("RIGHT SMALL"),bootstyle="light").grid(row=4, column=5, padx=3)
+        ttk.Button(self.direction_frame, image=self.img_right_medium, command=lambda: self.move_prusa("RIGHT MEDIUM"), bootstyle="secondary").grid(row=4, column=6, padx=3)
+        ttk.Button(self.direction_frame, image=self.img_right_high, command=lambda: self.move_prusa("RIGHT LARGE"), bootstyle="dark").grid(row=4, column=7, padx=3, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_down_low, command=lambda: self.move_prusa("FRONT SMALL"), bootstyle="light").grid(row=5, column=4, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_down_medium, command=lambda: self.move_prusa("FRONT MEDIUM"), bootstyle="secondary").grid(row=6, column=4, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_down_high, command=lambda: self.move_prusa("FRONT LARGE"), bootstyle="dark").grid(row=7, column=4, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_up_low, command=lambda: self.move_prusa("UP SMALL"), bootstyle="light").grid(row=3, column=10)
+        ttk.Button(self.direction_frame, image=self.img_up_medium, command=lambda: self.move_prusa("UP MEDIUM"), bootstyle="secondary").grid(row=2, column=10, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_up_high, command=lambda: self.move_prusa("UP LARGE"), bootstyle="dark").grid(row=1, column=10, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_down_low, command=lambda: self.move_prusa("DOWN SMALL"), bootstyle="light").grid(row=5, column=10)
+        ttk.Button(self.direction_frame, image=self.img_down_medium, command=lambda: self.move_prusa("DOWN MEDIUM"), bootstyle="secondary").grid(row=6, column=10, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_down_high, command=lambda: self.move_prusa("DOWN LARGE"), bootstyle="dark").grid(row=7, column=10, pady=3)
+        ttk.Button(self.direction_frame, image=self.img_up_nano, command=lambda: self.move_nanodrive("UP"), bootstyle="light").grid(row=3, column=11)
+        ttk.Button(self.direction_frame, image=self.img_down_nano, command=lambda: self.move_nanodrive("DOWN"), bootstyle="light").grid(row=5, column=11)
 
-        # Frame for drop position
-        sample_drop_position_frame = ttk.Labelframe(main_frame, text="Sample Drop Position", padding=5)
-        sample_drop_position_frame.grid(row=3, column=0, rowspan=5, sticky='nsew', padx=5, pady=5)
-        self.sample_drop_panel_canvas = tk.Canvas(sample_drop_position_frame, width=self.sample_drop_panel_total_width, height=self.sample_drop_panel_total_height, state=DISABLED)
+        # Combined frame for drop position and camera autofocus
+        quartz_slides_and_sample_drops_frame = ttk.Labelframe(main_frame, text="Sample Drop & Camera Autofocus", padding=5)
+        quartz_slides_and_sample_drops_frame.grid(row=3, column=0, columnspan=5, rowspan=6, sticky='nsew', padx=5, pady=5)
+
+        # Sample drop position section
+        self.sample_drop_panel_canvas = tk.Canvas(quartz_slides_and_sample_drops_frame, width=self.sample_drop_panel_total_width, height=self.sample_drop_panel_total_height, state=DISABLED)
         self.sample_drop_panel_canvas.grid(row=0, column=0, rowspan=5, padx=5, pady=5)
-        self.sample_drop_panel_tooltip = tk.Label(sample_drop_position_frame, text="", relief=tk.SOLID, bd=1, state=DISABLED)
+        self.sample_drop_panel_tooltip = tk.Label(quartz_slides_and_sample_drops_frame, text="", relief=tk.SOLID, bd=1, state=DISABLED)
         self.sample_drop_panel_create_circle_grid()
 
-        # registering the focus range
-        register_focus_range_frame = ttk.Labelframe(main_frame, text="Register Focus Range", padding=5)
-        register_focus_range_frame.grid(row=3, column=1, rowspan=5, padx=5, pady=5)
+        # Camera autofocus section
+        register_camera_focus_range_frame = ttk.Frame(quartz_slides_and_sample_drops_frame, padding=5)
+        register_camera_focus_range_frame.grid(row=0, column=1, rowspan=5, columnspan=4, sticky='nsew', padx=5, pady=5)
 
-        self.xy_position_label = ttk.Label(register_focus_range_frame, text="(X, Y) [mm]")
-        self.xy_position_label.grid(row=0, column=1, padx=5, pady=5)
-        self.focus_lower_limit_label = ttk.Label(register_focus_range_frame, text="Z Range[mm]")
-        self.focus_lower_limit_label.grid(row=0, column=2, padx=5, pady=5)
+        ttk.Label(register_camera_focus_range_frame, text="Upper Z Limit [mm]:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
+        self.upper_limit_entry = ttk.Entry(register_camera_focus_range_frame, width=3)
+        self.upper_limit_entry.grid(row=0, column=1, padx=5, pady=5)
 
-        self.point_1_button = ttk.Button(register_focus_range_frame, text="Point 1", command=lambda: self.register_focus_range("P1"), bootstyle="info_outline", state=DISABLED)
-        self.point_1_button.grid(row=1, column=0, padx=5, pady=5)
-        self.point_1_position_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_1_position_label.grid(row=1, column=1, padx=5, pady=5)
-        self.point_1_focus_range_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_1_focus_range_label.grid(row=1, column=2, padx=5, pady=5)
+        ttk.Label(register_camera_focus_range_frame, text="Lower Z Limit [mm]:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
+        self.lower_limit_entry = ttk.Entry(register_camera_focus_range_frame, width=3)
+        self.lower_limit_entry.grid(row=1, column=1, padx=5, pady=5)
 
-        self.point_2_button = ttk.Button(register_focus_range_frame, text="Point 2", command=lambda: self.register_focus_range("P2"), bootstyle="info_outline", state=DISABLED)
-        self.point_2_button.grid(row=2, column=0, padx=5, pady=5)
-        self.point_2_position_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_2_position_label.grid(row=2, column=1, padx=5, pady=5)
-        self.point_2_focus_range_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_2_focus_range_label.grid(row=2, column=2, padx=5, pady=5)
+        ttk.Label(register_camera_focus_range_frame, text="Widefield # of Steps:").grid(row=2, column=0, padx=5, pady=5, sticky="e")
+        self.widefield_focus_steps_entry = ttk.Entry(register_camera_focus_range_frame, width=3)
+        self.widefield_focus_steps_entry.grid(row=2, column=1, padx=5, pady=5)
+        self.widefield_focus_steps_entry.insert(0, 20)
 
-        self.point_3_button = ttk.Button(register_focus_range_frame, text="Point 3",  command=lambda: self.register_focus_range("P3"), bootstyle="info_outline", state=DISABLED)
-        self.point_3_button.grid(row=3, column=0, padx=5, pady=5)
-        self.point_3_position_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_3_position_label.grid(row=3, column=1, padx=5, pady=5)
-        self.point_3_focus_range_label = ttk.Label(register_focus_range_frame, text="N/A", width=5)
-        self.point_3_focus_range_label.grid(row=3, column=2, padx=5, pady=5)
+        self.register_widefield_focus_range_button = ttk.Button(register_camera_focus_range_frame, text="Register", command=self.register_prusa_focus_range, bootstyle="info-outline", state= DISABLED)
+        self.register_widefield_focus_range_button.grid(row=0, column=2, rowspan=2, padx=5, pady=5, sticky='news')
 
-        self.interpolate_button = ttk.Button(register_focus_range_frame, text="Interpolate", command=self.interpolate_prusa_focus_range, bootstyle="info_outline", state=DISABLED)
-        self.interpolate_button.grid(row=4, column=2, columnspan=2, sticky='nesw', padx=5, pady=5)
-    
+        self.widefield_focus_z_label = ttk.Label(register_camera_focus_range_frame, text="Widefield f Z[mm]: N/A", foreground="grey", anchor="center")
+        self.widefield_focus_z_label.grid(row=2, column=2,  padx=5, pady=5, sticky="nsew")
+        self.objective_focus_z_label = ttk.Label(register_camera_focus_range_frame, text="Obj f Z[mm]: N/A", foreground="grey", anchor="center")
+        self.objective_focus_z_label.grid(row=3, column=2,  padx=5, pady=5, sticky="nsew")
+        self.objective_focus_ND_z_label = ttk.Label(register_camera_focus_range_frame, text="Obj f ND Z[um]: N/A", foreground="grey", anchor="center")
+        self.objective_focus_ND_z_label.grid(row=4, column=2, padx=5, pady=5, sticky="nsew")
+
+        # quartz slide navigation section
+        quartz_slide_navigation_frame = ttk.Frame(quartz_slides_and_sample_drops_frame, padding=5)
+        quartz_slide_navigation_frame.grid(row=5, column=0, columnspan=5, sticky='nsew', padx=5, pady=5)
+        self.previous_quartz_slide_button = ttk.Button(quartz_slide_navigation_frame, text="Previous Slide", command=self.move_to_previous_quartz_slide, bootstyle="info", state=DISABLED)
+        self.previous_quartz_slide_button.grid(row=0, column=0, padx=5, pady=5, sticky="w")
+        self.quartz_slide_label = ttk.Label(quartz_slide_navigation_frame, text="Quartz Slide: 1")
+        self.quartz_slide_label.grid(row=0, column=1, padx=5, pady=5, sticky="ew")
+        self.next_quartz_slide_button = ttk.Button(quartz_slide_navigation_frame, text="Next Quartz Slide", command=self.move_to_next_quartz_slide, bootstyle="info", state=DISABLED)
+        self.next_quartz_slide_button.grid(row=0, column=2, padx=5, pady=5, sticky="e")
+
+
     def run_in_thread(self, func, *args):
         thread = Thread(target=func, args=args, daemon=True)
         thread.start()
@@ -291,7 +321,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
     def prusa_go_to_home_position(self):
         self.prusa_go_to_xyz(z=self.safety_height) # raise to a safe height first
         self.prusa_go_to_xyz(x=float(self.home_position[0]), y=float(self.home_position[1]))
-        # self.prusa_go_to_xyz(z=float(self.home_position[2]))
+        self.prusa_go_to_xyz(z=float(self.home_position[2]))
 
     def move_both_prusa_nanodrive(self):
         print("Moving both the stage and the nanodrive")
@@ -374,7 +404,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         else:
             print("Invalid option")
     
-
     def ref(self, option):
         self.run_in_thread(self._ref, option)
 
@@ -425,14 +454,14 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
             self.home_button.configure(state=NORMAL)
             self.calibrate_home_position_button.configure(state=NORMAL)
-            self.point_1_button.configure(state=NORMAL)
-            self.point_2_button.configure(state=NORMAL)
-            self.point_3_button.configure(state=NORMAL)
             self.sample_drop_panel_canvas.configure(state=NORMAL)
             self.sample_drop_panel_activate_circles()
+            self.previous_quartz_slide_button.configure(state=NORMAL)
+            self.next_quartz_slide_button.configure(state=NORMAL)
             self.sample_drop_panel_tooltip.configure(state=NORMAL)
             self.go_button.configure(state=NORMAL)
             self.update_position_button.configure(state=NORMAL)
+            self.register_widefield_focus_range_button.configure(state=NORMAL)
             self.dispatch('activate_switch_view_button')
             self.dispatch('activate_protocol_module_state', 'stage_reference_is_setup')
 
@@ -456,8 +485,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         if x is not None or y is not None or z is not None:
             gcode += f" F{self.speed}\r\n"
             self.ser.write(str.encode(gcode))
-            # # # pause for 1 second to allow the printer to move
-            # time.sleep(2)
             self.update_prusa_position()
 
     def prusa_go_by_xyz(self, x=None, y=None, z=None):
@@ -491,22 +518,31 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             print(line)
             if critiria in line:
                 return line
-            # elif line:
-                # print(f"Received during {process_name}: {line}")
+            elif line:
+                print(f"Received during {process_name}: {line}")
                 
-
     def update_prusa_speed(self):
         self.speed = self.speed_slider.get()
         print(f"Speed of stage is updated to: {self.speed} mm/s")
 
     def connect_prusa_device(self):
         self.port = self.find_prusa_com_ports()
-        self.ser = serial.Serial(self.port, 115200)
+        self.ser = serial.Serial(self.port, 115200, timeout=2.0, write_timeout=5.0)
         # time.sleep(3)
-
         printer_status = self.is_prusa_on()
         if printer_status:
             print("Connected to the PRUSA " + self.ser.name)
+            # Keep the PRUSA engaged by sending periodic keep-alive commands
+            def keep_prusa_alive():
+                while True:
+                    try:
+                        self.ser.write(b'M105\n')  # Send a keep-alive command
+                        time.sleep(5)  # Wait for 5 seconds before sending the next command
+                    except Exception as e:
+                        print(f"Error keeping PRUSA alive: {e}")
+                        break
+
+            self.run_in_thread(keep_prusa_alive)
         else:
             self.ser.close()
             print("Couldn't connect to the PRUSA")
@@ -554,6 +590,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
         # recalculate the circle positions
         self.sample_drop_panel_calculate_circle_pursa_coordinates()
+        self.dispatch('update_home_position', self.home_position)
         print("Home position updated")
 
     def handle_switch_view(self, view):
@@ -572,13 +609,6 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             print("Error Happened", view)
 
         return True
-
-    # def roll_over_coarse_fine_z_position(self, coarse_mm, fine_um):
-    #             # Check if fine_nm exceeds 1000 nm and adjust the coarse stage accordingly
-    #     total_nm = coarse_mm * 1000 + fine_um  # Convert coarse to nm and add fine adjustment
-    #     adjusted_coarse_um = int(total_nm // 1000)  # New coarse value in µm
-    #     remaining_nm = total_nm % 1000  # Fine position within the µm range
-    #     return f"{adjusted_coarse_um} mm + {remaining_nm:.0f} um"
 
     def handle_update_nanodrive_position(self, nanodrive_position):
         self.current_nanodrive_position = nanodrive_position
@@ -677,26 +707,16 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             self.capture_frame_center_widefield_y = self.capture_frame_center_objective_y - self.calibration_from_widefield_to_objective_y
         return None
 
-
     def handle_move_stage_to_target_sample_drop_in_widefield_view_during_aquisition(self, sample_drop_row_column):
-        # get current position of the stage
-        current_x = float(self.get_current_prusa_position('XYZ')[0])
-        current_y = float(self.get_current_prusa_position('XYZ')[1])
-        lower_limit_current, upper_limit_current = self.calculate_focus_range_at_position(current_x, current_y)
-        lower_limit_target, upper_limit_target = self.calculate_focus_range_at_position(sample_drop_row_column[0], sample_drop_row_column[1])
-
-        # get the bigger upper limit to avoid collision
-        upper_limit = max(upper_limit_current, upper_limit_target)
-
-        self.prusa_go_to_xyz(z=upper_limit)
+        self.prusa_go_to_xyz(z=self.widefield_focus_prusa_upper_limit)
         print('moving to the upper limit')
         # check if the stage is at the target position
         while True:
             current_z_position = np.round(float(self.get_current_prusa_position('Z')),2)
             print('stuck when trying to move to the upper limit')
             print(f"current z position: {current_z_position}")
-            print(f"upper limit: {upper_limit}")
-            if current_z_position == upper_limit:
+            print(f"upper limit: {self.widefield_focus_prusa_upper_limit}")
+            if current_z_position == self.widefield_focus_prusa_upper_limit:
                 break
 
         # re-position nanodrive to the initial position
@@ -711,12 +731,12 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
     def handle_reposition_stage_and_nanodrive_in_objective_view_during_acquisition(self):
         # move the stage to the best focus position in widefield view
-        self.prusa_go_to_xyz(z=self.best_prusa_focus_position_widefield)
+        self.prusa_go_to_xyz(z=self.best_widefield_focus_prusa_position)
 
         # check if the stage is at the target position
         while True:
             current_position = self.get_current_prusa_position('Z')
-            if current_position == self.best_prusa_focus_position_widefield:
+            if current_position == self.best_widefield_focus_prusa_position:
                 break
 
         # re-position nanodrive to the initial position
@@ -738,18 +758,13 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             print(f"current nanodrive position: {current_nanodrive_position}")
             if current_nanodrive_position == self.initial_nanodrive_position:
                 break
-        
-        # get the upper limit and lower limit for prusa
-        current_x = float(self.get_current_prusa_position('XYZ')[0])
-        current_y = float(self.get_current_prusa_position('XYZ')[1])
-        lower_limit, upper_limit = self.calculate_focus_range_at_position(current_x, current_y)
-    
-        if upper_limit and lower_limit:
 
-            self.best_prusa_focus_position_widefield, self.best_prusa_focus_position_widefield_refine_min, self.best_prusa_focus_position_widefield_refine_max = self.focus_prusa(lower_limit, upper_limit, self.prusa_rough_focus_step_number)
-            print(f"Widefield pursa focus [{lower_limit}, {upper_limit}] with {self.prusa_rough_focus_step_number} steps")
-            print(f"Best focus position for widefield camera: {self.best_prusa_focus_position_widefield}")
-            print(f"Refined focus range: {self.best_prusa_focus_position_widefield_refine_min} - {self.best_prusa_focus_position_widefield_refine_max}")
+        if self.widefield_focus_prusa_lower_limit and self.widefield_focus_prusa_upper_limit:
+
+            self.best_widefield_focus_prusa_position = self.focus_prusa(self.widefield_focus_prusa_lower_limit, self.widefield_focus_prusa_upper_limit, self.widefield_focus_prusa_step_number)
+            print(f"Widefield pursa focus [{self.widefield_focus_prusa_lower_limit}, {self.widefield_focus_prusa_upper_limit}] with {self.widefield_focus_prusa_step_number} steps")
+            print(f"Best focus position for widefield camera: {self.best_widefield_focus_prusa_position} mm")
+            self.widefield_focus_z_label.config(text=f"Widefield Focus Z[mm]: {self.best_widefield_focus_prusa_position}")
             return True
         else:
             print("Please interpolate the focus range first")
@@ -791,66 +806,17 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
             focus_score.append(self.focus_score_at_current_z_position)
 
-        best_prusa_focus_position, best_prusa_focus_refine_min, best_prusa_focus_refine_max= self.refine_focus_range(focus_score, z_range, self.prusa_rough_fine_focus_overlap_step_number)
+        best_prusa_focus_position = self.find_best_focus_position(focus_score, z_range)
         print(f"Best focus position for prusa: {best_prusa_focus_position}")
-        print(f"Refined focus range for prusa: {best_prusa_focus_refine_min} - {best_prusa_focus_refine_max}")
 
         self.prusa_go_to_xyz(z=best_prusa_focus_position)
         time.sleep(self.prusa_movement_stabilization_time)
-        return best_prusa_focus_position, best_prusa_focus_refine_min, best_prusa_focus_refine_max
-    
-    def focus_nanodrive(self, lower_limit, upper_limit, step_number):
-        # focus with nanodrive
-        nanodrive_z_range = np.linspace(lower_limit, upper_limit, step_number)
-        print(f"z range: {nanodrive_z_range}")
-        # round up the z range to 2 decimal places
-        nanodrive_z_range = np.round(nanodrive_z_range)
-        print(f"z range after rounding: {nanodrive_z_range}")
-        focus_score = []
-        self.focus_score_at_current_z_position = None
+        return best_prusa_focus_position
 
-        for z in nanodrive_z_range:
-            self.dispatch('move_nanodrive_to', z)
-
-            # wait until the nanodrive position is at the target position
-            while True:
-                current_nanodrive_position = self.get_nanodrive_position()
-                if current_nanodrive_position == z:
-                    break
-
-            # wait until the robot is stable
-            time.sleep(self.nanodrive_movement_stabilization_time)
-
-            self.dispatch('calculate_focus_score')
-
-            # wait until the score is different from the previous one
-            while True:
-                if self.focus_score_at_current_z_position:
-                    #check if the focus score is different from the previous one except the first one
-                    if len(focus_score) > 0:
-                        if self.focus_score_at_current_z_position != focus_score[-1]:
-                            break
-                    else:
-                        break
-
-            focus_score.append(self.focus_score_at_current_z_position)
-
-        # find the best focus position
-        best_nanodrive_focus_position_objective = nanodrive_z_range[np.argmax(focus_score)]
-        self.dispatch('move_nanodrive_to', best_nanodrive_focus_position_objective)
-
-        print(f'focus score at each z position: {focus_score}')
-        print(f"The best focus position is {best_nanodrive_focus_position_objective}, with the focus score of {max(focus_score)}")
-        return best_nanodrive_focus_position_objective
-
-
-    def refine_focus_range(self, focus_score, z_axis_range, overlap_step_number):
+    def find_best_focus_position(self, focus_score, z_axis_range):
         k = np.argmax(focus_score)
-        fineMin = z_axis_range[max(k - overlap_step_number, 0)]
-        fineMax = z_axis_range[min(k + overlap_step_number, len(z_axis_range) - 1)]
-        print("Refined focus range for Prusa:", fineMin, fineMax)
         best_focus_position = z_axis_range[k]
-        return best_focus_position, fineMin, fineMax
+        return best_focus_position
 
     def handle_focus_widefield_camera_during_acquisition(self):
         def on_focus_complete(result):
@@ -860,50 +826,22 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                 self.dispatch('abort_aquisition')
         self.run_in_thread_with_callback(self._handle_focus_widefield_camera, on_focus_complete)
 
-    def handle_focus_objective_camera(self):
-        self.run_in_thread(self._handle_focus_objective_camera)
-
-    def _handle_focus_objective_camera(self):
-        print("Focusing the objective camera")
-        if self.best_prusa_focus_position_widefield_refine_max and self.best_prusa_focus_position_widefield_refine_min:
-
-            # re-position nanodrive before refining the prusa focus position
-            self.dispatch('move_nanodrive_to', self.initial_nanodrive_position)
-            while True:
-                current_nanodrive_position = self.get_nanodrive_position()
-                if current_nanodrive_position == self.initial_nanodrive_position:
-                    break
-
-            # calculate the refined prusa focus range in the objective view
-            prusa_focus_position_objective_refine_max = round(self.best_prusa_focus_position_widefield_refine_max + self.calibration_from_widefield_to_objective_z, 2)
-            prusa_focus_position_objective_refine_min = round(self.best_prusa_focus_position_widefield_refine_min + self.calibration_from_widefield_to_objective_z, 2)
-            print('Converting focus range from widefield camera for the objective camera')
-            print(f"focus plane offset widefield to objective: {self.calibration_from_widefield_to_objective_z}")
-            print(f"Converted range for objective camera: {prusa_focus_position_objective_refine_min} - {prusa_focus_position_objective_refine_max}")
-
-            # fine the best focus position in the objective view with the refined range
-            self.best_prusa_focus_position_objective, _, _ = self.focus_prusa(prusa_focus_position_objective_refine_min, prusa_focus_position_objective_refine_max, self.prusa_fine_focus_step_number)
-            # update the best focus position in the widefield view
-            self.best_prusa_focus_position_widefield = round(self.best_prusa_focus_position_objective - self.calibration_from_widefield_to_objective_z, 2)
-            return True
-        else:
-            print("Please focus the widefield camera first")
-            return False
-
-    def handle_focus_objective_camera_during_acquisition(self):
-        def on_focus_complete(result):
-            if result:
-                self.dispatch('task_completed')
-            else:
-                self.dispatch('abort_aquisition')
-
-        # Call the thread-running function, passing the callback
-        self.run_in_thread_with_callback(self._handle_focus_objective_camera, on_focus_complete)
-
-
     def handle_update_focus_score(self, focus_score):
         self.focus_score_at_current_z_position = focus_score
         return None
+
+    def handle_move_prusa_to(self, z_position):
+        if self.prusa_z_referenced:
+            self.prusa_go_to_xyz(z=z_position)
+            # wait until the stage position is at the target position
+            while True:
+                current_z_position = float(self.get_current_prusa_position('Z'))
+                if current_z_position == z_position:
+                    break
+            return True
+        else:
+            print("Prusa Z-axis is not referenced")
+            return False
 
     def update_prusa_position(self):
         current_prusa_position = self.get_current_prusa_position('XYZ')
@@ -920,188 +858,28 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             current_prusa_position_z = str(current_prusa_position[2])
             self.current_z_entry.config(text=current_prusa_position_z)
 
-    def register_focus_range(self, point_label):
-        lower, upper = self.get_user_input_focus_range()
-        position = self.get_current_prusa_position('XYZ')
+    def register_prusa_focus_range(self):
+        try:
+            self.widefield_focus_prusa_upper_limit = float(self.upper_limit_entry.get())
+            self.widefield_focus_prusa_lower_limit = float(self.lower_limit_entry.get())
+            self.widefield_focus_prusa_step_number = int(self.widefield_focus_steps_entry.get())
 
-        if point_label == "P1":
-            if lower is not None and upper is not None and position is not None:
-                self.lower_limit_p1, self.upper_limit_p1 = float(lower), float(upper)
-                self.focus_p1 = [float(position[0]), float(position[1]), float(position[2])]
-                # Update the labels
-                self.point_1_focus_range_label.config(text=f"{self.lower_limit_p1}-{self.upper_limit_p1}")
-                self.point_1_position_label.config(text=f"{self.focus_p1}")
-                self.point_1_button.configure(bootstyle='info')
-            else:
-                self.point_1_focus_range_label.config(text="N/A")
-                self.point_1_position_label.config(text="N/A")
-                self.point_1_button.configure(bootstyle='info_outline')
+            self.objective_focus_prusa_upper_limit = round(self.widefield_focus_prusa_upper_limit + self.calibration_from_widefield_to_objective_z, 2)
+            self.objective_focus_prusa_lower_limit = round(self.widefield_focus_prusa_lower_limit + self.calibration_from_widefield_to_objective_z, 2)  
 
-        elif point_label == "P2":
-            if lower is not None and upper is not None and position is not None:
-                self.lower_limit_p2, self.upper_limit_p2 = float(lower), float(upper)
-                self.focus_p2 = [float(position[0]), float(position[1]), float(position[2])]
-                # Update the labels
-                self.point_2_focus_range_label.config(text=f"{self.lower_limit_p2}-{self.upper_limit_p2}")
-                self.point_2_position_label.config(text=f"{self.focus_p2}")
-                self.point_2_button.configure(bootstyle='info')
-            else:
-                self.point_2_focus_range_label.config(text="N/A")
-                self.point_2_position_label.config(text="N/A")
-                self.point_2_button.configure(bootstyle='info_outline')
-
-        elif point_label == "P3":
-            if lower is not None and upper is not None and position is not None:
-                self.lower_limit_p3, self.upper_limit_p3 = float(lower), float(upper)
-                self.focus_p3 = [float(position[0]), float(position[1]), float(position[2])]
-                # Update the labels
-                self.point_3_focus_range_label.config(text=f"{self.lower_limit_p3}-{self.upper_limit_p3}")
-                self.point_3_position_label.config(text=f"{self.focus_p3}")
-                self.point_3_button.configure(bootstyle='info')
-            else:
-                self.point_3_focus_range_label.config(text="N/A")
-                self.point_3_position_label.config(text="N/A")
-                self.point_3_button.configure(bootstyle='info_outline')
-
-        # Check if all the points are registered
-        if self.lower_limit_p1 and self.upper_limit_p1 and self.lower_limit_p2 and self.upper_limit_p2 and self.lower_limit_p3 and self.upper_limit_p3:
-            self.interpolate_button.configure(state=NORMAL)
-        else:
-            self.interpolate_button.configure(state=DISABLED)
-
-    def get_user_input_focus_range(self):
-        # Create a dialog window
-        dialog = tk.Toplevel(self.parent)
-        dialog.title("Focus Range")
-        dialog.grab_set()  # Make this dialog modal (prevents interacting with main window)
-
-        # Set a fixed position for the dialog window
-        dialog.update_idletasks()  # Update "requested size" from geometry manager
-
-        # Use absolute coordinates to center the dialog on the parent window
-        x = self.parent.winfo_rootx() + (self.parent.winfo_width() // 2) - (dialog.winfo_width() // 2)
-        y = self.parent.winfo_rooty() + (self.parent.winfo_height() // 2) - (dialog.winfo_height() // 2)
-        
-        dialog.geometry(f"+{x}+{y}")
-
-        # Variables to store user input
-        user_input = {"upper_limit": None, "lower_limit": None}
-
-        # Create labels and entries for upper and lower limits
-        ttk.Label(dialog, text="Z Upper Limit [mm]:").grid(row=0, column=0, padx=5, pady=5, sticky="e")
-        upper_limit_entry = tk.Entry(dialog)
-        upper_limit_entry.grid(row=0, column=1, padx=5, pady=5)
-
-        ttk.Label(dialog, text="Z Lower Limit [mm]:").grid(row=1, column=0, padx=5, pady=5, sticky="e")
-        lower_limit_entry = tk.Entry(dialog)
-        lower_limit_entry.grid(row=1, column=1, padx=5, pady=5)
-
-        # Define what happens when user clicks OK
-        def on_ok():
-            try:
-                # Fetch and convert user input
-                user_input["upper_limit"] = float(upper_limit_entry.get())
-                user_input["lower_limit"] = float(lower_limit_entry.get())
-                # Close the dialog window
-                dialog.destroy()
-            except ValueError:
-                messagebox.showerror("Input Error", "Please enter valid numeric values.")
-
-        # Define what happens when user clicks Cancel
-        def on_cancel():
-            user_input["upper_limit"] = None
-            user_input["lower_limit"] = None
-            dialog.destroy()
-
-        # OK and Cancel buttons
-        ok_button = ttk.Button(dialog, text="OK", command=on_ok, bootstyle='info')
-        ok_button.grid(row=2, column=0, padx=5, pady=5, sticky="e")
-
-        cancel_button = ttk.Button(dialog, text="Cancel", command=on_cancel, bootstyle='info')
-        cancel_button.grid(row=2, column=1, padx=5, pady=5, sticky="w")
-
-        # You can force the focus on the entry widget to let user type immediately
-        upper_limit_entry.focus_set()
-
-        # Wait for the dialog to close
-        dialog.wait_window()
-
-        # Return the user input values after the dialog is closed
-        return user_input["lower_limit"], user_input["upper_limit"]
-
-    def interpolate_prusa_focus_range(self):
-        # Check if all the points are registered
-        if self.lower_limit_p1 and self.upper_limit_p1 and \
-        self.lower_limit_p2 and self.upper_limit_p2 and \
-        self.lower_limit_p3 and self.upper_limit_p3 and \
-        self.focus_p1 and self.focus_p2 and self.focus_p3:
-        
-            # Extract the lower limit points
-            lower_points = [
-                [self.focus_p1[0], self.focus_p1[1], self.lower_limit_p1],
-                [self.focus_p2[0], self.focus_p2[1], self.lower_limit_p2],
-                [self.focus_p3[0], self.focus_p3[1], self.lower_limit_p3]
-            ]
-
-            upper_points = [
-                [self.focus_p1[0], self.focus_p1[1], self.upper_limit_p1],
-                [self.focus_p2[0], self.focus_p2[1], self.upper_limit_p2],
-                [self.focus_p3[0], self.focus_p3[1], self.upper_limit_p3]
-            ]
-
-            # Function to calculate plane coefficients
-            def fit_plane(points):
-                import numpy as np
-                x1, y1, z1 = points[0]
-                x2, y2, z2 = points[1]
-                x3, y3, z3 = points[2]
-
-                # Solve for the plane coefficients
-                A = [
-                    [x1, y1, 1],
-                    [x2, y2, 1],
-                    [x3, y3, 1]
-                ]
-                B = [z1, z2, z3]
-                coefficients = np.linalg.solve(A, B)
-                return coefficients  # Returns a, b, c for the plane z = ax + by + c
-
-            # Fit both planes
-            lower_plane_coeffs = fit_plane(lower_points)
-            upper_plane_coeffs = fit_plane(upper_points)
-
-            # Define functions for the planes
-            def lower_plane(x, y):
-                a, b, c = lower_plane_coeffs
-                return a * x + b * y + c
-
-            def upper_plane(x, y):
-                a, b, c = upper_plane_coeffs
-                return a * x + b * y + c
-            
-            # Store as attributes
-            self.lower_plane_func = lower_plane
-            self.upper_plane_func = upper_plane
-
-            print("Focus range lower and upper limits registered and interpolated across the XY plane successfully.")
-
+            print(f"Prusa focus range for widefield camera registered: {self.widefield_focus_prusa_lower_limit} - {self.widefield_focus_prusa_upper_limit} mm")
+            print(f'The offset from widefield to objective Z: {self.calibration_from_widefield_to_objective_z} mm')
+            print(f'Prusa focus range for objective camera registered: {self.objective_focus_prusa_lower_limit} - {self.objective_focus_prusa_upper_limit} mm')
+ 
             self.dispatch('activate_camera_autofocus_button')
             self.dispatch('activate_protocol_module_state','focus_range_is_setup')
+            self.dispatch('update_prusa_focus_range_for_wasatch', self.objective_focus_prusa_lower_limit, self.objective_focus_prusa_upper_limit)
 
-        else:
-            print("Please register the focus range first")
-
-    def calculate_focus_range_at_position(self, x, y):
-        if self.lower_plane_func and self.upper_plane_func:
-            # Calculate the focus range at the given XY position
-            lower_limit = np.round(self.lower_plane_func(x, y),2)
-            upper_limit = np.round(self.upper_plane_func(x, y),2)
-            return lower_limit, upper_limit
-        else:
-            print("Please register the focus range first")
+        except ValueError:
+            messagebox.showerror("Input Error", "Please enter valid numeric values for the focus range.")
 
     def sample_drop_panel_create_circle_grid(self): 
-        skip_positions = [(0, 0), (4, 0), (0, 3), (4, 3)]  # Positions to skip
+        skip_positions = [(0, 0), (3, 0), (0, 4), (3, 4)]  # Positions to skip
 
         for col_index, num_circles in enumerate(self.sample_drop_panel_grid_pattern):
             vertical_offset = (max(self.sample_drop_panel_grid_pattern) - num_circles) * self.sample_drop_panel_spacing // 2
@@ -1178,184 +956,11 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         else:
             print("Stage is not referenced. Action disabled.")
 
-    def handle_select_sample_for_protocol(self):
-        # Check if the window is already open
-        if hasattr(self, 'protocol_select_sample_window') and self.protocol_select_sample_window.winfo_exists():
-            print("The sample selection window is already open.")
-            self.protocol_select_sample_window.focus_force()
-            return
+    def move_to_previous_quartz_slide(self):
+        pass
 
-        # Create the selection window
-        self.protocol_select_sample_window = tk.Toplevel(self.parent)
-        self.protocol_select_sample_window.title("Select Sample")
-        self.protocol_select_sample_window.geometry("700x650")
-        self.protocol_select_sample_window.resizable(False, False)
-
-        # Create a canvas to display the sample
-        self.protocol_select_sample_frame = ttk.Frame(self.protocol_select_sample_window)
-        self.protocol_select_sample_frame.grid(row=0, column=0, padx=10, pady=5)
-
-        self.protocol_select_sample_canvas = tk.Canvas(self.protocol_select_sample_frame, width=500, height=650)
-        self.protocol_select_sample_canvas.grid(row=0, column=0, columnspan=2, rowspan=11, padx=20, pady=5)
-
-        # Create the circles
-        self.protocol_select_sample_create_circle_grid()
-
-        # Add a confirm button
-        select_all_button = ttk.Button(self.protocol_select_sample_frame, text="Select All", command=self.protocol_select_all_samples, bootstyle='info_outline')
-        select_all_button.grid(row=4, column=2, pady=10, padx=30, sticky='ew')
-
-        cancel_all_button = ttk.Button(self.protocol_select_sample_frame, text="Cancel All", command=self.protocol_cancel_all_samples, bootstyle='danger-outline')
-        cancel_all_button.grid(row=5, column=2, pady=10, padx=30, sticky='ew')
-
-        confirm_button = ttk.Button(self.protocol_select_sample_frame, text="Confirm", command=self.confirm_sample_selection, bootstyle='info')
-        confirm_button.grid(row=6, column=2, pady=10, padx=30, sticky='ew')
-
-        # Focus the attention to the new window
-        self.protocol_select_sample_window.focus_force()
-
-    def protocol_select_sample_create_circle_grid(self):
-        enlarged_spacing = self.sample_drop_panel_spacing * 3  # Enlarge the spacing for better visualization
-        enlarged_circle_radius = self.sample_drop_panel_circle_radius * 3 # Enlarge the circle radius for better visualization
-
-        skip_positions = [(0, 0), (4, 0), (0, 3), (4, 3)]
-
-        # Ensure `selected_circles` and `selected_circle_positions` exist and are persistent
-        if not hasattr(self, 'selected_circles'):
-            self.selected_circles = set()  # Track selected circles by their IDs
-        if not hasattr(self, 'selected_circle_positions'):
-            self.selected_circle_positions = []  # Track (row, column) positions of selected circles
-
-        self.circles = []  # Store references to all circles
-
-        for col_index, num_circles in enumerate(self.sample_drop_panel_grid_pattern):
-            vertical_offset = (max(self.sample_drop_panel_grid_pattern) - num_circles) * enlarged_spacing // 2
-            for row_index in range(num_circles):
-                true_row_index = row_index + vertical_offset // enlarged_spacing
-
-                # Skip the specified corner positions
-                if (true_row_index, col_index) in skip_positions:
-                    continue
-
-                x = col_index * enlarged_spacing + enlarged_spacing // 2
-                y = vertical_offset + row_index * enlarged_spacing + enlarged_spacing // 2
-
-                # Determine the initial color of the circle based on its selection status
-                if (true_row_index, col_index) in self.selected_circle_positions:
-                    fill_color = 'skyblue'  # Selected
-                else:
-                    fill_color = 'grey'  # Not selected
-
-                circle = self.protocol_select_sample_canvas.create_oval(
-                    x - enlarged_circle_radius, y - enlarged_circle_radius,
-                    x + enlarged_circle_radius, y + enlarged_circle_radius,
-                    fill=fill_color, outline='black', tags=f"circle_{true_row_index}_{col_index}"
-                )
-                self.circles.append((circle, x, y, true_row_index, col_index))
-
-                # Bind click event for toggling selection
-                self.protocol_select_sample_canvas.tag_bind(circle, '<Button-1>',
-                            lambda event, c=circle, r=true_row_index, col=col_index: self.protocol_select_sample_toggle_selection(c, r, col))
-
-        # Bind mouse events for dragging selection
-        self.protocol_select_sample_canvas.bind('<Button-1>', self.protocol_select_sample_on_drag_start)
-        self.protocol_select_sample_canvas.bind('<B1-Motion>', self.protocol_select_sample_on_drag_motion)
-        self.protocol_select_sample_canvas.bind('<ButtonRelease-1>', self.protocol_select_sample_on_drag_end)
-
-    def protocol_select_sample_toggle_selection(self, circle, row, col):
-        """
-        Toggle selection state of the clicked circle.
-        """
-        if circle in self.selected_circles:  # Deselect if already selected
-            self.selected_circles.remove(circle)
-            self.selected_circle_positions.remove((row, col))  # Remove position from the list
-            self.protocol_select_sample_canvas.itemconfig(circle, fill='grey', outline='black')
-        else:  # Select if not already selected
-            self.selected_circles.add(circle)
-            self.selected_circle_positions.append((row, col))  # Add position to the list
-            self.protocol_select_sample_canvas.itemconfig(circle, fill='skyblue', outline='black')
-
-        # Print updated selected circle positions
-        print("Currently selected circles (row, col):", self.selected_circle_positions)
-
-    def protocol_select_sample_on_drag_start(self, event):
-        # Store the starting position of the drag
-        self.drag_start_x = event.x
-        self.drag_start_y = event.y
-        # Initialize a rectangle for visual feedback during the drag
-        self.drag_rectangle = self.protocol_select_sample_canvas.create_rectangle(
-            self.drag_start_x, self.drag_start_y, self.drag_start_x, self.drag_start_y, outline='skyblue', tag='drag_rectangle'
-        )
-
-    def protocol_select_sample_on_drag_motion(self, event):
-        # Update the rectangle to match the current drag area
-        self.protocol_select_sample_canvas.coords(
-            self.drag_rectangle, self.drag_start_x, self.drag_start_y, event.x, event.y
-        )
-        # Compute the selection rectangle bounds
-        x1, y1 = min(self.drag_start_x, event.x), min(self.drag_start_y, event.y)
-        x2, y2 = max(self.drag_start_x, event.x), max(self.drag_start_y, event.y)
-
-        # Check which circles are within the rectangle (highlight only for visual feedback)
-        for circle, cx, cy, row, col in self.circles:
-            if x1 <= cx <= x2 and y1 <= cy <= y2:
-                if circle not in self.selected_circles:  # Highlight if not already selected
-                    self.protocol_select_sample_canvas.itemconfig(circle, fill='grey', outline='skyblue')
-            elif circle not in self.selected_circles:  # Revert unselected circles to grey
-                self.protocol_select_sample_canvas.itemconfig(circle, fill='grey', outline='black')
-
-    def protocol_select_sample_on_drag_end(self, event):
-        # Remove the drag rectangle after the drag operation ends
-        self.protocol_select_sample_canvas.delete(self.drag_rectangle)
-
-        # Compute the selection rectangle bounds
-        x1, y1 = min(self.drag_start_x, event.x), min(self.drag_start_y, event.y)
-        x2, y2 = max(self.drag_start_x, event.x), max(self.drag_start_y, event.y)
-
-        # Toggle selection for circles within the rectangle
-        for circle, cx, cy, row, col in self.circles:
-            if x1 <= cx <= x2 and y1 <= cy <= y2:
-                if circle in self.selected_circles:  # If already selected, deselect
-                    self.selected_circles.remove(circle)
-                    self.selected_circle_positions.remove((row, col))  # Remove position from the list
-                    self.protocol_select_sample_canvas.itemconfig(circle, fill='grey', outline='black')
-                else:  # Otherwise, select it
-                    self.selected_circles.add(circle)
-                    self.selected_circle_positions.append((row, col))  # Add position to the list
-                    self.protocol_select_sample_canvas.itemconfig(circle, fill='skyblue', outline='black')
-
-        # Print updated selected circle positions
-        print("Currently selected circles (row, col):", self.selected_circle_positions)
-
-    def protocol_select_all_samples(self):
-        for circle, cx, cy, row, col in self.circles:
-            if circle not in self.selected_circles:
-                self.selected_circles.add(circle)
-                self.selected_circle_positions.append((row, col))
-                self.protocol_select_sample_canvas.itemconfig(circle, fill='skyblue', outline='black')
-        print("All circles selected:")
-        self.update_circle_colors()
-
-    def protocol_cancel_all_samples(self):
-        for circle, cx, cy, row, col in self.circles:
-            if circle in self.selected_circles:
-                self.selected_circles.remove(circle)
-                self.selected_circle_positions.remove((row, col))
-                self.protocol_select_sample_canvas.itemconfig(circle, fill='grey', outline='black')
-        print("All circles deselected.")
-        self.update_circle_colors()
-
-    def update_circle_colors(self):
-        for circle, cx, cy, row, col in self.circles:
-            if (row, col) in self.selected_circle_positions:
-                self.protocol_select_sample_canvas.itemconfig(circle, fill='skyblue', outline='black')
-            else:
-                self.protocol_select_sample_canvas.itemconfig(circle, fill='grey', outline='black')
-
-
-    def confirm_sample_selection(self):
-        print("Saving selected circle positions:", self.selected_circle_positions)
-        self.protocol_select_sample_window.destroy()
+    def move_to_next_quartz_slide(self):
+        pass
 
 if __name__ == '__main__':
     root = ttk.Window()

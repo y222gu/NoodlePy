@@ -18,8 +18,8 @@ class EdgeDetectorSAM():
         self.marker_size = image.shape[1]/2
         self.center_x = self.width // 2
         self.center_y = self.height // 2
-        model_path = os.path.join(os.getcwd(), "sam_vit_b_01ec64.pth")
-        self.sam = sam_model_registry["vit_b"](checkpoint=model_path)
+        model_path = os.path.join(os.getcwd(), "sam_vit_h_4b8939.pth")
+        self.sam = sam_model_registry["vit_h"](checkpoint=model_path)
         if torch.cuda.is_available():
             self.sam.to('cuda')
 
@@ -70,9 +70,13 @@ class EdgeDetectorSAM():
         plt.savefig(buf, format='png')  # Save the figure to the buffer
         buf.seek(0)  # Rewind the buffer
         pil_image = Image.open(buf)
-
         # save the figure
-        save_path = os.path.join(os.getcwd(), f"masked_image.png")
+        save_path = os.path.join(os.getcwd(), "masked_image.png")
+        base_name, ext = os.path.splitext(save_path)
+        index = 1
+        while os.path.exists(save_path):
+            save_path = f"{base_name}_{index}{ext}"
+            index += 1
         pil_image.save(save_path)
         plt.close(fig)
         return pil_image
@@ -128,12 +132,49 @@ class EdgeDetectorSAM():
             indices = np.random.choice(len(sampling_x), num_points, replace=False)
             sampling_x, sampling_y = sampling_x[indices], sampling_y[indices]
 
-        elif shape == 'edge':
+        elif shape == 'line':
             num_points = kwargs['num_points']
-            mask_edge = cv2.Canny(mask, 0, 1)
-            edge_coords = np.argwhere(mask_edge > 0)
-            indices = np.linspace(0, len(edge_coords) - 1, num_points).astype(int)
-            sampling_y, sampling_x = edge_coords[indices].T
+
+            # ensure mask has positive pixels
+            if not mask.any():
+                sampling_x, sampling_y = np.array([]), np.array([])
+            else:
+                h_img, w_img = mask.shape
+                # centroid of mask pixels
+                ys, xs = np.where(mask == 1)
+                cx = int(np.round(xs.mean()))
+                cy = int(np.round(ys.mean()))
+
+                # search outward from centroid for a row with mask pixels
+                found_row = None
+                for offset in range(h_img):
+                    for r in (cy + offset, cy - offset) if offset else (cy,):
+                        if 0 <= r < h_img:
+                            cols = np.where(mask[r] == 1)[0]
+                            if cols.size:
+                                # pick the largest contiguous segment in this row
+                                diffs = np.diff(cols)
+                                splits = np.where(diffs > 1)[0]
+                                segments = []
+                                start = 0
+                                for s in splits:
+                                    segments.append(cols[start:s+1])
+                                    start = s + 1
+                                segments.append(cols[start:])
+                                largest = max(segments, key=len)
+                                xmin, xmax = float(largest[0]), float(largest[-1])
+                                sampling_x = np.linspace(xmin, xmax, num_points)
+                                sampling_y = np.full_like(sampling_x, float(r))
+                                found_row = r
+                                break
+                    if found_row is not None:
+                        break
+
+                # fallback if no row found (use full mask horizontal span)
+                if found_row is None:
+                    xmin, xmax = float(xs.min()), float(xs.max())
+                    sampling_x = np.linspace(xmin, xmax, num_points)
+                    sampling_y = np.full_like(sampling_x, float(self.center_y))
 
         elif shape == 'rings':
             num_points = kwargs['num_points']
@@ -141,16 +182,21 @@ class EdgeDetectorSAM():
             interval = kwargs['interval']
             offset_from_the_edge = kwargs['offset_from_the_edge']
             sampling_x, sampling_y = np.array([]), np.array([])
+            
             for i_ring in range(num_rings):
-                erosion_size = interval*i_ring + offset_from_the_edge
+                erosion_size = interval * i_ring + offset_from_the_edge
                 edge_coords = self.find_edge_of_eroded_mask(mask, erosion_size=erosion_size, erosion_shape=cv.MORPH_RECT)
-                indices = np.linspace(0, len(edge_coords) - 1, num_points).astype(int)
-                y_i_ring, x_i_ring = edge_coords[indices].T
-                sampling_x = np.concatenate([sampling_x, x_i_ring])
-                sampling_y = np.concatenate([sampling_y, y_i_ring])
-
-
-
+                
+                if len(edge_coords) == 0:
+                    continue
+                
+                # Sample points with consistent spacing along the contour
+                sampled_points = self.sample_points_along_contour(edge_coords, num_points)
+                
+                if len(sampled_points) > 0:
+                    y_i_ring, x_i_ring = sampled_points[:, 0], sampled_points[:, 1]
+                    sampling_x = np.concatenate([sampling_x, x_i_ring])
+                    sampling_y = np.concatenate([sampling_y, y_i_ring])
 
         px = 1/plt.rcParams['figure.dpi']  # pixel in inches
         fig, ax = plt.subplots(figsize=(self.width*px, self.height*px))
@@ -165,6 +211,72 @@ class EdgeDetectorSAM():
         pil_image = Image.open(buf)
         plt.close(fig)
         return pil_image, sampling_x, sampling_y
+
+    @staticmethod
+    def sample_points_along_contour(edge_coords, num_points):
+        """
+        Sample points along a contour with consistent spacing.
+        
+        Parameters:
+            edge_coords (np.ndarray): Coordinates of the edge points.
+            num_points (int): Number of points to sample.
+            
+        Returns:
+            sampled_points (np.ndarray): Sampled points with consistent spacing.
+        """
+        if len(edge_coords) < 2:
+            return edge_coords
+        
+        # Find contours and get the longest one
+        edge_image = np.zeros((edge_coords[:, 0].max() + 1, edge_coords[:, 1].max() + 1), dtype=np.uint8)
+        edge_image[edge_coords[:, 0], edge_coords[:, 1]] = 255
+        
+        contours, _ = cv2.findContours(edge_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        
+        if not contours:
+            return edge_coords[:num_points] if len(edge_coords) > num_points else edge_coords
+        
+        # Get the longest contour
+        longest_contour = max(contours, key=cv2.contourArea)
+        
+        # Reshape contour to (N, 2) format
+        contour_points = longest_contour.reshape(-1, 2)
+        
+        # Calculate cumulative distances along the contour
+        distances = np.zeros(len(contour_points))
+        for i in range(1, len(contour_points)):
+            dist = np.linalg.norm(contour_points[i] - contour_points[i-1])
+            distances[i] = distances[i-1] + dist
+        
+        # Total perimeter
+        total_distance = distances[-1]
+        
+        # Calculate target distances for evenly spaced points
+        target_distances = np.linspace(0, total_distance, num_points, endpoint=False)
+        
+        # Find points at target distances
+        sampled_points = []
+        for target_dist in target_distances:
+            # Find the segment containing this distance
+            idx = np.searchsorted(distances, target_dist)
+            
+            if idx == 0:
+                point = contour_points[0]
+            elif idx >= len(contour_points):
+                point = contour_points[-1]
+            else:
+                # Interpolate between points
+                segment_start_dist = distances[idx-1]
+                segment_end_dist = distances[idx]
+                t = (target_dist - segment_start_dist) / (segment_end_dist - segment_start_dist)
+                
+                # Linear interpolation
+                point = (1 - t) * contour_points[idx-1] + t * contour_points[idx]
+            
+            # Convert from (x, y) to (y, x) format to match edge_coords
+            sampled_points.append([point[1], point[0]])
+        
+        return np.array(sampled_points)
 
     @staticmethod
     def find_edge_of_eroded_mask(mask, erosion_size=10, erosion_shape=cv.MORPH_RECT):
@@ -236,7 +348,13 @@ if __name__ == "__main__":
     edge_detector = EdgeDetectorSAM(image)
     pil_image = edge_detector.point_prompt_mask_generate()
     pil_image.show()
-    pil_image.save("masked_image.png")
-    print("Mask generated successfully!")
+    save_path = "masked_image.png"
+    base_name, ext = os.path.splitext(save_path)
+    index = 1
+    while os.path.exists(save_path):
+        save_path = f"{base_name}_{index}{ext}"
+        index += 1
+    pil_image.save(save_path)
+    print(f"Mask generated successfully! Saved as {save_path}")
 
-    image, x, y = edge_detector.generate_sampling_points(shape='grid', row_number=4, col_number=4)
+    image, x, y = edge_detector.generate_sampling_points(shape='rings', num_points=50, num_rings=3, interval=10, offset_from_the_edge=5)

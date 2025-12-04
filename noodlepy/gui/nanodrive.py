@@ -12,7 +12,7 @@ class NanoDrive:
         self.mcldll.MCL_ReleaseHandle.restype = None
         self.mcldll.MCL_SingleReadN.restype = c_double
         self.handle = self.mcldll.MCL_InitHandle()
-        self.max_position_um = 80
+        self.max_position_um = 90
         self.min_position_um = 0
         if self.handle == 0:
             raise RuntimeError("Failed to initialize MCL handle. Error code: 8")

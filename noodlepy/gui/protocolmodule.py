@@ -12,17 +12,18 @@ import queue
 class ProtocolModule(Publisher, ttk.Frame):
     def __init__(self, parent):
         Publisher.__init__(self, ["update_nanodrive_position",
-                                  "select_sample_for_protocol",
                                   "check_current_camera_view",
                                   "move_stage_to_target_sample_drop_during_aquisition",
                                   "focus_widefield_camera",
-                                  "focus_objective_camera",
+                                  "focus_wasatch_with_prusa",
+                                  "focus_wasatch_with_nanodrive",
                                   "capture_current_image_and_detect_sample_drop_and_create_sampling_points",
                                   "call_switch_view_button_in_live_camera_module",
                                   "move_to_a_single_sampling_point",
-                                  "focus_wasatch",
                                   "measure_spectra_and_save_to_specific_folder",
-                                  "reposition_stage_and_nanodrive_in_objective_view"])
+                                  "reposition_stage_and_nanodrive_in_objective_view", 
+                                  "turn_on_laser",
+                                  "turn_off_laser",])
         ttk.Frame.__init__(self, parent)
 
         self.name = "ProtocolModule"
@@ -34,10 +35,11 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.task_queue = queue.Queue()  # Queue for tasks
         self.current_task = None  # Keep track of the current task
         self.abort_flag = False  # Flag to abort the current task
+        self.current_task_generator = None  # Track the task generator
 
         self.protocol_canvas_circle_spacing = 80  # Enlarge the spacing for better visualization
         self.protocol_canvas_circle_radius = 30 # Enlarge the circle radius for better visualization
-        self.protocol_canvas_grid_pattern = [5, 5, 5, 5]  # Column-wise circle counts for symmetry
+        self.protocol_canvas_grid_pattern = [4,4,4,4,4]  # Column-wise circle counts for symmetry
         # calculate the canvas size based on the circle spacing and radius
         self.protocol_canvas_width = len(self.protocol_canvas_grid_pattern) * self.protocol_canvas_circle_spacing
         self.protocol_canvas_height = max(self.protocol_canvas_grid_pattern) * self.protocol_canvas_circle_spacing
@@ -46,12 +48,17 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.sampling_points_relative_distance_to_camera_center = None
 
         self.create_widgets()
-        
         # Periodically check the state machine
         self.check_state_machine()
 
     def check_state_machine(self):
-        if self.state == "IDLE":
+        # Check abort flag first, regardless of state
+        if self.abort_flag:
+            if self.state != "IDLE":  # Only cleanup if not already idle
+                self.handle_abort_cleanup()
+                self.state = "IDLE"
+        
+        elif self.state == "IDLE":
             if not self.task_queue.empty() and not self.abort_flag:
                 self.current_task = self.task_queue.get()
                 self.state = "BUSY"
@@ -62,36 +69,31 @@ class ProtocolModule(Publisher, ttk.Frame):
             pass
 
         elif self.state == "TASK_COMPLETED":
-            self.state = "IDLE"  # Otherwise, continue to the next task
+            self.state = "IDLE"  # Return to idle, next task will be handled in next cycle
 
         elif self.state == "ABORT":
-            print("Acquisition aborted due to an error or condition.")
-            self.abort_flag = True
-            self.task_queue.queue.clear()  # Clear remaining tasks to stop the process
+            self.handle_abort_cleanup()
             self.state = "IDLE"  # Reset state to IDLE
 
         # Continue checking the state machine after a short delay (50 ms)
         self.after(50, self.check_state_machine)
 
     def execute_task(self):
-        event, args = self.current_task
-        self.dispatch(event, *args)
+        if not self.abort_flag:  # Check abort flag before executing
+            event, args = self.current_task
+            self.dispatch(event, *args)
 
     def enqueue_task(self, event, *args):
-        self.task_queue.put((event, args))
+        if not self.abort_flag:  # Don't enqueue if aborting
+            self.task_queue.put((event, args))
 
     def clear_task_queue(self):
-        """Clear the task queue and reset state."""
-        with self.task_queue.mutex:
-            self.task_queue.queue.clear()
-        self.current_task = None
-        self.abort_flag = False
-        print("All tasks cleared.")
-
-    def abort_execution(self):
-        """Abort the execution of the current task and clear the queue."""
-        self.abort_flag = True
-        print("Abort flag set. Tasks will be stopped.")
+        """Clear the task queue safely."""
+        while not self.task_queue.empty():
+            try:
+                self.task_queue.get_nowait()
+            except queue.Empty:
+                break
 
     def start_aquisition(self):
         print("Checking setup status")
@@ -103,10 +105,20 @@ class ProtocolModule(Publisher, ttk.Frame):
             return
         
         print("Executing protocol")
+        self.abort_flag = False  # Reset abort flag
         self.current_task_generator = self.task_sequence_generator(self.selected_circle_positions)
         self.enqueue_next_task()
 
     def enqueue_next_task(self):
+        if self.abort_flag:
+            print("Aborting task generation.")
+            return
+        
+        # Check if generator exists before trying to use it
+        if self.current_task_generator is None:
+            print("No task generator available.")
+            return
+            
         try:
             next_task = next(self.current_task_generator)
             self.enqueue_task(*next_task)
@@ -115,48 +127,130 @@ class ProtocolModule(Publisher, ttk.Frame):
             self.current_task_generator = None
 
     def task_sequence_generator(self, selected_circle_positions):
-        for sample_drop_row_column in selected_circle_positions:
-            print('Measuring the sample drop at row', sample_drop_row_column[0], 'column', sample_drop_row_column[1])
+        for i_sample_drop, sample_drop_row_column in enumerate(selected_circle_positions):
+            if self.abort_flag:
+                print("Aborting task sequence at sample drop", i_sample_drop)
+                break
+                
             yield ('check_current_camera_view', "WIDEFIELD")
+            if self.abort_flag: break
+            
+            print('Moving the sample drop at row', sample_drop_row_column[0], 'column', sample_drop_row_column[1])
             yield ("move_stage_to_target_sample_drop_during_aquisition", sample_drop_row_column)
+            if self.abort_flag: break
 
             if self.autofocus_widefield_var.get() == "True":
                 yield ("focus_widefield_camera",)
+                if self.abort_flag: break
 
             yield ("capture_current_image_and_detect_sample_drop_and_create_sampling_points",)
+            if self.abort_flag: break
+            
             yield ("call_switch_view_button_in_live_camera_module", "TO_OBJECTIVE")
+            if self.abort_flag: break
+            
             yield ("check_current_camera_view", "OBJECTIVE")
-
+            if self.abort_flag: break
+            
             print("Sampling points relative to camera center:", self.sampling_points_relative_distance_to_camera_center)
-            for i, point in enumerate(self.sampling_points_relative_distance_to_camera_center):
-                print(f"Measuring #{i} point at position {point}")
+
+            # turn on laser
+            if i_sample_drop == 0:
+                yield ("turn_on_laser", "wait")
+                print("Turning on laser for the first sample drop and first sampling point.")
+                print("Waiting for 6 seconds to allow the laser to stabilize.")# Wait for the laser to stabilize
+            else:
+                yield ("turn_on_laser", "no_wait") # no wait
+            if self.abort_flag: break
+
+            for i_sampling_point, point in enumerate(self.sampling_points_relative_distance_to_camera_center):
+                if self.abort_flag:
+                    print("Aborting task sequence at sampling point", i_sampling_point)
+                    break
+
+                print(f"Measuring #{i_sampling_point} point at position {point}")
                 yield ("move_to_a_single_sampling_point", 'OBJECTIVE', point)
+                if self.abort_flag: break
 
-                if self.autofocus_objective_var.get() == "True":
-                    yield ("focus_objective_camera",)
+                if self.wasatch_autofocus_with_prusa_var.get() == "True":
+                    print("Autofocusing Wasatch with Prusa for the first sampling point.")
+                    print("This step is only performed once per sample drop.")
+                    yield ("focus_wasatch_with_prusa",)
+                    if self.abort_flag: break
 
-                if self.autofocus_wasatch_var.get() == "True":
-                    yield ("focus_wasatch",)
+                if self.wasatch_autofocus_with_nanodrive_var.get() == "True":
+                    yield ("focus_wasatch_with_nanodrive",)
+                    if self.abort_flag: break
 
-                subfolder = f"sample_drop_row{sample_drop_row_column[0]}_column{sample_drop_row_column[1]}"
+                subfolder = f"sample_{i_sample_drop}"
                 folder = os.path.join(self.folder_path.get(), subfolder)
                 if not os.path.exists(folder):
                     os.makedirs(folder)
-                filename = f"{self.file_base_name.get()}_sample_drop_row{sample_drop_row_column[0]}_column{sample_drop_row_column[1]}_point_x{point[0]}_y{point[1]}"
+                filename = f"{self.file_base_name.get()}_sample_{i_sample_drop}_point_x{point[0]:.2f}_y{point[1]:.2f}"
                 yield ("measure_spectra_and_save_to_specific_folder", self.number_of_samples.get(), folder, filename)
+                if self.abort_flag: break
                 print(f"Data saved to {folder}/{filename}")
 
             print("All points for the current sample drop are completed.")
+            yield ('turn_off_laser',)
+            if self.abort_flag: break
+            
             yield ("reposition_stage_and_nanodrive_in_objective_view",)
+            if self.abort_flag: break
+            
             yield ("call_switch_view_button_in_live_camera_module", "TO_WIDE")
+            if self.abort_flag: break
+            
             yield ("check_current_camera_view", "WIDEFIELD")
+            if self.abort_flag: break
 
     def handle_task_completed(self):
+        # Check if we're aborting or if generator is None
+        if self.abort_flag or self.current_task_generator is None:
+            self.state = "IDLE"
+            return
+            
         self.state = "TASK_COMPLETED"
         self.enqueue_next_task()
 
     def handle_abort_aquisition(self):
+        print("Abort acquisition requested.")
+        self.abort_flag = True
         self.state = "ABORT"
+        
+        # Clear the task queue
+        self.clear_task_queue()
+        
+        # Stop the task generator
+        if self.current_task_generator:
+            self.current_task_generator = None
+            
+        print("Acquisition abort initiated.")
+
+    def handle_abort_cleanup(self):
+        """Cleanup tasks when aborting"""
+        print("Performing abort cleanup...")
+        
+        # Stop the task generator first
+        self.current_task_generator = None
+        
+        # Clear any remaining tasks
+        self.clear_task_queue()
+        
+        # Reset current task
+        self.current_task = None
+        
+        # Turn off laser if it's on (only if not already in the process of aborting)
+        if self.state != "IDLE":
+            try:
+                self.dispatch("turn_off_laser")
+            except Exception as e:
+                print(f"Error turning off laser during abort: {e}")
+        
+        # Reset abort flag after cleanup
+        self.abort_flag = False
+        
+        print("Abort cleanup completed. System is idle.")
 
     def handle_update_sampling_points_to_protocol_module(self, sampling_points_relative_distance_to_camera_center):
         print('Handle_update_sampling_points_to_protocol_module is running')
@@ -188,8 +282,12 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.select_sample_drop_button.grid(row=1, column=0,  padx=5, pady=5, sticky="nsew")
 
         # button to start the protocol
-        self.start_protocol_button = ttk.Button(protocol_frame, text="Start Aquisition", command=self.start_aquisition, bootstyle = 'info')
-        self.start_protocol_button.grid(row=1, column=1, columnspan=3, padx=5, pady=5, sticky="nsew")
+        self.start_protocol_button = ttk.Button(protocol_frame, text="Start Aquisition", command=self.start_aquisition, bootstyle = 'info', state=DISABLED)
+        self.start_protocol_button.grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+
+        # button to abort the acquisition
+        self.abort_aquisition_button = ttk.Button(protocol_frame, text="Abort Aquisition", command=self.handle_abort_aquisition, bootstyle='danger', state=DISABLED)
+        self.abort_aquisition_button.grid(row=1, column=2, padx=5, pady=5, sticky="nsew")
 
     def browse_folder(self):
         folder_path = filedialog.askdirectory()
@@ -203,7 +301,7 @@ class ProtocolModule(Publisher, ttk.Frame):
 
         if self.focus_range_is_setup and self.stage_reference_is_setup:
             self.start_protocol_button.configure(state=NORMAL)
-
+            self.abort_aquisition_button.configure(state=NORMAL)
         return None
 
     def create_protocol_window(self):
@@ -252,11 +350,11 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.autofocus_widefield_var = StringVar(value="True")
         self.autofocus_widefield = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Widefield", variable=self.autofocus_widefield_var, onvalue="True", offvalue="False", bootstyle='info')
         self.autofocus_widefield.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        self.autofocus_objective_var = StringVar(value="False")
-        self.autofocus_objective = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Objective", variable=self.autofocus_objective_var, onvalue="True", offvalue="False", bootstyle='info')
+        self.wasatch_autofocus_with_prusa_var = StringVar(value="True")
+        self.autofocus_objective = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Objective", variable=self.wasatch_autofocus_with_prusa_var, onvalue="True", offvalue="False", bootstyle='info')
         self.autofocus_objective.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-        self.autofocus_wasatch_var = StringVar(value="True")
-        self.autofocus_wasatch = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Wasatch", variable=self.autofocus_wasatch_var, onvalue="True", offvalue="False", bootstyle='info')
+        self.wasatch_autofocus_with_nanodrive_var = StringVar(value="True")
+        self.autofocus_wasatch = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Wasatch", variable=self.wasatch_autofocus_with_nanodrive_var, onvalue="True", offvalue="False", bootstyle='info')
         self.autofocus_wasatch.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
 
         # button to confirm the selection
@@ -268,7 +366,7 @@ class ProtocolModule(Publisher, ttk.Frame):
 
 
     def protocol_select_sample_create_circle_grid(self):
-        skip_positions = [(0, 0), (4, 0), (0, 3), (4, 3)]
+        skip_positions = [(0, 0), (3, 0), (0, 4), (3, 4)]  # Positions to skip
 
         # Ensure `selected_circles` and `selected_circle_positions` exist and are persistent
         if not hasattr(self, 'selected_circles'):
