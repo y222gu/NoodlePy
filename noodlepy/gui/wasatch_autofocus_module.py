@@ -568,10 +568,10 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             current_step += 1
 
         # Once done with rough autofocus, proceed to fine autofocus
-        best_nanodrive_focus_position, fineMin, fineMax = self.refine_focus_range(y1_data, z_axis_range, self.wasatch_nanodrive_focus_rough_fine_overlap_step_number)
-        print('Rough Nanodrive focus position found:', best_nanodrive_focus_position)
-        if best_nanodrive_focus_position is not None:
-            self.nano_drive.move_to(best_nanodrive_focus_position)
+        self.best_nanodrive_focus_position, fineMin, fineMax = self.refine_focus_range(y1_data, z_axis_range, self.wasatch_nanodrive_focus_rough_fine_overlap_step_number)
+        print('Rough Nanodrive focus position found:', self.best_nanodrive_focus_position)
+        if self.best_nanodrive_focus_position is not None:
+            self.nano_drive.move_to(self.best_nanodrive_focus_position)
             time.sleep(self.nanodrive_movement_stabilization_time)
             self.dispatch("update_nanodrive_position", self.nano_drive.get_current_position())
 
@@ -782,10 +782,22 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         intensities_flatten = list(itertools.chain.from_iterable(intensities))
 
         # Save the spectra to a file
-        with open(os.path.join(folder_path, filename + ".txt"), "w") as outfile:
+        os.makedirs(os.path.join(folder_path, 'spectra'), exist_ok=True)
+        os.makedirs(os.path.join(folder_path, 'metadata'), exist_ok=True)
+        
+        with open(os.path.join(folder_path, 'spectra',filename + ".txt"), "w") as outfile:
             for i in range(len(wavelengths_flatten)):
                 outfile.write(f"{wavelengths_flatten[i]:0.2f}, {intensities_flatten[i]}\n")
         
+        # save a metadata file
+        with open(os.path.join(folder_path, 'metadata', filename + "_metadata.txt"), "w") as metafile:
+            metafile.write(f"Number of repetitions: {num_rep}\n")
+            metafile.write(f"Integration time (ms): {self.wasatch_manager.integ_time_ms}\n")
+            metafile.write(f"Laser power (mW): {self.wasatch_manager.laser_power_mW}\n")
+            metafile.write(f"Prusa position (mm): {self.best_prusa_focus_wasatch}\n")
+            metafile.write(f"Nanodrive position (um): {self.best_nanodrive_focus_position}\n")
+            metafile.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}\n")
+
         self.dispatch("task_completed")
         return None
 

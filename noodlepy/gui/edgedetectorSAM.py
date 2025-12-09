@@ -38,8 +38,6 @@ class EdgeDetectorSAM():
         buf.seek(0)  # Rewind the buffer
         pil_image = Image.open(buf)
 
-        # save the figure
-        # plt.savefig(os.path.join(os.getcwd(), "masked_image.png"))
         plt.close(fig)
         return pil_image
 
@@ -104,13 +102,12 @@ class EdgeDetectorSAM():
         buf.seek(0)  # Rewind the buffer
         pil_image = Image.open(buf)
 
-        # save the figure
-        # plt.savefig(os.path.join(os.getcwd(), "masked_image.png"))
         plt.close(fig)
         return pil_image
         
 
     def generate_sampling_points(self, shape, **kwargs):
+        coordinates_order = None
 
         h, w = self.best_mask.shape[-2:]
         mask = self.best_mask.reshape(h, w)
@@ -122,10 +119,20 @@ class EdgeDetectorSAM():
 
         if shape == 'grid':
             row_number, col_number = kwargs['row_number'], kwargs['col_number']
+
+            # Build grid over the mask bounding box
             sampling_x = np.linspace(sampling_x.min(), sampling_x.max(), int(col_number))
             sampling_y = np.linspace(sampling_y.min(), sampling_y.max(), int(row_number))
             sampling_x, sampling_y = np.meshgrid(sampling_x, sampling_y)
             sampling_x, sampling_y = sampling_x.flatten(), sampling_y.flatten()
+
+            # --- NEW: keep only points inside the mask ---
+            ix = np.clip(np.round(sampling_x).astype(int), 0, self.width - 1)
+            iy = np.clip(np.round(sampling_y).astype(int), 0, self.height - 1)
+            inside = mask[iy, ix] == 1
+
+            sampling_x = sampling_x[inside]
+            sampling_y = sampling_y[inside]
 
         elif shape == 'random':
             num_points = kwargs['num_points']
@@ -177,32 +184,112 @@ class EdgeDetectorSAM():
                     sampling_y = np.full_like(sampling_x, float(self.center_y))
 
         elif shape == 'rings':
-            num_points = kwargs['num_points']
-            num_rings = kwargs['num_rings']
-            interval = kwargs['interval']
-            offset_from_the_edge = kwargs['offset_from_the_edge']
-            sampling_x, sampling_y = np.array([]), np.array([])
+            # Radial lines with points distributed from near-center to edge
+            num_rays = kwargs.get('num_rays', kwargs.get('num_points', 50))  # Number of radial lines
+            num_rings = kwargs['num_rings']  # Points along each ray
+            interval = kwargs['interval']  # Pixel interval between rings
+            offset_from_the_edge = kwargs['offset_from_the_edge']  # Offset from edge in pixels
             
-            for i_ring in range(num_rings):
-                erosion_size = interval * i_ring + offset_from_the_edge
-                edge_coords = self.find_edge_of_eroded_mask(mask, erosion_size=erosion_size, erosion_shape=cv.MORPH_RECT)
+            # Find mask center and edge distances
+            ys, xs = np.where(mask == 1)
+            if len(ys) == 0:
+                sampling_x, sampling_y = np.array([]), np.array([])
+                ring_numbers = np.array([])
+                line_numbers = np.array([])
+            else:
+                center_x = xs.mean()
+                center_y = ys.mean()
                 
-                if len(edge_coords) == 0:
-                    continue
+                sampling_x, sampling_y = [], []
+                ring_numbers, line_numbers = [], []
                 
-                # Sample points with consistent spacing along the contour
-                sampled_points = self.sample_points_along_contour(edge_coords, num_points)
+                # Generate rays at equal angular intervals
+                angles = np.linspace(0, 2*np.pi, num_rays, endpoint=False)
                 
-                if len(sampled_points) > 0:
-                    y_i_ring, x_i_ring = sampled_points[:, 0], sampled_points[:, 1]
-                    sampling_x = np.concatenate([sampling_x, x_i_ring])
-                    sampling_y = np.concatenate([sampling_y, y_i_ring])
+                for ray_idx, angle in enumerate(angles):
+                    # Direction vector for this ray
+                    dx = np.cos(angle)
+                    dy = np.sin(angle)
+                    
+                    # Find intersection of ray with mask boundary
+                    max_dist = max(self.width, self.height)
+                    edge_dist = 0
+                    
+                    for dist in range(int(max_dist)):
+                        x = int(center_x + dist * dx)
+                        y = int(center_y + dist * dy)
+                        
+                        # Check if we've left the mask
+                        if x < 0 or x >= self.width or y < 0 or y >= self.height or mask[y, x] == 0:
+                            edge_dist = dist - 1
+                            break
+                    
+                    # Calculate positions for points along this ray
+                    if edge_dist > 0:
+                        # Start from offset_from_the_edge pixels from the edge
+                        # and place points at interval pixels apart going inward
+                        start_dist = edge_dist - offset_from_the_edge
+                        
+                        # Minimum distance from center to avoid overlap (e.g., 5-10 pixels)
+                        min_dist_from_center = 10
+                        
+                        # Generate point positions
+                        point_distances = []
+                        for i in range(num_rings):
+                            dist = start_dist - i * interval
+                            if dist > min_dist_from_center:
+                                point_distances.append(dist)
+                        
+                        # Add points along this ray
+                        for ring_idx, d in enumerate(point_distances):
+                            px = center_x + d * dx
+                            py = center_y + d * dy
+                            # Only add if inside mask
+                            if 0 <= int(px) < self.width and 0 <= int(py) < self.height:
+                                if mask[int(py), int(px)] > 0:
+                                    sampling_x.append(px)
+                                    sampling_y.append(py)
+                                    ring_numbers.append(ring_idx + 1)
+                                    line_numbers.append(ray_idx + 1)
+                
+                sampling_x = np.array(sampling_x)
+                sampling_y = np.array(sampling_y)
+                ring_numbers = np.array(ring_numbers)
+                line_numbers = np.array(line_numbers)
+
+                # Compute angles and sort
+                point_angles = np.arctan2(sampling_y - center_y, sampling_x - center_x)
+                sorted_indices = np.argsort(point_angles)
+
+                # Sort all arrays by angle
+                sampling_x = sampling_x[sorted_indices]
+                sampling_y = sampling_y[sorted_indices]
+                ring_numbers = ring_numbers[sorted_indices]
+                line_numbers = line_numbers[sorted_indices]
+
+                # Rotate arrays so the sequence starts from a chosen reference point
+                # (keep the original radial numbers so all points on the same ray keep the same id)
+                min_y_index = np.argmin(sampling_y)
+                sampling_x = np.roll(sampling_x, -min_y_index)
+                sampling_y = np.roll(sampling_y, -min_y_index)
+                ring_numbers = np.roll(ring_numbers, -min_y_index)
+                line_numbers = np.roll(line_numbers, -min_y_index)
+                
+                coordinates_order = [{'ring': int(r), 'line': int(l)} for r, l in zip(ring_numbers, line_numbers)]
 
         px = 1/plt.rcParams['figure.dpi']  # pixel in inches
         fig, ax = plt.subplots(figsize=(self.width*px, self.height*px))
         ax.imshow(self.image)
         self.show_mask(self.best_mask, ax)
         self.show_points(np.stack([sampling_x, sampling_y], axis=1), np.ones(len(sampling_x)), ax, '.', marker_size=self.marker_size)
+        
+        # Add text labels for ring and radial numbers if shape is 'rings'
+        if shape == 'rings':
+            for i, (x, y) in enumerate(zip(sampling_x, sampling_y)):
+                label = f"R{ring_numbers[i]}:r{line_numbers[i]}"
+                ax.text(x, y + 15, label, fontsize=8, ha='center', color='white', 
+                    bbox=dict(boxstyle='round,pad=0.3', facecolor='black', alpha=0.7))
+
         ax.axis('off')
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
         buf = io.BytesIO()
@@ -210,73 +297,7 @@ class EdgeDetectorSAM():
         buf.seek(0)
         pil_image = Image.open(buf)
         plt.close(fig)
-        return pil_image, sampling_x, sampling_y
-
-    @staticmethod
-    def sample_points_along_contour(edge_coords, num_points):
-        """
-        Sample points along a contour with consistent spacing.
-        
-        Parameters:
-            edge_coords (np.ndarray): Coordinates of the edge points.
-            num_points (int): Number of points to sample.
-            
-        Returns:
-            sampled_points (np.ndarray): Sampled points with consistent spacing.
-        """
-        if len(edge_coords) < 2:
-            return edge_coords
-        
-        # Find contours and get the longest one
-        edge_image = np.zeros((edge_coords[:, 0].max() + 1, edge_coords[:, 1].max() + 1), dtype=np.uint8)
-        edge_image[edge_coords[:, 0], edge_coords[:, 1]] = 255
-        
-        contours, _ = cv2.findContours(edge_image, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-        
-        if not contours:
-            return edge_coords[:num_points] if len(edge_coords) > num_points else edge_coords
-        
-        # Get the longest contour
-        longest_contour = max(contours, key=cv2.contourArea)
-        
-        # Reshape contour to (N, 2) format
-        contour_points = longest_contour.reshape(-1, 2)
-        
-        # Calculate cumulative distances along the contour
-        distances = np.zeros(len(contour_points))
-        for i in range(1, len(contour_points)):
-            dist = np.linalg.norm(contour_points[i] - contour_points[i-1])
-            distances[i] = distances[i-1] + dist
-        
-        # Total perimeter
-        total_distance = distances[-1]
-        
-        # Calculate target distances for evenly spaced points
-        target_distances = np.linspace(0, total_distance, num_points, endpoint=False)
-        
-        # Find points at target distances
-        sampled_points = []
-        for target_dist in target_distances:
-            # Find the segment containing this distance
-            idx = np.searchsorted(distances, target_dist)
-            
-            if idx == 0:
-                point = contour_points[0]
-            elif idx >= len(contour_points):
-                point = contour_points[-1]
-            else:
-                # Interpolate between points
-                segment_start_dist = distances[idx-1]
-                segment_end_dist = distances[idx]
-                t = (target_dist - segment_start_dist) / (segment_end_dist - segment_start_dist)
-                
-                # Linear interpolation
-                point = (1 - t) * contour_points[idx-1] + t * contour_points[idx]
-            
-            # Convert from (x, y) to (y, x) format to match edge_coords
-            sampled_points.append([point[1], point[0]])
-        
-        return np.array(sampled_points)
+        return pil_image, sampling_x, sampling_y, coordinates_order
 
     @staticmethod
     def find_edge_of_eroded_mask(mask, erosion_size=10, erosion_shape=cv.MORPH_RECT):
@@ -357,4 +378,11 @@ if __name__ == "__main__":
     pil_image.save(save_path)
     print(f"Mask generated successfully! Saved as {save_path}")
 
-    image, x, y = edge_detector.generate_sampling_points(shape='rings', num_points=50, num_rings=3, interval=10, offset_from_the_edge=5)
+    # Example usage with rings (now creates radial lines with points)
+    image, x, y = edge_detector.generate_sampling_points(
+        shape='rings', 
+        num_points=50,           # Number of radial lines (you can also use num_rays)
+        num_rings=5,             # Number of points along each radial line
+        interval=20,             # Pixels between each ring
+        offset_from_the_edge=10  # Start 10 pixels from the edge
+    )

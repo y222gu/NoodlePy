@@ -45,6 +45,7 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.protocol_canvas_height = max(self.protocol_canvas_grid_pattern) * self.protocol_canvas_circle_spacing
         self.selected_circles = set()  # Track selected circles
         self.selected_circle_positions = []  # Track selected circle positions
+        self.number_of_spectra = 3
         self.sampling_points_relative_distance_to_camera_center = None
 
         self.create_widgets()
@@ -163,35 +164,47 @@ class ProtocolModule(Publisher, ttk.Frame):
                 yield ("turn_on_laser", "no_wait") # no wait
             if self.abort_flag: break
 
-            for i_sampling_point, point in enumerate(self.sampling_points_relative_distance_to_camera_center):
-                if self.abort_flag:
-                    print("Aborting task sequence at sampling point", i_sampling_point)
-                    break
+            for i_rep in range(int(self.number_of_repeats_var.get())):
 
-                print(f"Measuring #{i_sampling_point} point at position {point}")
-                yield ("move_to_a_single_sampling_point", 'OBJECTIVE', point)
-                if self.abort_flag: break
+                for i_sampling_point, point in enumerate(self.sampling_points_relative_distance_to_camera_center):
+                    if self.abort_flag:
+                        print("Aborting task sequence at sampling point", i_sampling_point)
+                        break
 
-                if self.wasatch_autofocus_with_prusa_var.get() == "True":
-                    print("Autofocusing Wasatch with Prusa for the first sampling point.")
-                    print("This step is only performed once per sample drop.")
-                    yield ("focus_wasatch_with_prusa",)
+                    print(f"Measuring #{i_sampling_point} point at position {point}")
+                    yield ("move_to_a_single_sampling_point", 'OBJECTIVE', point)
                     if self.abort_flag: break
 
-                if self.wasatch_autofocus_with_nanodrive_var.get() == "True":
-                    yield ("focus_wasatch_with_nanodrive",)
-                    if self.abort_flag: break
+                    if self.wasatch_autofocus_with_prusa_var.get() == "True":
+                        print("Autofocusing Wasatch with Prusa for the first sampling point.")
+                        print("This step is only performed once per sample drop.")
+                        yield ("focus_wasatch_with_prusa",)
+                        if self.abort_flag: break
 
-                subfolder = f"sample_{i_sample_drop}"
-                folder = os.path.join(self.folder_path.get(), subfolder)
-                if not os.path.exists(folder):
-                    os.makedirs(folder)
-                filename = f"{self.file_base_name.get()}_sample_{i_sample_drop}_point_x{point[0]:.2f}_y{point[1]:.2f}"
-                yield ("measure_spectra_and_save_to_specific_folder", self.number_of_samples.get(), folder, filename)
-                if self.abort_flag: break
-                print(f"Data saved to {folder}/{filename}")
+                    if self.wasatch_autofocus_with_nanodrive_var.get() == "True":
+                        yield ("focus_wasatch_with_nanodrive",)
+                        if self.abort_flag: break
+
+                    folder = os.path.join(self.folder_path.get())
+                    if not os.path.exists(folder):
+                        os.makedirs(folder)
+
+                    coordinates_order = self.coordinates_order[i_sampling_point]
+                    # join keys and values (key then value) with "_" sorted by ascending key
+                    sorted_items = sorted(coordinates_order.items(), key=lambda item: item[0])
+                    parts = []
+                    for k, v in sorted_items:
+                        parts.append(str(k))
+                        parts.append(f"{v}" if isinstance(v, (int, float)) else str(v))
+                    coordicates_str = "_".join(parts)
+
+                    filename = f"{self.file_base_name.get()}_sample_{i_sample_drop}_point_{i_sampling_point}_rep_{i_rep+1}_{coordicates_str}_x{point[0]:.2f}_y{point[1]:.2f}"
+                    yield ("measure_spectra_and_save_to_specific_folder", self.number_of_spectra_var.get(), folder, filename)
+                    if self.abort_flag: break
+                    print(f"Data saved to {folder}")
 
             print("All points for the current sample drop are completed.")
+
             yield ('turn_off_laser',)
             if self.abort_flag: break
             
@@ -252,9 +265,10 @@ class ProtocolModule(Publisher, ttk.Frame):
         
         print("Abort cleanup completed. System is idle.")
 
-    def handle_update_sampling_points_to_protocol_module(self, sampling_points_relative_distance_to_camera_center):
+    def handle_update_sampling_points_to_protocol_module(self, sampling_points_relative_distance_to_camera_center, coordinates_order):
         print('Handle_update_sampling_points_to_protocol_module is running')
         self.sampling_points_relative_distance_to_camera_center = sampling_points_relative_distance_to_camera_center
+        self.coordinates_order = coordinates_order
 
     def create_widgets(self):
         protocol_frame = ttk.Labelframe(self, text="Aquisition", padding=5)
@@ -324,6 +338,11 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.select_sample_drop_frame.grid(row=0, column=0, columnspan=3, padx=10, pady=5, sticky="nsew")
         self.protocol_select_sample_canvas = ttk.Canvas(self.select_sample_drop_frame, width=self.protocol_canvas_width, height=self.protocol_canvas_height)
         self.protocol_select_sample_canvas.grid(row=0, column=0,columnspan=2, padx=40, pady=5, sticky='nsew')
+        # Ensure selected lists exist before grid creation so the grid can reflect previous choices
+        if not hasattr(self, 'selected_circle_positions'):
+            self.selected_circle_positions = []
+        if not hasattr(self, 'selected_circles'):
+            self.selected_circles = set()
         self.protocol_select_sample_create_circle_grid()
         
         select_all_button = ttk.Button(self.select_sample_drop_frame, text="Select All", command=self.protocol_select_all_samples, bootstyle='info_outline')
@@ -338,32 +357,50 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.select_sample_drop_frame.grid_rowconfigure(0, weight=1)
         self.select_sample_drop_frame.grid_rowconfigure(1, weight=1)
 
-        # entry for the number of reps
-        self.number_of_samples = StringVar()
-        self.number_of_samples.set("1")
+        # entry for the number of reps - reuse existing StringVar if present so value persists between opens
+        if not hasattr(self, 'number_of_spectra_var') or not isinstance(getattr(self, 'number_of_spectra_var'), StringVar):
+            # create and initialize from the plain attribute if available
+            try:
+                initial = int(self.number_of_spectra)
+            except Exception:
+                initial = 3
+            self.number_of_spectra_var = StringVar(value=str(initial))
         self.number_of_samples_label = ttk.Label(self.set_protocol, text="Number of repetitions per point per sample drop:").grid(row=1, column=0, padx=5, pady=5)
-        self.number_of_samples_entry = ttk.Entry(self.set_protocol, textvariable=self.number_of_samples, width = 5).grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
+        self.number_of_samples_entry = ttk.Entry(self.set_protocol, textvariable=self.number_of_spectra_var, width = 5).grid(row=1, column=1, padx=5, pady=5, sticky="nsew")
 
-        # check box for autofocusing in widefield, objective, and wasatch
+        # entry for the number of times to repeat each whole sample (new)
+        if not hasattr(self, 'number_of_repeats_var') or not isinstance(getattr(self, 'number_of_repeats_var'), StringVar):
+            try:
+                initial_repeats = int(getattr(self, 'number_of_repeats', 1))
+            except Exception:
+                initial_repeats = 1
+            self.number_of_repeats_var = StringVar(value=str(initial_repeats))
+        self.number_of_repeats_label = ttk.Label(self.set_protocol, text="Number of times to repeat each sample:").grid(row=2, column=0, padx=5, pady=5)
+        self.number_of_repeats_entry = ttk.Entry(self.set_protocol, textvariable=self.number_of_repeats_var, width = 5).grid(row=2, column=1, padx=5, pady=5, sticky="nsew")
+
+        # check box for autofocusing in widefield, objective, and wasatch - reuse StringVars if present
+        if not hasattr(self, 'autofocus_widefield_var') or not isinstance(getattr(self, 'autofocus_widefield_var'), StringVar):
+            self.autofocus_widefield_var = StringVar(value="True")
+        if not hasattr(self, 'wasatch_autofocus_with_prusa_var') or not isinstance(getattr(self, 'wasatch_autofocus_with_prusa_var'), StringVar):
+            self.wasatch_autofocus_with_prusa_var = StringVar(value="True")
+        if not hasattr(self, 'wasatch_autofocus_with_nanodrive_var') or not isinstance(getattr(self, 'wasatch_autofocus_with_nanodrive_var'), StringVar):
+            self.wasatch_autofocus_with_nanodrive_var = StringVar(value="True")
+
         self.autofocus_checkbuttons_frame = ttk.Frame(self.set_protocol)
-        self.autofocus_checkbuttons_frame.grid(row=2, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
-        self.autofocus_widefield_var = StringVar(value="True")
+        self.autofocus_checkbuttons_frame.grid(row=3, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
         self.autofocus_widefield = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Widefield", variable=self.autofocus_widefield_var, onvalue="True", offvalue="False", bootstyle='info')
         self.autofocus_widefield.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
-        self.wasatch_autofocus_with_prusa_var = StringVar(value="True")
         self.autofocus_objective = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Objective", variable=self.wasatch_autofocus_with_prusa_var, onvalue="True", offvalue="False", bootstyle='info')
         self.autofocus_objective.grid(row=0, column=1, padx=5, pady=5, sticky="nsew")
-        self.wasatch_autofocus_with_nanodrive_var = StringVar(value="True")
         self.autofocus_wasatch = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Wasatch", variable=self.wasatch_autofocus_with_nanodrive_var, onvalue="True", offvalue="False", bootstyle='info')
         self.autofocus_wasatch.grid(row=0, column=2, padx=5, pady=5, sticky="nsew")
 
         # button to confirm the selection
         self.ok_button = ttk.Button(self.set_protocol, text="OK", command=self.confirm_sample_selection, bootstyle='info')
-        self.ok_button.grid(row=3, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
+        self.ok_button.grid(row=4, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
 
         self.set_protocol_window.update_idletasks()
         self.set_protocol_window.geometry(f"{self.set_protocol_window.winfo_reqwidth()}x{self.set_protocol_window.winfo_reqheight()}")
-
 
     def protocol_select_sample_create_circle_grid(self):
         skip_positions = [(0, 0), (3, 0), (0, 4), (3, 4)]  # Positions to skip

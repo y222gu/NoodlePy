@@ -503,24 +503,22 @@ class LiveViewModule(Publisher, tk.Frame):
         selected_method = self.sampling_method_var.get()
         if selected_method == "Random":
             num_points = int(self.number_of_sampling_points_entry.get())
-            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='random', num_points=num_points)
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y, self.coordinates_order = self.edgedetector.generate_sampling_points(shape='random', num_points=num_points)
             
         elif selected_method == "Grid":
             row_number = int(self.row_number_entry.get())
             col_number = int(self.column_number_entry.get())
-            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='grid', row_number=row_number, col_number=col_number)
-            self.sampling_position_x, self.sampling_position_y = self.optimize_the_sequence_of_sampling_points(self.sampling_position_x, self.sampling_position_y, shape='grid')
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y, self.coordinates_order = self.edgedetector.generate_sampling_points(shape='grid', row_number=row_number, col_number=col_number)
 
         elif selected_method == "Rings":
             num_points = int(self.number_of_sampling_points_entry.get())
             num_rings = int(self.rings_number_entry.get())
             interval = int(self.interval_entry.get())
-            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='rings', num_points=num_points, num_rings=num_rings, interval=interval, offset_from_the_edge=self.sampling_offset_from_the_edge)
-            self.sampling_position_x, self.sampling_position_y = self.optimize_the_sequence_of_sampling_points(self.sampling_position_x, self.sampling_position_y, shape='rings')
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y, self.coordinates_order = self.edgedetector.generate_sampling_points(shape='rings', num_points=num_points, num_rings=num_rings, interval=interval, offset_from_the_edge=self.sampling_offset_from_the_edge)
 
         elif selected_method == "Line":
             num_points = int(self.number_of_sampling_points_entry.get())
-            sampled_mask_image, self.sampling_position_x, self.sampling_position_y = self.edgedetector.generate_sampling_points(shape='line', num_points=num_points)
+            sampled_mask_image, self.sampling_position_x, self.sampling_position_y, self.coordinates_order = self.edgedetector.generate_sampling_points(shape='line', num_points=num_points)
 
         self.sampled_mask_image = sampled_mask_image
         # resize the image to fit the canvas
@@ -583,7 +581,7 @@ class LiveViewModule(Publisher, tk.Frame):
 
         # turn it into [[x1, y1], [x2, y2]...] format
         relative_distance_to_camera_center = np.stack([relative_distance_to_camera_center[0], relative_distance_to_camera_center[1]], axis=1)
-        self.dispatch('update_sampling_points_to_protocol_module', relative_distance_to_camera_center)
+        self.dispatch('update_sampling_points_to_protocol_module', relative_distance_to_camera_center, self.coordinates_order)
         self.dispatch('task_completed')
         return True
 

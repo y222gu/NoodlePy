@@ -21,8 +21,8 @@ class StageSettings():
         self.home_z: float = 15.0
 
         # Widefield ↔ objective calibration (mm)
-        self.calib_wide_to_obj_x: float = -62.78
-        self.calib_wide_to_obj_y: float = 1.2
+        self.calib_wide_to_obj_x: float = -62.48
+        self.calib_wide_to_obj_y: float = 1.32
         self.calib_wide_to_obj_z: float = -13.26
 
         # Nanodrive & step sizes
@@ -60,8 +60,8 @@ class LiveViewSettings():
         # Pixel sizes (µm)
         self.x_pixel_size_objective_camera: float = 0.191
         self.y_pixel_size_objective_camera: float = 0.191
-        self.x_pixel_size_widefield_camera: float = 2.309
-        self.y_pixel_size_widefield_camera: float = 2.309
+        self.x_pixel_size_widefield_camera: float = 2.82
+        self.y_pixel_size_widefield_camera: float = 2.82
 
         # Crop center (pixels)
         self.objective_crop_center_x: int = 798
