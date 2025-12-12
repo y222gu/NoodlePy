@@ -3,11 +3,14 @@ import json
 import yaml
 import numpy as np
 import pandas as pd
-from PyQt5.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
-                             QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, 
-                             QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox, 
-                             QDoubleSpinBox, QSpinBox, QRadioButton, QButtonGroup,
-                             QScrollArea, QFormLayout, QLineEdit)
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, 
+    QHBoxLayout, QPushButton, QListWidget, QListWidgetItem, 
+    QFileDialog, QComboBox, QLabel, QGroupBox, QCheckBox, 
+    QDoubleSpinBox, QSpinBox, QRadioButton, QButtonGroup,
+    QScrollArea, QFormLayout, QLineEdit,
+    QTableWidget, QTableWidgetItem, QHeaderView, QAbstractItemView  # <-- add these
+)
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -30,7 +33,9 @@ import os
 # Import the actual Spectrum and SpectrumPreprocessor classes
 from noodlepy.utils.spectrum import Spectrum
 from noodlepy.utils.spectrumpreprocessor import SpectrumPreprocessor
-from noodlepy.utils.izabelladataset import OC_Dataset
+from noodlepy.utils.raman_robot_dataset import RamanRobotDataset
+from matplotlib import colors, cm  # add this
+
 # Use the "fast" style.
 plt.style.use('fast')
 
@@ -248,11 +253,11 @@ class SpectrumPreprocessorWrapper:
 class SpectraViewer(QMainWindow):
     def __init__(self, data_objects, preprocessor, config_file=None):
         super().__init__()
-        self.setWindowTitle("Spectra Viewer - Enhanced")
+        self.setWindowTitle("Spectra Viewer 2.0")
         self.original_data_objects = data_objects  
         self.preprocessor = preprocessor
         self.config_file = config_file
-        
+
         # Preprocess data with error handling
         print(f"Preprocessing {len(data_objects)} spectra...")
         self.data_objects = []
@@ -284,6 +289,9 @@ class SpectraViewer(QMainWindow):
         self.selected_index_to_line = {}
         self.hovered_index = None
         self.scatter_highlight = None
+        self.top_index = None   # spectrum index to be drawn on top
+        self.scatter_selected = None   # overlay scatter for selected points (on top)
+        self.scatter_cbar = None       # colorbar for scatter
 
         self.embedding_method = "T-SNE"
         self.embedding_dim = 2
@@ -305,8 +313,14 @@ class SpectraViewer(QMainWindow):
         # Plotting mode: 'grouped' (by patient) or 'combined' (all in one plot)
         self.plot_mode = 'grouped'
 
+        # ---- Filtering state (multi-filter support) ----
+        self.filters = []  # each item: {'widget', 'attr_combo', 'value_combo', 'attr', 'value'}
+        self.visible_indices = list(range(len(self.data_objects))) if self.data_objects else []
+        self.index_to_scatter_pos = {}
+
         self.initUI()
         self.populate_color_combo()
+        self.add_filter_row()  # create the first filter row
         self.compute_embedding()
         self.plot_embedding()
 
@@ -346,7 +360,7 @@ class SpectraViewer(QMainWindow):
         
         # ==== COLUMN 1: Preprocessing and DBSCAN ====
         left_layout = QVBoxLayout()
-        
+
         # ===== Enhanced Preprocessing Options Group Box =====
         preproc_group = QGroupBox("Preprocessing Options")
         preproc_main_layout = QVBoxLayout()
@@ -621,24 +635,61 @@ class SpectraViewer(QMainWindow):
         # Color options
         color_group = QGroupBox("Color Options")
         color_layout = QVBoxLayout()
+
+        # Color-by (metadata field)
         self.color_combo = QComboBox()
-        self.color_combo.currentTextChanged.connect(self.plot_embedding)
+        self.color_combo.currentTextChanged.connect(self.on_color_option_changed)
         color_layout.addWidget(QLabel("Color By:"))
         color_layout.addWidget(self.color_combo)
+
+        # Color map selection
+        self.cmap_combo = QComboBox()
+        self.cmap_combo.addItems(["tab10", "turbo", "hsv", "cool"])
+        self.cmap_combo.setCurrentText("tab10")
+        self.cmap_combo.currentTextChanged.connect(self.on_color_option_changed)
+        color_layout.addWidget(QLabel("Color Map:"))
+        color_layout.addWidget(self.cmap_combo)
+
         color_group.setLayout(color_layout)
         middle_layout.addWidget(color_group)
 
-        # Metadata list
-        metadata_group = QGroupBox("Selected Spectra Metadata")
-        metadata_layout = QVBoxLayout()
-        self.metadata_list = QListWidget()
-        self.metadata_list.itemSelectionChanged.connect(self.update_line_highlights)
-        metadata_layout.addWidget(self.metadata_list)
-        btn_save = QPushButton("Save Metadata")
-        btn_save.clicked.connect(self.save_metadata)
-        metadata_layout.addWidget(btn_save)
-        metadata_group.setLayout(metadata_layout)
-        middle_layout.addWidget(metadata_group)
+
+        # ---- Filter options (multi-filter) ----
+        filter_group = QGroupBox("Filters")
+        filter_group_layout = QVBoxLayout()
+
+        # Header row: label + "+" button
+        filter_header_layout = QHBoxLayout()
+        filter_header_label = QLabel("Filter by type:")
+        self.btn_add_filter = QPushButton("➕")
+        self.btn_add_filter.setFixedSize(24, 24)
+        self.btn_add_filter.setStyleSheet("""
+            QPushButton {
+            font-size: 16px;
+            background-color: #e8e8e8;
+            border: none;
+            outline: none;
+            }
+            QPushButton:hover {
+            background-color: #d0d0d0;
+            border: none;
+            outline: none;
+            }
+        """)
+
+        self.btn_add_filter.clicked.connect(self.add_filter_row)
+
+        filter_header_layout.addWidget(filter_header_label)
+        filter_header_layout.addWidget(self.btn_add_filter)
+        filter_header_layout.addStretch()
+        filter_group_layout.addLayout(filter_header_layout)
+
+        # Container for dynamic filter rows
+        self.filters_container_layout = QVBoxLayout()
+        filter_group_layout.addLayout(self.filters_container_layout)
+
+        filter_group.setLayout(filter_group_layout)
+        middle_layout.addWidget(filter_group)
 
         # Clear selection button
         btn_clear = QPushButton("Clear Selection")
@@ -659,6 +710,8 @@ class SpectraViewer(QMainWindow):
         self.canvas_scatter.mpl_connect('button_press_event', self.on_pan_press)
         self.canvas_scatter.mpl_connect('motion_notify_event', self.on_pan_motion)
         self.canvas_scatter.mpl_connect('button_release_event', self.on_pan_release)
+        self._pending_line_color_update = False
+        self.canvas_scatter.mpl_connect('draw_event', self._on_scatter_draw)
         middle_layout.addWidget(self.canvas_scatter, stretch=1)
         
         # Add middle column to main layout
@@ -684,11 +737,156 @@ class SpectraViewer(QMainWindow):
         self.canvas_line.mpl_connect('motion_notify_event', self.on_line_hover)
         self.canvas_line.mpl_connect('pick_event', self.on_line_pick)
         self.canvas_line.mpl_connect('button_press_event', self.on_line_click)
-        right_layout.addWidget(self.canvas_line, stretch=1)
+        right_layout.addWidget(self.canvas_line, stretch=3)
 
+        # ---- Selected spectra metadata table (now under line plot) ----
+        metadata_group = QGroupBox("Selected Spectra Metadata")
+        metadata_layout = QVBoxLayout()
+
+        self.metadata_table = QTableWidget()
+        self.metadata_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.metadata_table.setSelectionBehavior(QAbstractItemView.SelectRows)
+        self.metadata_table.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.metadata_table.verticalHeader().setVisible(False)
+        self.metadata_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.metadata_table.itemSelectionChanged.connect(self.update_line_highlights)
+        self.metadata_table.horizontalHeader().sectionClicked.connect(self.on_metadata_header_clicked)
+
+        metadata_layout.addWidget(self.metadata_table)
+
+        btn_save = QPushButton("Save Metadata")
+        btn_save.clicked.connect(self.save_metadata)
+        metadata_layout.addWidget(btn_save)
+
+        metadata_group.setLayout(metadata_layout)
+        right_layout.addWidget(metadata_group, stretch=1)
 
         # Add right column to main layout
         main_layout.addLayout(right_layout, stretch=2)
+
+
+    def get_metadata_keys(self):
+        """Return sorted list of metadata keys across all spectra."""
+        metadata_keys = set()
+        for obj in self.data_objects:
+            metadata_keys.update(obj.metadata.keys())
+        return sorted(metadata_keys)
+    
+    def add_filter_row(self):
+        """Add one filter row: [attr_combo] [value_combo] [remove button]."""
+        row_widget = QWidget()
+        row_layout = QHBoxLayout(row_widget)
+        row_layout.setContentsMargins(0, 0, 0, 0)
+
+        attr_combo = QComboBox()
+        value_combo = ScrollableComboBox()  # <-- changed here
+        value_combo.addItem("All")
+        value_combo.setEnabled(False)
+
+        btn_remove = QPushButton("➖")
+        btn_remove.setFixedSize(24, 24)
+        btn_remove.setStyleSheet("""
+            QPushButton {
+            font-size: 16px;
+            background-color: #e8e8e8;
+            border: none;
+            outline: none;
+            }
+            QPushButton:hover {
+            background-color: #d0d0d0;
+            border: none;
+            outline: none;
+            }
+        """)
+
+        row_layout.addWidget(attr_combo)
+        row_layout.addWidget(value_combo)
+        row_layout.addWidget(btn_remove)
+
+        self.filters_container_layout.addWidget(row_widget)
+
+        filter_obj = {
+            'widget': row_widget,
+            'attr_combo': attr_combo,
+            'value_combo': value_combo,
+            'attr': None,
+            'value': "All",
+        }
+        self.filters.append(filter_obj)
+
+        # Populate attribute combo
+        self.populate_filter_attr_combo(attr_combo)
+
+        # Connect signals (capture filter_obj via default arg)
+        attr_combo.currentTextChanged.connect(
+            lambda text, f=filter_obj: self.on_filter_attr_changed(f, text)
+        )
+        value_combo.currentTextChanged.connect(
+            lambda text, f=filter_obj: self.on_filter_value_changed(f, text)
+        )
+        btn_remove.clicked.connect(
+            lambda _, f=filter_obj: self.remove_filter_row(f)
+        )
+
+        # On creation, apply filters (no-op until user changes attr)
+        self.update_visible_indices()
+
+    def remove_filter_row(self, filter_obj):
+        """Remove a filter row and reapply filters."""
+        if filter_obj in self.filters:
+            self.filters.remove(filter_obj)
+        widget = filter_obj.get('widget')
+        if widget is not None:
+            widget.setParent(None)
+        self.update_visible_indices()
+
+    def on_color_option_changed(self, *_):
+        """
+        Called when color-by metadata or colormap changes.
+        We replot the embedding and then wait for the canvas 'draw_event'
+        to refresh line colors so they exactly match the scatter.
+        """
+        # Mark that, after the scatter is drawn, we want to refresh line colors
+        self._pending_line_color_update = True
+
+        # This will recreate the scatter with the new colors and call
+        # canvas_scatter.draw_idle(), which eventually fires 'draw_event'
+        self.plot_embedding()
+
+    def toggle_lasso(self, checked):
+        """Enable/disable Lasso selection on the embedding scatter plot."""
+        # Only meaningful in 2D
+        if self.embedding_dim != 2:
+            if self.lasso is not None:
+                try:
+                    self.lasso.disconnect_events()
+                except Exception:
+                    pass
+                self.lasso = None
+            self.btn_select.setChecked(False)
+            self.btn_select.setText("Enable Lasso Selection")
+            return
+
+        if checked:
+            self.btn_select.setText("Disable Lasso Selection")
+            # Remove old lasso if it exists
+            if self.lasso is not None:
+                try:
+                    self.lasso.disconnect_events()
+                except Exception:
+                    pass
+                self.lasso = None
+
+            from matplotlib.widgets import LassoSelector
+            self.lasso = LassoSelector(self.ax_scatter, self.on_lasso_select, useblit=True)
+        else:
+            self.btn_select.setText("Enable Lasso Selection")
+            if self.lasso is not None:
+                try:
+                    self.lasso.disconnect_events()
+                except Exception:
+                    pass
+                self.lasso = None
 
     def toggle_cropping_params(self):
         self.crop_params_widget.setVisible(self.cb_cropping.isChecked())
@@ -790,6 +988,8 @@ class SpectraViewer(QMainWindow):
         self.preprocessor.normalization_type = self.norm_type_combo.currentText()
 
     def populate_color_combo(self):
+        self.color_combo.blockSignals(True)
+        self.color_combo.clear()
         self.color_combo.addItem("None")
         if len(self.data_objects) > 0:
             metadata_keys = set()
@@ -797,6 +997,22 @@ class SpectraViewer(QMainWindow):
                 metadata_keys.update(obj.metadata.keys())
             for key in sorted(metadata_keys):
                 self.color_combo.addItem(key)
+        self.color_combo.blockSignals(False)
+
+    def populate_filter_attr_combo(self, combo):
+        """Fill a given attribute combo with metadata keys."""
+        combo.blockSignals(True)
+        combo.clear()
+        combo.addItem("None")
+        for key in self.get_metadata_keys():
+            combo.addItem(key)
+        combo.blockSignals(False)
+
+    def get_visible_indices(self):
+        """Return indices that should currently be shown in the scatter plot."""
+        if self.visible_indices is None:
+            return list(range(len(self.data_objects)))
+        return self.visible_indices
 
     def update_dim(self, text):
         self.embedding_dim = 2 if text == "2D" else 3
@@ -841,7 +1057,9 @@ class SpectraViewer(QMainWindow):
                     reducer = PCA(n_components=n_components)
                     self.embedding_result = reducer.fit_transform(data_matrix)
                 else:
-                    reducer = TSNE(n_components=n_components, random_state=42)
+                    # Calculate appropriate perplexity (must be < n_samples)
+                    perplexity = min(30, (n_samples - 1) / 3)
+                    reducer = TSNE(n_components=n_components, perplexity=perplexity, random_state=42)
                     self.embedding_result = reducer.fit_transform(data_matrix)
             elif self.embedding_method == "PCA":
                 reducer = PCA(n_components=n_components)
@@ -861,86 +1079,292 @@ class SpectraViewer(QMainWindow):
             self.embedding_result = np.array([])
 
     def plot_embedding(self):
-        self.ax_scatter.clear()
-        
+        """Plot embedding, keeping axis limits fixed and managing colorbar/selection/lasso."""
+        # Clear the entire figure so old axes/colorbars are removed
+        self.fig_scatter.clear()
+
+        # Recreate axes depending on 2D/3D
+        if self.embedding_dim == 2:
+            self.ax_scatter = self.fig_scatter.add_subplot(111)
+        else:
+            self.ax_scatter = self.fig_scatter.add_subplot(111, projection='3d')
+
+        self.scatter_cbar = None  # reset colorbar handle
+
         # Check if we have a valid embedding result
         if self.embedding_result is None or len(self.embedding_result) == 0:
-            self.ax_scatter.text(0.5, 0.5, 'No embedding data available.\nPlease check data preprocessing.', 
-                               ha='center', va='center', transform=self.ax_scatter.transAxes)
+            self.ax_scatter.text(
+                0.5, 0.5,
+                'No embedding data available.\nPlease check data preprocessing.',
+                ha='center', va='center', transform=self.ax_scatter.transAxes
+            )
             self.ax_scatter.set_title("Embedding Unavailable")
             self.canvas_scatter.draw_idle()
             return
-        
+
+        # ---- Global bounds over ALL points (independent of filters) ----
+        emb = self.embedding_result
+        n_samples, n_dims = emb.shape
+
+        x_all = emb[:, 0]
+        y_all = emb[:, 1]
+
+        x_min, x_max = float(x_all.min()), float(x_all.max())
+        y_min, y_max = float(y_all.min()), float(y_all.max())
+
+        def with_margin(vmin, vmax):
+            if vmin == vmax:
+                delta = 1.0
+                return vmin - delta, vmax + delta
+            span = vmax - vmin
+            pad = 0.05 * span
+            return vmin - pad, vmax + pad
+
+        x_min, x_max = with_margin(x_min, x_max)
+        y_min, y_max = with_margin(y_min, y_max)
+
+        z_min = z_max = None
+        if self.embedding_dim == 3 and n_dims >= 3:
+            z_all = emb[:, 2]
+            z_min, z_max = float(z_all.min()), float(z_all.max())
+            z_min, z_max = with_margin(z_min, z_max)
+
+        # ---- Visible indices based on filters ----
+        indices = self.get_visible_indices()
+        if len(indices) == 0:
+            self.ax_scatter.text(
+                0.5, 0.5,
+                'No points match the current filter.',
+                ha='center', va='center', transform=self.ax_scatter.transAxes
+            )
+            self.ax_scatter.set_xlim(x_min, x_max)
+            self.ax_scatter.set_ylim(y_min, y_max)
+            self.ax_scatter.set_title(f"{self.embedding_method} Embedding (filtered)")
+            self.canvas_scatter.draw_idle()
+            return
+
+        # mapping from global index -> position in scatter arrays
+        self.index_to_scatter_pos = {idx: pos for pos, idx in enumerate(indices)}
+
         color_attr = self.color_combo.currentText()
-        
-        if color_attr == "outlier":
-            colors = ['red' if i in self.outlier_indices else 'blue' for i in range(len(self.data_objects))]
-            cmap_to_use = None
-        elif color_attr != "None":
-            values = [obj.metadata.get(color_attr, None) for obj in self.data_objects]
+        cmap_name = self.cmap_combo.currentText() if hasattr(self, "cmap_combo") else "tab10"
+
+        colors_array = None
+        cmap_to_use = None
+        unique_vals = []
+        n_unique = 0
+
+        if color_attr != "None":
+            values = [self.data_objects[i].metadata.get(color_attr, None) for i in indices]
             unique_vals = sorted(set(v for v in values if v is not None))
             n_unique = len(unique_vals)
-            
-            # Use a colormap that can handle any number of categories
-            # Generate distinct colors by spreading them across the colormap
-            color_map = {val: idx / max(n_unique - 1, 1) for idx, val in enumerate(unique_vals)}
-            colors = [color_map.get(v, -1) for v in values]
-            
-            # Use 'tab10' for up to 10 categories, then switch to continuous colormaps
-            if n_unique <= 12:
-                cmap_to_use = 'Paired'
+
+            if n_unique > 0:
+                color_map = {val: idx for idx, val in enumerate(unique_vals)}
+                colors_array = [color_map.get(v, -1) for v in values]
+                cmap_to_use = cmap_name
             else:
-                cmap_to_use = 'hsv'  # HSV colormap cycles through all hues
+                colors_array = 'blue'
         else:
-            colors = 'blue'
+            colors_array = 'blue'
             cmap_to_use = None
-        
+
         try:
             if self.embedding_dim == 2:
-                self.scatter = self.ax_scatter.scatter(self.embedding_result[:, 0], self.embedding_result[:, 1],
-                                                  c=colors, cmap=cmap_to_use,
-                                                  picker=5)
+                coords = self.embedding_result[indices, :2]
+                # Base scatter (all points)
+                self.scatter = self.ax_scatter.scatter(
+                    coords[:, 0], coords[:, 1],
+                    c=colors_array, cmap=cmap_to_use,
+                    picker=5, zorder=1
+                )
+                # Overlay scatter for selected points (initially empty, always on top)
+                self.scatter_selected = self.ax_scatter.scatter(
+                    [], [], marker='*', s=120,
+                    edgecolors='black', facecolors='none',
+                    linewidths=1.0, zorder=10, picker=False
+                )
+
                 self.ax_scatter.set_xlabel(f"{self.embedding_method} 1")
                 self.ax_scatter.set_ylabel(f"{self.embedding_method} 2")
+                self.ax_scatter.set_xlim(x_min, x_max)
+                self.ax_scatter.set_ylim(y_min, y_max)
             else:
-                self.ax_scatter = self.fig_scatter.add_subplot(111, projection='3d')
-                self.scatter = self.ax_scatter.scatter(self.embedding_result[:, 0], 
-                                                  self.embedding_result[:, 1], 
-                                                  self.embedding_result[:, 2],
-                                                  c=colors, cmap=cmap_to_use,
-                                                  picker=5)
+                coords = self.embedding_result[indices, :3]
+                self.scatter = self.ax_scatter.scatter(
+                    coords[:, 0], coords[:, 1], coords[:, 2],
+                    c=colors_array, cmap=cmap_to_use,
+                    picker=5, zorder=1
+                )
+                self.scatter_selected = None
+
                 self.ax_scatter.set_xlabel(f"{self.embedding_method} 1")
                 self.ax_scatter.set_ylabel(f"{self.embedding_method} 2")
                 self.ax_scatter.set_zlabel(f"{self.embedding_method} 3")
-            
-            self.ax_scatter.set_title(f"{self.embedding_method} Embedding")
+                self.ax_scatter.set_xlim(x_min, x_max)
+                self.ax_scatter.set_ylim(y_min, y_max)
+                if z_min is not None and z_max is not None:
+                    self.ax_scatter.set_zlim(z_min, z_max)
+
+            title_suffix = "" if len(indices) == len(self.data_objects) else f" (filtered: {len(indices)}/{len(self.data_objects)})"
+            self.ax_scatter.set_title(f"{self.embedding_method} Embedding{title_suffix}")
         except Exception as e:
             print(f"Error plotting embedding: {e}")
             import traceback
             traceback.print_exc()
-            self.ax_scatter.text(0.5, 0.5, f'Error plotting embedding:\n{str(e)}', 
-                               ha='center', va='center', transform=self.ax_scatter.transAxes)
-        
+            self.ax_scatter.text(
+                0.5, 0.5,
+                f'Error plotting embedding:\n{str(e)}',
+                ha='center', va='center', transform=self.ax_scatter.transAxes
+            )
+            self.canvas_scatter.draw_idle()
+            return
+
+        # ---- Colorbar for metadata-based coloring ----
+        if color_attr not in ("None") and cmap_to_use is not None and n_unique > 0:
+            cmap_obj = plt.get_cmap(cmap_to_use)
+            norm = colors.Normalize(vmin=0, vmax=max(n_unique - 1, 1))
+            sm = cm.ScalarMappable(norm=norm, cmap=cmap_obj)
+            self.scatter_cbar = self.fig_scatter.colorbar(
+                sm, ax=self.ax_scatter,
+                orientation='horizontal', pad=0.30
+            )
+            self.scatter_cbar.set_ticks(list(range(n_unique)))
+            self.scatter_cbar.set_ticklabels([str(v) for v in unique_vals])
+            self.scatter_cbar.ax.tick_params(labelsize=8)
+            for label in self.scatter_cbar.ax.get_xticklabels():
+                label.set_rotation(45)
+                label.set_ha('right')
+            self.scatter_cbar.set_label(color_attr, fontsize=9)
+        else:
+            self.scatter_cbar = None
+
+        # ---- Recreate lasso selector if it was active ----
+        if self.embedding_dim == 2 and hasattr(self, "btn_select"):
+            if self.btn_select.isChecked():
+                # Remove old lasso (if any) bound to previous axes
+                if self.lasso is not None:
+                    try:
+                        self.lasso.disconnect_events()
+                    except Exception:
+                        pass
+                    self.lasso = None
+
+                from matplotlib.widgets import LassoSelector
+                self.lasso = LassoSelector(self.ax_scatter, self.on_lasso_select, useblit=True)
+            else:
+                # ensure no stale lasso
+                if self.lasso is not None:
+                    try:
+                        self.lasso.disconnect_events()
+                    except Exception:
+                        pass
+                    self.lasso = None
+        else:
+            # In 3D mode or if button doesn't exist, disable lasso
+            if self.lasso is not None:
+                try:
+                    self.lasso.disconnect_events()
+                except Exception:
+                    pass
+                self.lasso = None
+            if hasattr(self, "btn_select"):
+                self.btn_select.setChecked(False)
+                self.btn_select.setText("Enable Lasso Selection")
+
         self.canvas_scatter.draw_idle()
 
-    def toggle_lasso(self, checked):
-        if checked:
-            self.btn_select.setText("Disable Lasso Selection")
-            self.lasso = LassoSelector(self.ax_scatter, self.on_lasso_select, useblit=True)
+    def on_filter_attr_changed(self, filter_obj, text):
+        """When a filter's metadata key (type) changes."""
+        filter_obj['attr'] = text
+        value_combo = filter_obj['value_combo']
+
+        if text == "None":
+            value_combo.blockSignals(True)
+            value_combo.clear()
+            value_combo.addItem("All")
+            value_combo.setEnabled(False)
+            value_combo.blockSignals(False)
+            filter_obj['value'] = "All"
+            self.update_visible_indices()
+            return
+
+        # Collect unique values for this metadata field
+        values = sorted({
+            str(obj.metadata.get(text))
+            for obj in self.data_objects
+            if text in obj.metadata
+        }, key=lambda x: float(x) if x.replace('.', '', 1).isdigit() else float('inf'))
+
+        value_combo.blockSignals(True)
+        value_combo.clear()
+        value_combo.addItem("All")
+        for v in values:
+            value_combo.addItem(v)
+        value_combo.setEnabled(True)
+        value_combo.blockSignals(False)
+
+        # Default to "All" for the new attribute
+        filter_obj['value'] = "All"
+        self.update_visible_indices()
+
+    def on_filter_value_changed(self, filter_obj, text):
+        """When a filter's value changes."""
+        if not filter_obj['value_combo'].isEnabled():
+            return
+        filter_obj['value'] = text
+        self.update_visible_indices()
+
+    def update_visible_indices(self):
+        """Recompute visible indices based on ALL active filters (AND logic)."""
+        # Build list of (attr, value) for active filters
+        active_filters = []
+        for f in self.filters:
+            attr = f.get('attr')
+            val = f.get('value')
+            if not attr or attr == "None" or not val or val == "All":
+                continue
+            active_filters.append((attr, val))
+
+        if not active_filters:
+            # No active filters → show all
+            self.visible_indices = list(range(len(self.data_objects)))
         else:
-            self.btn_select.setText("Enable Lasso Selection")
-            if self.lasso is not None:
-                self.lasso.disconnect_events()
-                self.lasso = None
+            visible = []
+            for i, obj in enumerate(self.data_objects):
+                ok = True
+                for attr, val in active_filters:
+                    v = obj.metadata.get(attr)
+                    if str(v) != val:
+                        ok = False
+                        break
+                if ok:
+                    visible.append(i)
+            self.visible_indices = visible
+
+        # Keep only selected indices that are still visible
+        self.selected_indices = [i for i in self.selected_indices if i in self.visible_indices]
+
+        # Redraw
+        self.plot_embedding()
+        self.update_line_plot()
 
     def on_lasso_select(self, verts):
+        """Handle lasso selection in the embedding plot (2D only)."""
         if self.embedding_dim != 2:
             return
+
+        visible_indices = self.visible_indices or list(range(len(self.data_objects)))
+        if not visible_indices:
+            return
+
         path = Path(verts)
-        points = self.embedding_result[:, :2]
-        selected = path.contains_points(points)
-        self.selected_indices = [i for i, s in enumerate(selected) if s]
+        points = self.embedding_result[visible_indices, :2]
+        selected_mask = path.contains_points(points)
+        self.selected_indices = [visible_indices[i] for i, s in enumerate(selected_mask) if s]
         self.update_line_plot()
+
+
 
     def on_scroll(self, event):
         ax = event.inaxes
@@ -1002,19 +1426,39 @@ class SpectraViewer(QMainWindow):
         """Update line plot - supports both grouped (by patient) and combined modes"""
         self.fig_line.clear()
         self.selected_index_to_line = {}
-        self.metadata_list.clear()
-        
+
+        # Clear metadata table
+        if hasattr(self, "metadata_table"):
+            self.metadata_table.clearContents()
+            self.metadata_table.setRowCount(0)
+            self.metadata_table.setColumnCount(0)
+
         if len(self.selected_indices) == 0:
             ax = self.fig_line.add_subplot(111)
             ax.set_title("Select points to view spectra")
             ax.axis('off')
             self.canvas_line.draw_idle()
             return
-        
+
+        # Build list of all metadata keys across selected spectra
+        all_keys = set()
+        for idx in self.selected_indices:
+            all_keys.update(self.data_objects[idx].metadata.keys())
+        metadata_keys = sorted(all_keys)
+
+        # Prepare metadata table headers
+        if hasattr(self, "metadata_table"):
+            self.metadata_table.setColumnCount(len(metadata_keys))
+            header_labels = [key.replace('_', ' ').title() for key in metadata_keys]
+            self.metadata_table.setHorizontalHeaderLabels(header_labels)
+            self.metadata_table.setRowCount(len(self.selected_indices))
+
         # Get colors from scatter plot
         scatter_colors = None
+        index_to_pos = {}
         if hasattr(self, 'scatter') and self.scatter is not None:
             scatter_colors = self.scatter.get_facecolors()
+            index_to_pos = getattr(self, 'index_to_scatter_pos', {})
         
         if self.plot_mode == 'combined':
             # Combined mode: all spectra in one plot
@@ -1022,43 +1466,43 @@ class SpectraViewer(QMainWindow):
             
             for idx in self.selected_indices:
                 obj = self.data_objects[idx]
-                
-                # Get the color for this specific spectrum from the scatter plot
-                if scatter_colors is not None and len(scatter_colors) > idx:
-                    spectrum_color = scatter_colors[idx]
+
+                # Always derive the color from the scatter facecolors, if available
+                if scatter_colors is not None and len(scatter_colors) > 0:
+                    pos = index_to_pos.get(idx)
+                    if pos is not None and pos < len(scatter_colors):
+                        spectrum_color = scatter_colors[pos]
+                    else:
+                        spectrum_color = 'C0'
                 else:
-                    spectrum_color = None  # Will use default color
-                
-                line, = ax.plot(obj.raman_shift_cm, obj.intensity, 
-                              color=spectrum_color, alpha=0.7, picker=5)
+                    spectrum_color = 'C0'
+
+                line, = ax.plot(
+                    obj.raman_shift_cm,
+                    obj.intensity,
+                    color=spectrum_color,
+                    alpha=0.7,
+                    picker=5
+                )
                 self.selected_index_to_line[idx] = line
-                
-                # Add to metadata list
-                metadata = obj.metadata
-                patient_id = metadata.get('patient_id', 'Unknown')
-                
-                # Format metadata as a readable string with all fields
-                metadata_parts = [f"Patient {patient_id}"]
-                
-                # Add all metadata fields except patient_id
-                for key, value in sorted(metadata.items()):
-                    if key != 'patient_id':
-                        formatted_key = key.replace('_', ' ').title()
-                        metadata_parts.append(f"{formatted_key}: {value}")
-                
-                metadata_str = " | ".join(metadata_parts)
-                
-                item = QListWidgetItem(metadata_str)
-                item.setData(Qt.UserRole, idx)
-                self.metadata_list.addItem(item)
-            
+
+                # Fill metadata table row
+                if hasattr(self, "metadata_table"):
+                    row = self.selected_indices.index(idx)
+                    for col, key in enumerate(metadata_keys):
+                        val = obj.metadata.get(key, "")
+                        item = SortableTableWidgetItem(str(val))
+                        if col == 0:
+                            # store global spectrum index in first column
+                            item.setData(Qt.UserRole, idx)
+                        self.metadata_table.setItem(row, col, item)
+    
             ax.set_title(f"All Selected Spectra ({len(self.selected_indices)} total)")
             ax.set_xlabel("Raman Shift (cm⁻¹)")
             ax.set_ylabel("Intensity")
             
         else:
             # Grouped mode: separate subplots by patient
-            # Group selected spectra by patient_id
             patient_groups = {}
             for idx in self.selected_indices:
                 obj = self.data_objects[idx]
@@ -1067,7 +1511,6 @@ class SpectraViewer(QMainWindow):
                     patient_groups[patient_id] = []
                 patient_groups[patient_id].append(idx)
             
-            # Create subplots - one per patient, stacked vertically
             n_patients = len(patient_groups)
             
             for plot_idx, (patient_id, indices) in enumerate(sorted(patient_groups.items())):
@@ -1076,36 +1519,36 @@ class SpectraViewer(QMainWindow):
                 # Plot all spectra for this patient
                 for idx in indices:
                     obj = self.data_objects[idx]
-                    
-                    # Get the color for this specific spectrum from the scatter plot
-                    if scatter_colors is not None and len(scatter_colors) > idx:
-                        spectrum_color = scatter_colors[idx]
+
+                    # Always derive from scatter facecolors
+                    if scatter_colors is not None and len(scatter_colors) > 0:
+                        pos = index_to_pos.get(idx)
+                        if pos is not None and pos < len(scatter_colors):
+                            spectrum_color = scatter_colors[pos]
+                        else:
+                            spectrum_color = 'C0'
                     else:
-                        spectrum_color = None  # Will use default color
-                    
-                    line, = ax.plot(obj.raman_shift_cm, obj.intensity, 
-                                  color=spectrum_color, alpha=0.7, picker=5)
+                        spectrum_color = 'C0'
+
+                    line, = ax.plot(
+                        obj.raman_shift_cm,
+                        obj.intensity,
+                        color=spectrum_color,
+                        alpha=0.7,
+                        picker=5
+                    )
                     self.selected_index_to_line[idx] = line
-                    
-                    # Add to metadata list - show ALL metadata fields
-                    metadata = obj.metadata
-                    
-                    # Format metadata as a readable string with all fields
-                    metadata_parts = [f"Patient {patient_id}"]
-                    
-                    # Add all metadata fields except patient_id (already shown)
-                    for key, value in sorted(metadata.items()):
-                        if key != 'patient_id':
-                            # Format the key nicely (e.g., 'sample_type' -> 'Sample Type')
-                            formatted_key = key.replace('_', ' ').title()
-                            metadata_parts.append(f"{formatted_key}: {value}")
-                    
-                    metadata_str = " | ".join(metadata_parts)
-                    
-                    item = QListWidgetItem(metadata_str)
-                    item.setData(Qt.UserRole, idx)
-                    self.metadata_list.addItem(item)
-                
+
+                    # Fill metadata table row
+                    if hasattr(self, "metadata_table"):
+                        row = self.selected_indices.index(idx)
+                        for col, key in enumerate(metadata_keys):
+                            val = obj.metadata.get(key, "")
+                            item = SortableTableWidgetItem(str(val))
+                            if col == 0:
+                                item.setData(Qt.UserRole, idx)
+                            self.metadata_table.setItem(row, col, item)
+
                 # Set subplot title and labels
                 ax.set_title(f"Patient {patient_id} ({len(indices)} spectra)", fontsize=9, pad=3)
                 ax.set_xlabel("Raman Shift (cm⁻¹)", fontsize=8)
@@ -1116,9 +1559,39 @@ class SpectraViewer(QMainWindow):
                 if plot_idx < n_patients - 1:
                     ax.set_xlabel('')
         
+        # Keep the previously "top" line on top if still present
+        self.update_line_zorder()
+
         # Tight layout to minimize white space
         self.fig_line.tight_layout(pad=0.5, h_pad=0.5)
         self.canvas_line.draw_idle()
+
+    def update_line_zorder(self, primary_idx=None):
+        """
+        Ensure one spectrum line is drawn on top by setting its z-order higher.
+        primary_idx: the spectrum index we want on top (if provided).
+        """
+        if primary_idx is not None:
+            self.top_index = primary_idx
+
+        if not self.selected_index_to_line:
+            return
+
+        base_z = 1
+        top_z = 10
+
+        # If current top_index is not in the mapping anymore, clear it
+        if self.top_index not in self.selected_index_to_line:
+            self.top_index = None
+
+        for idx, line in self.selected_index_to_line.items():
+            if idx == self.top_index:
+                line.set_zorder(top_z)
+            else:
+                line.set_zorder(base_z)
+
+        self.canvas_line.draw_idle()
+
 
     def clear_selection(self):
         self.selected_indices = []
@@ -1126,7 +1599,12 @@ class SpectraViewer(QMainWindow):
         ax = self.fig_line.add_subplot(111)
         ax.set_title("Select points to view spectra")
         ax.axis('off')
-        self.metadata_list.clear()
+
+        if hasattr(self, "metadata_table"):
+            self.metadata_table.clearContents()
+            self.metadata_table.setRowCount(0)
+            self.metadata_table.setColumnCount(0)
+
         self.selected_index_to_line = {}
         self.clear_scatter_highlight()
         self.canvas_line.draw_idle()
@@ -1147,18 +1625,50 @@ class SpectraViewer(QMainWindow):
             self.update_line_highlights()
 
     def on_line_pick(self, event):
-        if event.artist in self.selected_index_to_line.values():
-            idx = [k for k, v in self.selected_index_to_line.items() if v == event.artist][0]
-            
-            for i in range(self.metadata_list.count()):
-                item = self.metadata_list.item(i)
-                if item.data(Qt.UserRole) == idx:
-                    was_selected = item.isSelected()
-                    item.setSelected(not was_selected)
-                    break
+        """When a line in the spectra plot is clicked, select the matching row in the metadata table and bring it on top."""
+        if event.artist not in self.selected_index_to_line.values():
+            return
+
+        # Find which global index this line corresponds to
+        idx = None
+        for k, v in self.selected_index_to_line.items():
+            if v is event.artist:
+                idx = k
+                break
+
+        if idx is None:
+            return
+
+        if not hasattr(self, "metadata_table") or self.metadata_table.rowCount() == 0:
+            # Even if there's no table (shouldn't happen now), still bring it on top
+            self.update_line_zorder(idx)
+            return
+
+        # Find the row in the metadata table with this idx stored in the first column's UserRole
+        row_to_select = None
+        for row in range(self.metadata_table.rowCount()):
+            item0 = self.metadata_table.item(row, 0)
+            if item0 is None:
+                continue
+            stored_idx = item0.data(Qt.UserRole)
+            if stored_idx == idx:
+                row_to_select = row
+                break
+
+        # Update table selection
+        self.metadata_table.blockSignals(True)
+        self.metadata_table.clearSelection()
+        if row_to_select is not None:
+            self.metadata_table.selectRow(row_to_select)
+        self.metadata_table.blockSignals(False)
+
+        # Update highlights and bring clicked line on top
+        self.update_line_highlights()
+        self.update_line_zorder(idx)
+
 
     def on_line_click(self, event):
-        """Clear selection when clicking on blank space"""
+        """Clear metadata/table selection when clicking on blank space in the line plot."""
         if event.inaxes is None:
             return
         
@@ -1171,51 +1681,192 @@ class SpectraViewer(QMainWindow):
                     break
         
         if not clicked_on_line:
-            self.metadata_list.clearSelection()
+            # Clear row selection in the metadata table
+            if hasattr(self, "metadata_table"):
+                self.metadata_table.clearSelection()
+
+            # Clear scatter highlight + hover state + redraw styles
             self.clear_scatter_highlight()
+            self.hovered_index = None
             self.update_line_highlights()
 
     def update_line_highlights(self):
+        """Update line widths/colors based on hover & metadata table selection."""
         scatter_colors = None
+        index_to_pos = {}
+
         if hasattr(self, 'scatter') and self.scatter is not None:
             scatter_colors = self.scatter.get_facecolors()
-        
-        selected_items = self.metadata_list.selectedItems()
-        selected_indices_from_list = [item.data(Qt.UserRole) for item in selected_items]
+            index_to_pos = getattr(self, 'index_to_scatter_pos', {})
+
+        # Indices selected in the metadata table
+        selected_indices_from_list = []
+        if hasattr(self, "metadata_table"):
+            selected_items = self.metadata_table.selectedItems()
+            selected_rows = {item.row() for item in selected_items}
+            for row in selected_rows:
+                item0 = self.metadata_table.item(row, 0)
+                if item0 is None:
+                    continue
+                idx = item0.data(Qt.UserRole)
+                if idx is not None:
+                    selected_indices_from_list.append(idx)
+
+        color_attr = self.color_combo.currentText() if hasattr(self, "color_combo") else "None"
+
         for idx, line in self.selected_index_to_line.items():
             if idx == self.hovered_index or idx in selected_indices_from_list:
+                # Highlighted state
                 line.set_linewidth(2.5)
-                line.set_color('gold')
+                line.set_color('black')
                 line.set_alpha(1.0)
             else:
+                # Default state mirrors scatter colors
                 line.set_linewidth(1)
-                if scatter_colors is not None and len(scatter_colors) > idx:
-                    line.set_color(scatter_colors[idx])
+
+                if scatter_colors is not None and len(scatter_colors) > 0:
+                    pos = index_to_pos.get(idx)
+                    if pos is not None and pos < len(scatter_colors):
+                        line.set_color(scatter_colors[pos])
+                    else:
+                        line.set_color('C0')
                 else:
                     line.set_color('C0')
+
                 line.set_alpha(0.7)
+
+        # Decide which spectrum should be on top:
+        # 1) first selected in the metadata table, else
+        # 2) currently hovered line, else keep previous top_index
+        primary_idx = None
+        if selected_indices_from_list:
+            primary_idx = selected_indices_from_list[0]
+        elif self.hovered_index is not None:
+            primary_idx = self.hovered_index
+
+        self.update_line_zorder(primary_idx)
+
         self.canvas_line.draw_idle()
-        
+
+        # Also reflect selection in the embedding plot
         self.update_scatter_highlight(selected_indices_from_list)
 
     def update_scatter_highlight(self, selected_indices):
-        """Highlight selected spectra in the scatter plot"""
+        """Highlight selected spectra in the scatter plot and bring them on top."""
         if not hasattr(self, 'scatter') or self.scatter is None:
             return
-        
-        sizes = np.full(len(self.data_objects), 20)
-        for idx in selected_indices:
-            sizes[idx] = 100
-        
-        self.scatter.set_sizes(sizes)
+
+        visible_indices = self.visible_indices or list(range(len(self.data_objects)))
+        if not visible_indices:
+            return
+
+        # Keep your existing marker-shape logic (stars vs circles)
+        # (Assumes you kept your custom update_scatter_markers)
+        try:
+            self.update_scatter_markers(selected_indices)
+        except Exception:
+            pass
+
+        # Overlay: draw selected points in a separate scatter on top (2D only)
+        if self.embedding_dim == 2 and hasattr(self, "scatter_selected") and self.scatter_selected is not None:
+            coords = []
+            for idx in selected_indices:
+                if 0 <= idx < len(self.embedding_result):
+                    coords.append(self.embedding_result[idx, :2])
+
+            if coords:
+                arr = np.vstack(coords)
+                self.scatter_selected.set_offsets(arr)
+            else:
+                # no selected points → clear overlay
+                self.scatter_selected.set_offsets(np.empty((0, 2)))
+
         self.canvas_scatter.draw_idle()
 
+
     def clear_scatter_highlight(self):
-        """Clear scatter plot highlights"""
+        """Clear scatter plot highlights."""
         if hasattr(self, 'scatter') and self.scatter is not None:
-            sizes = np.full(len(self.data_objects), 20)
-            self.scatter.set_sizes(sizes)
+            visible_indices = self.get_visible_indices()
+            if visible_indices:
+                # Reset markers
+                try:
+                    self.update_scatter_markers([])
+                except Exception:
+                    pass
+
+            # Clear overlay
+            if hasattr(self, "scatter_selected") and self.scatter_selected is not None and self.embedding_dim == 2:
+                self.scatter_selected.set_offsets(np.empty((0, 2)))
+
             self.canvas_scatter.draw_idle()
+
+    def _on_scatter_draw(self, event):
+        """
+        Called whenever the scatter FigureCanvas is drawn.
+        We only update the line plot colors if a color-change triggered it
+        (via _pending_line_color_update).
+        """
+        if not getattr(self, "_pending_line_color_update", False):
+            return
+
+        # Reset the flag: this draw has satisfied the pending update
+        self._pending_line_color_update = False
+
+        # Now the scatter's facecolors are fully up-to-date.
+        # Rebuild the line plot and highlights using those colors.
+        if self.selected_indices:
+            self.update_line_plot()
+            self.update_line_highlights()
+        else:
+            self.update_line_plot()
+
+
+    def update_scatter_markers(self, selected_indices):
+        """Update scatter markers: stars for selected, circles for others."""
+        if not hasattr(self, 'scatter') or self.scatter is None:
+            return
+
+        visible_indices = self.get_visible_indices()
+        if not visible_indices:
+            return
+
+        # Build new marker list (one per point)
+        # Matplotlib supports per-point markers via PathCollection.set_paths()
+        from matplotlib.markers import MarkerStyle
+        from matplotlib.transforms import Affine2D
+
+        circle = MarkerStyle("o").get_path().transformed(
+            MarkerStyle("o").get_transform()
+        )
+        star_style = MarkerStyle("*")
+        base_path = star_style.get_path()
+        base_transform = star_style.get_transform()
+        scaled_transform = base_transform + Affine2D().scale(2.0)  # make the star bigger
+        star = base_path.transformed(scaled_transform)
+
+        paths = []
+        edgecolors = []
+        for idx in visible_indices:
+            if idx in selected_indices:
+                paths.append(star)
+                edgecolors.append('black')
+            else:
+                paths.append(circle)
+                edgecolors.append('none')
+
+        self.scatter.set_paths(paths)
+        self.scatter.set_edgecolors(edgecolors)
+        self.scatter.set_linewidths(2)
+        self.canvas_scatter.draw_idle()
+
+    def on_metadata_header_clicked(self, column):
+        """Sort metadata table by the clicked column (ascending)."""
+        if hasattr(self, "metadata_table"):
+            self.metadata_table.sortItems(column, Qt.AscendingOrder)
+            # Keep line highlights / scatter highlights in sync
+            self.update_line_highlights()
+
 
     def save_metadata(self):
         metadata_list = [self.data_objects[idx].metadata for idx in self.selected_indices]
@@ -1225,25 +1876,114 @@ class SpectraViewer(QMainWindow):
                 json.dump(metadata_list, f, indent=4)
 
     def update_preprocessing(self):
-        """Re-process data with current preprocessing parameters"""
+        """Re-process data with current preprocessing parameters, preserving filters and color selection."""
+        # 1) Update preprocessor from UI
         self.update_preprocessor_from_ui()
-        
-        # Re-preprocess all data
-        self.data_objects = [self.preprocessor.preprocess(copy.deepcopy(obj)) for obj in self.original_data_objects]
-        
-        # Align spectra to common grid
+
+        # 2) Remember current color selection
+        prev_color_attr = None
+        if hasattr(self, "color_combo"):
+            prev_color_attr = self.color_combo.currentText()
+
+        # 3) Remember current filters (order-preserving)
+        saved_filters = []
+        if hasattr(self, "filters"):
+            for f in self.filters:
+                saved_filters.append((f.get("attr"), f.get("value")))
+
+        # 4) Re-preprocess all original spectra
+        self.data_objects = [
+            self.preprocessor.preprocess(copy.deepcopy(obj))
+            for obj in self.original_data_objects
+        ]
+
+        # 5) Align spectra to common grid
         self.align_spectra_to_common_grid()
-        
-        # Clear cache and recompute embedding
+
+        # 6) Clear embedding cache and current embedding
         self.embedding_cache.clear()
+        self.embedding_result = None
+
+        # 7) Recompute embedding with updated data
         self.compute_embedding()
-        self.plot_embedding()
-        
-        # Update line plot if there are selected spectra
-        if self.selected_indices:
-            self.update_line_plot()
-        
+
+        # 8) Refresh color options based on new metadata, but restore selection if possible
+        if hasattr(self, "color_combo"):
+            # Repopulate items
+            self.populate_color_combo()
+            # Try to restore previous color-by attribute
+            if prev_color_attr and self.color_combo.findText(prev_color_attr) != -1:
+                self.color_combo.blockSignals(True)
+                self.color_combo.setCurrentText(prev_color_attr)
+                self.color_combo.blockSignals(False)
+            else:
+                # Fallback if the old key no longer exists
+                self.color_combo.blockSignals(True)
+                self.color_combo.setCurrentText("None")
+                self.color_combo.blockSignals(False)
+
+        # 9) Rebuild filter combos using saved (attr, value) per row
+        if hasattr(self, "filters_container_layout") and hasattr(self, "filters"):
+            metadata_keys = set()
+            for obj in self.data_objects:
+                metadata_keys.update(obj.metadata.keys())
+            metadata_keys = sorted(metadata_keys)
+
+            for f, (saved_attr, saved_val) in zip(self.filters, saved_filters):
+                attr_combo = f["attr_combo"]
+                value_combo = f["value_combo"]
+
+                # Re-populate attribute combo
+                attr_combo.blockSignals(True)
+                self.populate_filter_attr_combo(attr_combo)
+                # Restore attribute if still available
+                if saved_attr and saved_attr != "None" and saved_attr in metadata_keys:
+                    attr_combo.setCurrentText(saved_attr)
+                    f["attr"] = saved_attr
+
+                    # Rebuild value combo for this attribute
+                    values = sorted({
+                        str(obj.metadata.get(saved_attr))
+                        for obj in self.data_objects
+                        if saved_attr in obj.metadata
+                    })
+
+                    value_combo.blockSignals(True)
+                    value_combo.clear()
+                    value_combo.addItem("All")
+                    for v in values:
+                        value_combo.addItem(v)
+                    value_combo.setEnabled(True)
+
+                    # Restore value if still valid
+                    if saved_val and saved_val != "All" and value_combo.findText(saved_val) != -1:
+                        value_combo.setCurrentText(saved_val)
+                        f["value"] = saved_val
+                    else:
+                        value_combo.setCurrentText("All")
+                        f["value"] = "All"
+                    value_combo.blockSignals(False)
+                else:
+                    # Attribute no longer valid → reset this filter
+                    attr_combo.setCurrentText("None")
+                    f["attr"] = None
+
+                    value_combo.blockSignals(True)
+                    value_combo.clear()
+                    value_combo.addItem("All")
+                    value_combo.setEnabled(False)
+                    f["value"] = "All"
+                    value_combo.blockSignals(False)
+
+                attr_combo.blockSignals(False)
+
+        # 10) Recompute which points are visible based on current filters
+        #     (this will call plot_embedding() and update_line_plot())
+        self.update_visible_indices()
+
         print("Data re-processed with new parameters")
+
+
 
     def optimize_dbscan_params(self):
         """Optimize DBSCAN parameters using silhouette score"""
@@ -1315,9 +2055,58 @@ class SpectraViewer(QMainWindow):
             self.selected_indices = list(self.outlier_indices)
             self.update_line_plot()
 
+class ScrollableComboBox(QComboBox):
+    """
+    QComboBox that lets you change the current item with the mouse wheel
+    (without having to open the dropdown). We consume the wheel event so
+    the parent scroll area won't scroll instead.
+    """
+    def wheelEvent(self, event):
+        if self.count() == 0:
+            event.ignore()
+            return
+
+        delta = event.angleDelta().y()
+
+        if delta > 0:
+            # scroll up → previous item
+            new_index = max(self.currentIndex() - 1, 0)
+        elif delta < 0:
+            # scroll down → next item
+            new_index = min(self.currentIndex() + 1, self.count() - 1)
+        else:
+            event.ignore()
+            return
+
+        if new_index != self.currentIndex():
+            self.setCurrentIndex(new_index)
+
+        # Don't let the event bubble up to the scroll area
+        event.accept()
+
+class SortableTableWidgetItem(QTableWidgetItem):
+    """QTableWidgetItem that sorts numerically when possible."""
+    def __lt__(self, other):
+        # If the other item isn't our type, fall back to default behavior
+        if not isinstance(other, QTableWidgetItem):
+            return super().__lt__(other)
+
+        left_text = self.text()
+        right_text = other.text()
+
+        # Try numeric comparison first
+        try:
+            left_val = float(left_text)
+            right_val = float(right_text)
+            return left_val < right_val
+        except ValueError:
+            # Fallback: case-insensitive string comparison
+            return left_text.lower() < right_text.lower()
+
+
 if __name__ == "__main__":
     # Example usage - update these paths to your actual data
-    data_folder = r"C:\Users\Yifei\Box\Carney Lab Shared\Data\Raman_Robot\2025_11_18"
+    data_folder = r'/Users/yifeigu/Documents/Carney_Lab/Data/RamanRobot/2025_12_10_only1-2_cleaned'
     
     # Create default config
     default_config = {
@@ -1342,16 +2131,16 @@ if __name__ == "__main__":
             'normalization_type': 'by_max'
         },
         'enabled': {
-            'cropping': True,
+            'cropping': False,
             'baseline_correction': False,
-            'remove_cosmic_rays': True,
+            'remove_cosmic_rays': False,
             'normalization': False,
             'smoothing': False
         }
     }
 
     preprocessor = SpectrumPreprocessorWrapper.from_dict(default_config)
-    dataset = OC_Dataset(data_folder, preprocessor, augmentor=None)
+    dataset = RamanRobotDataset(data_folder, preprocessor, augmentor=None)
 
     app = QApplication(sys.argv)
     window = SpectraViewer(dataset.db, preprocessor)
