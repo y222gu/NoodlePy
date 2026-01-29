@@ -1,0 +1,134 @@
+[
+    {
+        "date": "20250423",
+        "patient_id": 320,
+        "sample_type": "plasma",
+        "ring": 50,
+        "line": 1,
+        "staging": 1,
+        "gender": "Male Gender",
+        "race": "White",
+        "spectrum_id": 1
+    },
+    {
+        "date": "20250423",
+        "patient_id": 320,
+        "sample_type": "plasma",
+        "ring": 50,
+        "line": 1,
+        "staging": 1,
+        "gender": "Male Gender",
+        "race": "White",
+        "spectrum_id": 2
+    },
+    {
+        "date": "20250423",
+        "patient_id": 320,
+        "sample_type": "plasma",
+        "ring": 50,
+        "line": 1,
+        "staging": 1,
+        "gender": "Male Gender",
+        "race": "White",
+        "spectrum_id": 3
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 1,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 1
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 1,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 2
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 1,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 3
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 27,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 1
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 27,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 2
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 27,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 3
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 50,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 1
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 50,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 2
+    },
+    {
+        "date": "20250423",
+        "patient_id": 349,
+        "sample_type": "plasma",
+        "ring": 50,
+        "line": 1,
+        "staging": 2,
+        "gender": "Female Gender",
+        "race": "White",
+        "spectrum_id": 3
+    }
+]
