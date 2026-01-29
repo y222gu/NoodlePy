@@ -1,5 +1,6 @@
 import os
 import time
+from pyparsing import col
 import serial
 import serial.tools.list_ports
 import ttkbootstrap as ttk
@@ -77,7 +78,8 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         self.sample_drop_panel_total_width = len(self.sample_drop_panel_grid_pattern) * self.sample_drop_panel_spacing
         self.sample_drop_panel_total_height = self.sample_drop_panel_max_rows * self.sample_drop_panel_spacing
         self.sample_drop_panel_current_sample_row_column = None
-        self.sample_drop_panel_circle_pursa_coordinates = {}  # Store physical coordinates of circles
+        self.sample_drop_panel_circle_pursa_coordinates_in_widefield = {}  # Store physical coordinates of circles
+        self.sample_drop_panel_circle_pursa_coordinates_in_objective = {}  # Store physical coordinates of circles in objective view
         self.sample_drop_panel_calculate_circle_pursa_coordinates()
         self.create_widgets()
         self.connect_prusa_device()
@@ -527,7 +529,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
     def connect_prusa_device(self):
         self.port = self.find_prusa_com_ports()
-        self.ser = serial.Serial(self.port, 115200, timeout=2.0, write_timeout=5.0)
+        self.ser = serial.Serial(self.port, 115200, timeout=1000000, write_timeout=1000000)
         # time.sleep(3)
         printer_status = self.is_prusa_on()
         if printer_status:
@@ -639,7 +641,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         for i in range(len(sampling_position_x)):
             print(f'Moving to the test sample spot {sampling_position_x[i]}, {sampling_position_y[i]}')
             self.prusa_go_to_xyz(x=sampling_position_x[i], y=sampling_position_y[i])
-            time.sleep(3)
+            time.sleep(0.1)
         
         # Move back to the center of the captured frame
         if view_to_inspect_in == "OBJECTIVE":
@@ -649,14 +651,18 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
         else:
             raise ValueError("The center of the frame is not captured yet")
         
-    def handle_move_to_a_single_sampling_point_during_acquisition(self, view_to_inspect_in, relative_distance_for_sampling_point):
-        sampling_position_x, sampling_position_y = self.calculate_sampling_point_position_in_absolute_coordinate(view_to_inspect_in, relative_distance_for_sampling_point)
-        self.prusa_go_to_xyz(x=sampling_position_x, y=sampling_position_y)
+    def handle_move_to_a_single_sampling_point_during_acquisition(self, sample_drop_row_column, relative_distance_for_sampling_point, ):
+        row, column = sample_drop_row_column[0], sample_drop_row_column[1]
+        sample_drop_panel_current_sample_pursa_coordinates = self.sample_drop_panel_circle_pursa_coordinates_in_objective[(row, column)]
+        fliped_relative_distance_for_sampling_point_y = relative_distance_for_sampling_point[1] * -1
+        sample_position_x = np.round(relative_distance_for_sampling_point[0]/1000 + sample_drop_panel_current_sample_pursa_coordinates[0], 2)
+        sample_position_y = np.round(fliped_relative_distance_for_sampling_point_y/1000 + sample_drop_panel_current_sample_pursa_coordinates[1], 2)
+        self.prusa_go_to_xyz(x=sample_position_x, y=sample_position_y)
         
         while True:
             current_x = float(self.get_current_prusa_position('XYZ')[0])
             current_y = float(self.get_current_prusa_position('XYZ')[1])
-            if current_x == sampling_position_x and current_y == sampling_position_y:
+            if current_x == sample_position_x and current_y == sample_position_y:
                 break
 
         self.dispatch('task_completed')
@@ -707,27 +713,50 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
             self.capture_frame_center_widefield_y = self.capture_frame_center_objective_y - self.calibration_from_widefield_to_objective_y
         return None
 
-    def handle_move_stage_to_target_sample_drop_in_widefield_view_during_aquisition(self, sample_drop_row_column):
-        self.prusa_go_to_xyz(z=self.widefield_focus_prusa_upper_limit)
-        print('moving to the upper limit')
-        # check if the stage is at the target position
-        while True:
-            current_z_position = np.round(float(self.get_current_prusa_position('Z')),2)
-            print('stuck when trying to move to the upper limit')
-            print(f"current z position: {current_z_position}")
-            print(f"upper limit: {self.widefield_focus_prusa_upper_limit}")
-            if current_z_position == self.widefield_focus_prusa_upper_limit:
-                break
+    def handle_move_stage_to_target_sample_drop_during_aquisition(self, view_to_move_in, sample_drop_row_column):
+        if view_to_move_in == "OBJECTIVE":
+            self.prusa_go_to_xyz(z=self.objective_focus_prusa_upper_limit)
+            print('moving to the upper limit')
+            # check if the stage is at the target position
+            while True:
+                current_z_position = np.round(float(self.get_current_prusa_position('Z')),2)
+                print('stuck when trying to move to the upper limit')
+                print(f"current z position: {current_z_position}")
+                print(f"upper limit: {self.objective_focus_prusa_upper_limit}")
+                if current_z_position == self.objective_focus_prusa_upper_limit:
+                    break
 
-        # re-position nanodrive to the initial position
-        self.dispatch('move_nanodrive_to', self.initial_nanodrive_position)
-        print('moving nanodrive to the initial position')
+            # re-position nanodrive to the initial position
+            self.dispatch('move_nanodrive_to', self.initial_nanodrive_position)
+            print('moving nanodrive to the initial position')
 
-        # move to the target sample drop position
-        self.sample_drop_panel_move_stage(sample_drop_row_column[0], sample_drop_row_column[1])
+            # move to the target sample drop position
+            self.sample_drop_panel_move_stage('OBJECTIVE', sample_drop_row_column[0], sample_drop_row_column[1])
 
-        self.dispatch('task_completed')
-        return None
+            self.dispatch('task_completed')
+            return None
+        
+        elif view_to_move_in == "WIDEFIELD":
+            self.prusa_go_to_xyz(z=self.widefield_focus_prusa_upper_limit)
+            print('moving to the upper limit')
+            # check if the stage is at the target position
+            while True:
+                current_z_position = np.round(float(self.get_current_prusa_position('Z')),2)
+                print('stuck when trying to move to the upper limit')
+                print(f"current z position: {current_z_position}")
+                print(f"upper limit: {self.widefield_focus_prusa_upper_limit}")
+                if current_z_position == self.widefield_focus_prusa_upper_limit:
+                    break
+
+            # re-position nanodrive to the initial position
+            self.dispatch('move_nanodrive_to', self.initial_nanodrive_position)
+            print('moving nanodrive to the initial position')
+
+            # move to the target sample drop position
+            self.sample_drop_panel_move_stage('WIDEFIELD', sample_drop_row_column[0], sample_drop_row_column[1])
+
+            self.dispatch('task_completed')
+            return None
 
     def handle_reposition_stage_and_nanodrive_in_objective_view_during_acquisition(self):
         # move the stage to the best focus position in widefield view
@@ -901,7 +930,7 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
                 
                 # Bind click event to each circle
                 self.sample_drop_panel_canvas.tag_bind(circle, '<Button-1>',
-                    lambda event, row=true_row_index, col=col_index: self.sample_drop_panel_move_stage(row, col))
+                    lambda event, row=true_row_index, col=col_index: self.sample_drop_panel_move_stage('WIDEFIELD', row, col))
                 # Bind mouse over and leave events for hover effect and tooltip
                 self.sample_drop_panel_canvas.tag_bind(circle, '<Enter>',
                     lambda event, row=true_row_index, col=col_index: self.sample_drop_panel_on_hover(event, row, col))
@@ -912,27 +941,35 @@ class StageControlModule(ttk.Frame, Publisher, Subscriber):
 
         for col_index, num_circles in enumerate(self.sample_drop_panel_grid_pattern):
             for row_index in range(num_circles):
-                pursa_coordinate_x = np.round(home_x + self.offset_home_to_p1_x + col_index * self.interval_between_drop_x, 2)
-                pursa_coordinate_y = np.round(home_y + self.offset_home_to_p1_y - row_index * self.interval_between_drop_y, 2)
-                self.sample_drop_panel_circle_pursa_coordinates[(row_index, col_index)] = (pursa_coordinate_x, pursa_coordinate_y)
+                prusa_coordinate_x = np.round(home_x + self.offset_home_to_p1_x + col_index * self.interval_between_drop_x, 2)
+                prusa_coordinate_y = np.round(home_y + self.offset_home_to_p1_y - row_index * self.interval_between_drop_y, 2)
+                self.sample_drop_panel_circle_pursa_coordinates_in_widefield[(row_index, col_index)] = (prusa_coordinate_x, prusa_coordinate_y)
 
-    def sample_drop_panel_move_stage(self, row, col):
-        if not self.prusa_x_referenced or not self.prusa_y_referenced or not self.prusa_z_referenced:
-            print("Stage is not referenced. Action disabled.")
-            return  # Disable action if stage is not referenced
+                prusa_coordinate_x = np.round(prusa_coordinate_x + self.calibration_from_widefield_to_objective_x, 2)
+                prusa_coordinate_y = np.round(prusa_coordinate_y + self.calibration_from_widefield_to_objective_y, 2)
+                self.sample_drop_panel_circle_pursa_coordinates_in_objective[(row_index, col_index)] = (prusa_coordinate_x, prusa_coordinate_y)
 
-        # Reset the previous circle color
-        if self.sample_drop_panel_current_sample_row_column:
-            prev_row, prev_col = self.sample_drop_panel_current_sample_row_column
-            self.sample_drop_panel_canvas.itemconfig(f"circle_{prev_row}_{prev_col}", fill='skyblue')
+    def sample_drop_panel_move_stage(self, view_to_move_in, row, col):
 
-        # Highlight the selected circle
-        self.sample_drop_panel_canvas.itemconfig(f"circle_{row}_{col}", fill='yellow')
-        self.sample_drop_panel_current_sample_row_column = (row, col)
-        print(f"Moving XY stage to position: Row {row}, Column {col}")
-        self.sample_drop_panel_current_sample_pursa_coordinates = self.sample_drop_panel_circle_pursa_coordinates[(row, col)]
-        print(f"Pursa coordinates: {self.sample_drop_panel_current_sample_pursa_coordinates}")
-        self.prusa_go_to_xyz(x=self.sample_drop_panel_current_sample_pursa_coordinates[0], y=self.sample_drop_panel_current_sample_pursa_coordinates[1])
+            if not self.prusa_x_referenced or not self.prusa_y_referenced or not self.prusa_z_referenced:
+                print("Stage is not referenced. Action disabled.")
+                return  # Disable action if stage is not referenced
+
+            # Reset the previous circle color
+            if self.sample_drop_panel_current_sample_row_column:
+                prev_row, prev_col = self.sample_drop_panel_current_sample_row_column
+                self.sample_drop_panel_canvas.itemconfig(f"circle_{prev_row}_{prev_col}", fill='skyblue')
+
+            # Highlight the selected circle
+            self.sample_drop_panel_canvas.itemconfig(f"circle_{row}_{col}", fill='yellow')
+            self.sample_drop_panel_current_sample_row_column = (row, col)
+            print(f"Moving XY stage to position: Row {row}, Column {col}")
+            if view_to_move_in == "OBJECTIVE":
+                sample_drop_panel_current_sample_pursa_coordinates = self.sample_drop_panel_circle_pursa_coordinates_in_objective[(row, col)]
+            elif view_to_move_in == "WIDEFIELD":
+                sample_drop_panel_current_sample_pursa_coordinates = self.sample_drop_panel_circle_pursa_coordinates_in_widefield[(row, col)]
+            print(f"Pursa coordinates: {sample_drop_panel_current_sample_pursa_coordinates}")
+            self.prusa_go_to_xyz(x=sample_drop_panel_current_sample_pursa_coordinates[0], y=sample_drop_panel_current_sample_pursa_coordinates[1])
 
     def sample_drop_panel_on_hover(self, event, row, col):
         # Prevent changing color if hovering over the current position

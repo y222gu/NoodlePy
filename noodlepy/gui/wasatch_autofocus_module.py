@@ -43,6 +43,8 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.wasatch_prusa_focus_rough_fine_overlap_step_number = 4 # number of steps to overlap in the fine autofocus
         self.wasatch_nanodrive_focus_rough_fine_overlap_step_number = 2
 
+        self.save_folder_path = os.path.join(os.getcwd(), "captured_spectra")
+
         self.prusa_focus_score_method = 'ratio'  #  or 'entropy'
         self.nanodrive_focus_score_method = 'ratio'  #  or 'entropy'
 
@@ -71,7 +73,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.pause_icon = ImageTk.PhotoImage(pause_icon)
 
         self.spectrum_frame = ttk.Labelframe(self, text="Wasatch Live Spectrum", padding=5)
-        self.spectrum_frame.grid(row=0, column=0, columnspan=4, sticky='nsew', padx=5, pady=5)
+        self.spectrum_frame.grid(row=0, column=0, columnspan=6, sticky='nsew', padx=5, pady=5)
 
         self.laser_power_label = ttk.Label(self.spectrum_frame, text="Power (mW)", width=5)
         self.laser_power_label.grid(row=1, column=0, sticky='nsew', pady=5, padx=5)
@@ -98,18 +100,24 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.play_button.grid(row=1, column=3, rowspan =2, sticky='ew', pady=5, padx=5)
 
         self.capture_button = ttk.Button(self.spectrum_frame, text="Capture", bootstyle ='info-outline', command=self.capture_live_spectrum)
-        self.capture_button.grid(row=1, column=4, sticky='ew', pady=5, padx=5)
+        self.capture_button.grid(row=1, column=4, columnspan=2, sticky='ew', pady=5, padx=5)
 
-        self.ref_polystyrene_button = ttk.Button(self.spectrum_frame, text="Ref. Polystyrene", command=self.debug_with_polystyrene, bootstyle ='info-outline')
-        self.ref_polystyrene_button.grid(row=2, column=4, sticky='ew', pady=5, padx=5)
+        self.capture_number_var = StringVar()
+        self.capture_number_var.set(1)
+        self.capture_number_entry = ttk.Entry(self.spectrum_frame, textvariable=self.capture_number_var, width=5)
+        self.capture_number_entry.grid(row=2, column=4, sticky='ew', pady=5, padx=5)
+
+        # add toggle to show plotted captured spectra when capturing
+        self.plot_flag_var = ttk.BooleanVar(value=False)
+        self.plot_flag_check = ttk.Checkbutton(self.spectrum_frame, text="Show Plot", variable=self.plot_flag_var, bootstyle="info")
+        self.plot_flag_check.grid(row=2, column=5, sticky='ew', pady=5, padx=5)
 
         self.live_spectrum_canvas = ttk.Canvas(self.spectrum_frame, width=self.image_width, height=self.image_height)
-        self.live_spectrum_canvas.grid(row=0, column=0, columnspan=5, sticky='nsew', pady=5, padx=5)
+        self.live_spectrum_canvas.grid(row=0, column=0, columnspan=6, sticky='nsew', pady=5, padx=5)
 
         self.unit_toggle_var = ttk.BooleanVar(value=False)
         self.unit_toggle_btn = ttk.Checkbutton(self.spectrum_frame, variable=self.unit_toggle_var, text="To cm⁻¹", bootstyle="info-round-toggle", command=self.update_live_spectrum_units)
-        self.unit_toggle_btn.grid(row=0, column=4, sticky='en', pady=5, padx=5)
-
+        self.unit_toggle_btn.grid(row=0, column=5, sticky='en', pady=5, padx=5)
         self.live_spectrum_fig, self.live_spectrum_ax = plt.subplots(figsize=(8, 4))
         self.live_spectrum_line, = self.live_spectrum_ax.plot([], [])
         self.live_spectrum_line.set_linewidth(0.8)
@@ -296,7 +304,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         if self.playing_live_spectrum_plot:
             # print("Plotting live spectrum with integration time:", self.wasatch_manager.integ_time_ms)
             self.after(self.wasatch_manager.integ_time_ms, self.update_live_spectrum_plot)
-        
+
     def start_spectrum_thread(self):
         """Start a thread to collect spectrum data."""
         if not hasattr(self, 'spectrum_thread') or not self.spectrum_thread.is_alive():
@@ -327,63 +335,81 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
             pass
 
     def capture_live_spectrum(self):
-        ## check which thread is capture running in
-        spectrum = self.latest_spectrum
-        # print("Capturing spectrum in thread: ", threading.current_thread().name)
-        if self.units == "wavelength":
-            x_axis = self.wasatch_manager.settings.wavelengths
-        else:
-            x_axis = self.wasatch_manager.settings.wavenumbers
-            
-        new_window = ttk.Toplevel()
-        new_window.title("Captured Raman Spectrum")
+        # Measure requested number of spectra and save them (like handle_measure_spectra_and_save_to_specific_folder).
+        num_rep = int(float(self.capture_number_var.get() or 1))
 
-        captured_spectrum_fig = plt.figure(figsize=(4, 2))
-        captured_spectrum_fig, captured_spectrum_ax = plt.subplots(figsize=(4, 2))
-        captured_spectrum_line, =  captured_spectrum_ax.plot(x_axis, spectrum)
-        captured_spectrum_line.set_linewidth(0.8)
-        captured_spectrum_line.set_color('#5bc0de')
+        # Acquire spectra (this uses self.latest_spectrum internally)
+        wavelength, wavelengths, intensities = self.measure_spectra(num_rep)
 
-        if self.units == "wavelength":
-            captured_spectrum_ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
-        elif self.units == "wavenumber":
-            captured_spectrum_ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
+        # Prepare save folders
+        spectra_folder = os.path.join(self.save_folder_path, "spectra")
+        metadata_folder = os.path.join(self.save_folder_path, "metadata")
+        os.makedirs(spectra_folder, exist_ok=True)
+        os.makedirs(metadata_folder, exist_ok=True)
 
-        captured_spectrum_ax.set_ylabel("Intensity (counts)", fontsize=6, color='white')
-        captured_spectrum_ax.set_title("Raman Spectrum", fontsize=8, color='white')
-        captured_spectrum_ax.tick_params(axis='both', which='major', labelsize=6)
-        captured_spectrum_ax.tick_params(axis='both', which='minor', labelsize=6)
-        captured_spectrum_ax.tick_params(axis='x', colors='white')
-        captured_spectrum_ax.tick_params(axis='y', colors='white')
-        captured_spectrum_ax.spines['bottom'].set_color('white')
-        captured_spectrum_ax.spines['left'].set_color('white')
-        captured_spectrum_ax.spines['right'].set_visible(False)
-        captured_spectrum_ax.spines['top'].set_visible(False)
-        captured_spectrum_ax.set_facecolor("none")
-        captured_spectrum_ax.xaxis.label.set_color('white')
-        captured_spectrum_ax.yaxis.label.set_color('white')
-        plt.tight_layout(pad=0.5)
-        captured_spectrum_fig.patch.set_alpha(0)
-        captured_spectrum_canvas = FigureCanvasTkAgg(captured_spectrum_fig, master=new_window)
-        captured_spectrum_canvas.draw()
-        captured_spectrum_canvas.get_tk_widget().pack(side=ttk.TOP, fill=ttk.BOTH, expand=1)
+        # Determine next file number to avoid overwriting
+        existing = [f for f in os.listdir(spectra_folder) if f.endswith(".txt")]
+        file_number = 1
+        while f"Captured_spectra_{file_number}.txt" in existing:
+            file_number += 1
+        filename_base = f"Captured_spectra_{file_number}"
 
-        # check if the capture_spectrum fig already exists
-        filelist = [f for f in os.listdir() if f.endswith(".png")]
-        if "Captured_spectrum_1.png" in filelist:
-            file_number = 2
-            while f"Captured_spectrum_{file_number}.png" in filelist:
-                file_number += 1
-        else:
-            file_number = 1
+        # Flatten and save spectral data (wavelength,intensity pairs)
+        wavelengths_flatten = list(itertools.chain.from_iterable(wavelengths))
+        intensities_flatten = list(itertools.chain.from_iterable(intensities))
+        with open(os.path.join(spectra_folder, filename_base + ".txt"), "w") as outfile:
+            for i in range(len(wavelengths_flatten)):
+                outfile.write(f"{wavelengths_flatten[i]:0.2f}, {intensities_flatten[i]}\n")
 
-        # save the captured spectrum as a png file
-        captured_spectrum_fig.savefig(f"Captured_spectrum_{file_number}.png", dpi=300)
+        # Save metadata similar to handle_measure_spectra_and_save_to_specific_folder
+        with open(os.path.join(metadata_folder, filename_base + "_metadata.txt"), "w") as metafile:
+            metafile.write(f"Number of repetitions: {num_rep}\n")
+            metafile.write(f"Integration time (ms): {self.wasatch_manager.integ_time_ms}\n")
+            metafile.write(f"Laser power (mW): {self.wasatch_manager.laser_power_mW}\n")
+            metafile.write(f"Prusa position (mm): {getattr(self, 'best_prusa_focus_wasatch', None)}\n")
+            metafile.write(f"Nanodrive position (um): {getattr(self, 'best_nanodrive_focus_position', None)}\n")
+            metafile.write(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime())}\n")
 
-        with open(f"Captured_spectrum_{file_number}.txt", "w") as outfile:
-            for i in range(len(x_axis)):
-                outfile.write(f"{x_axis[i]:0.2f}, {spectrum[i]}\n")
-        plt.close(captured_spectrum_fig)
+        if self.plot_flag_var.get():
+            if self.units == "wavelength":
+                x_axis = wavelength
+            else:
+                x_axis = self.wasatch_manager.settings.wavenumbers
+
+            new_window = ttk.Toplevel()
+            new_window.title(f"Captured Spectra x{num_rep}")
+
+            fig, ax = plt.subplots(figsize=(6, 3))
+            for idx, spec in enumerate(intensities):
+                ax.plot(x_axis, spec, label=f"rep {idx+1}", linewidth=0.8)
+            ax.set_ylabel("Intensity (counts)", fontsize=6, color='white')
+            ax.set_title("Captured Raman Spectra", fontsize=8, color='white')
+            if self.units == "wavelength":
+                ax.set_xlabel("Wavelength (nm)", fontsize=6, color='white')
+            else:
+                ax.set_xlabel("Wavenumber (cm⁻¹)", fontsize=6, color='white')
+
+            ax.tick_params(axis='both', which='major', labelsize=6)
+            ax.tick_params(axis='x', colors='white')
+            ax.tick_params(axis='y', colors='white')
+            ax.spines['bottom'].set_color('white')
+            ax.spines['left'].set_color('white')
+            ax.spines['right'].set_visible(False)
+            ax.spines['top'].set_visible(False)
+            ax.set_facecolor("none")
+            ax.xaxis.label.set_color('white')
+            ax.yaxis.label.set_color('white')
+            ax.legend(fontsize=6, loc='upper right')
+
+            plt.tight_layout(pad=0.5)
+            fig.patch.set_alpha(0)
+            canvas = FigureCanvasTkAgg(fig, master=new_window)
+            canvas.draw()
+            canvas.get_tk_widget().pack(side=ttk.TOP, fill=ttk.BOTH, expand=1)
+
+            # also save the plotted figure
+            fig.savefig(os.path.join(self.save_folder_path, filename_base + "_plot.png"), dpi=300)
+            plt.close(fig)
         
     def debug_with_polystyrene(self):
         expected_peak = 1006.22
@@ -773,6 +799,10 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.nano_drive.move_to(position) # starting from the lowest position
         self.handle_get_nanodrive_position()
         return None
+
+    # def handle_update_save_folder(self, folder_path):
+    #     self.save_folder_path = folder_path
+    #     return None
 
     def handle_measure_spectra_and_save_to_specific_folder(self, num_rep, folder_path, filename):
         wavelength, wavelengths, intensities = self.measure_spectra(num_rep)

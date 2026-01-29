@@ -61,7 +61,7 @@ class EdgeDetectorSAM():
         fig, ax = plt.subplots(figsize=(self.width*px, self.height*px))
         ax.imshow(self.image)
         self.show_mask(self.best_mask, ax)
-        self.show_points(input_point, input_label, ax, '*', marker_size=self.marker_size)
+        # self.show_points(input_point, input_label, ax, '*', marker_size=self.marker_size)
         ax.axis('off')
         plt.subplots_adjust(left=0, right=1, top=1, bottom=0)
         buf = io.BytesIO()
@@ -70,6 +70,12 @@ class EdgeDetectorSAM():
         pil_image = Image.open(buf)
         # save the figure
         save_path = os.path.join(os.getcwd(), "masked_image.png")
+        # ensure subsequent pil_image.save uses high DPI (e.g., 600x600)
+        orig_save = pil_image.save
+        def _save_with_dpi(path, *args, **kwargs):
+            kwargs.setdefault('dpi', (600, 600))
+            return orig_save(path, *args, **kwargs)
+        pil_image.save = _save_with_dpi
         base_name, ext = os.path.splitext(save_path)
         index = 1
         while os.path.exists(save_path):
@@ -133,6 +139,21 @@ class EdgeDetectorSAM():
 
             sampling_x = sampling_x[inside]
             sampling_y = sampling_y[inside]
+
+            # compute grid row/col indices for each candidate point, then keep only those inside
+            col_indices = np.tile(np.arange(col_number), row_number)
+            row_indices = np.repeat(np.arange(row_number), col_number)
+            col_indices = col_indices[inside]
+            row_indices = row_indices[inside]
+
+            # convert to 1-based indexing for human-friendly coordinates order
+            coordinates_order = [{'row': int(r) + 1, 'col': int(c) + 1} for r, c in zip(row_indices, col_indices)]
+
+            # save the filtered coordinates order and the corresponding sampling points to a text file for debugging
+            with open("filtered_coordinates_order_and_sampling_points.txt", "w") as f:
+                f.write("Coordinates Order (Row, Col) and Corresponding Sampling Points (X, Y):\n")
+                for r, c, x, y in zip(row_indices + 1, col_indices + 1, sampling_x, sampling_y):
+                    f.write(f"Row: {int(r)}, Col: {int(c)} -> X: {float(x)}, Y: {float(y)}\n")
 
         elif shape == 'random':
             num_points = kwargs['num_points']
