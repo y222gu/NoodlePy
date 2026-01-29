@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
     QTableWidgetItem, QGridLayout, QSizePolicy, QStackedLayout,
     QTableWidget, QAbstractItemView, QHeaderView  # <-- add these
 )
-
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
@@ -23,6 +22,7 @@ from sklearn.metrics import silhouette_score
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 import copy
+from matplotlib.widgets import LassoSelector
 # Import the actual Spectrum and SpectrumPreprocessor classes
 from noodlepy.utils.spectrum import Spectrum
 from noodlepy.utils.spectrumpreprocessor import SpectrumPreprocessor
@@ -258,7 +258,7 @@ class SpectraViewer(QMainWindow):
     def __init__(self, data_objects, preprocessor, config_file=None):
         super().__init__()
         self.setWindowTitle("Spectra Viewer 2.1")
-        self.original_data_objects = data_objects  
+        self.original_data_objects = data_objects
         self.preprocessor = preprocessor
         self.config_file = config_file
 
@@ -273,22 +273,21 @@ class SpectraViewer(QMainWindow):
                 print(f"Error preprocessing spectrum {i}: {e}")
                 # Keep original if preprocessing fails
                 self.data_objects.append(copy.deepcopy(obj))
-        
+
         print(f"Successfully preprocessed {len(self.data_objects)} spectra")
-        
+
         # Align all spectra to common grid
         self.align_spectra_to_common_grid()
-        
+
         # Validate that we have data
         if len(self.data_objects) == 0:
             print("ERROR: No data objects available after preprocessing!")
         else:
-            # Check a sample of the data
             sample_obj = self.data_objects[0]
             print(f"Sample spectrum shape: intensity={len(sample_obj.intensity)}, raman={len(sample_obj.raman_shift_cm)}")
             if len(sample_obj.intensity) > 0:
                 print(f"Raman shift range: [{sample_obj.raman_shift_cm.min():.2f}, {sample_obj.raman_shift_cm.max():.2f}]")
-        
+
         self.selected_indices = []
         self.selected_index_to_line = {}
         self.hovered_index = None
@@ -310,10 +309,10 @@ class SpectraViewer(QMainWindow):
 
         self.color_by = "None"
         self.lasso = None
-        
+
         self._pan_active = False
         self._pan_press_event = None
-        
+
         # Plotting mode: 'grouped' (by patient) or 'combined' (all in one plot)
         self.plot_mode = 'combined'
 
@@ -333,6 +332,10 @@ class SpectraViewer(QMainWindow):
         self.add_filter_row()  # create the first filter row
         self.compute_embedding()
         self.plot_embedding()
+        self.btn_select.setChecked(True)
+        self.update_line_plot()
+        self.update_pca_loadings_plot()  # optional; safe
+
 
     def align_spectra_to_common_grid(self):
         """Align all spectra to a common wavenumber grid using interpolation"""
@@ -562,11 +565,6 @@ class SpectraViewer(QMainWindow):
         config_buttons_layout.addWidget(self.btn_save_config)
 
         preproc_group_layout.addLayout(config_buttons_layout)
-
-        self.btn_recalculate = QPushButton("Re-process")
-        self.btn_recalculate.clicked.connect(self.update_preprocessing)
-        preproc_group_layout.addWidget(self.btn_recalculate)
-
         preproc_tab_layout.addWidget(preproc_group)
 
         # ---- Filters in Preprocessing tab ----
@@ -591,6 +589,10 @@ class SpectraViewer(QMainWindow):
         self.filters_container_layout.setSpacing(6)
         filter_group_layout.addLayout(self.filters_container_layout)
 
+        self.btn_recalculate = QPushButton("Re-process")
+        self.btn_recalculate.clicked.connect(self.update_preprocessing)
+        preproc_group_layout.addWidget(self.btn_recalculate)
+
         preproc_tab_layout.addWidget(filter_group)
         left_tabs.addTab(preproc_tab, "Preprocessing")
 
@@ -612,6 +614,12 @@ class SpectraViewer(QMainWindow):
         embedding_layout.addWidget(QLabel("Dimensionality:"))
         embedding_layout.addWidget(self.combo_dim)
 
+        self.combo_method = QComboBox()
+        self.combo_method.addItems(["PCA", "T-SNE", "UMAP"])
+        self.combo_method.currentTextChanged.connect(self.update_method)
+        embedding_layout.addWidget(QLabel("Method:"))
+        embedding_layout.addWidget(self.combo_method)
+
         self.spin_pca_loadings = QSpinBox()
         self.spin_pca_loadings.setRange(1, 20)
         self.spin_pca_loadings.setValue(self.n_pcs_for_loading)
@@ -621,16 +629,20 @@ class SpectraViewer(QMainWindow):
         )
         embedding_layout.addWidget(QLabel("PCA Loadings PCs:"))
         embedding_layout.addWidget(self.spin_pca_loadings)
-
-        self.combo_method = QComboBox()
-        self.combo_method.addItems(["T-SNE", "PCA", "UMAP"])
-        self.combo_method.currentTextChanged.connect(self.update_method)
-        embedding_layout.addWidget(QLabel("Method:"))
-        embedding_layout.addWidget(self.combo_method)
-
         embed_tab_layout.addWidget(embedding_group)
 
-        color_group = QGroupBox("Color Options")
+        embed_tab_layout.addStretch(1)
+        left_tabs.addTab(embed_tab, "Dim Reduction")
+
+        # ---------------------------------------------------------------------
+        # TAB 3: Color Mapping
+        # ---------------------------------------------------------------------
+        embed_tab = QWidget()
+        embed_tab_layout = QVBoxLayout(embed_tab)
+        embed_tab_layout.setContentsMargins(0, 0, 0, 0)
+        embed_tab_layout.setSpacing(10)
+
+        color_group = QGroupBox("Color Mapping")
         color_layout = QVBoxLayout(color_group)
         color_layout.setSpacing(8)
 
@@ -648,10 +660,10 @@ class SpectraViewer(QMainWindow):
 
         embed_tab_layout.addWidget(color_group)
         embed_tab_layout.addStretch(1)
-        left_tabs.addTab(embed_tab, "Dim Reduction")
+        left_tabs.addTab(embed_tab, "Color Mapping")
 
         # ---------------------------------------------------------------------
-        # TAB 3: DBSCAN
+        # TAB 4: DBSCAN
         # ---------------------------------------------------------------------
         dbscan_tab = QWidget()
         dbscan_tab_layout = QVBoxLayout(dbscan_tab)
@@ -752,17 +764,17 @@ class SpectraViewer(QMainWindow):
         # Clear + Lasso buttons on one row (saves vertical space)
         sel_btn_row = QHBoxLayout()
 
+        # Toggle button for lasso selection
         self.btn_select = QPushButton("Enable Lasso Selection")
         self.btn_select.setCheckable(True)
         self.btn_select.toggled.connect(self.toggle_lasso)
+        self.toggle_lasso(True)  # Initialize lasso selection as enabled
 
         btn_clear = QPushButton("Clear Selection")
-
         btn_clear.clicked.connect(self.clear_selection)
         sel_btn_row.addWidget(self.btn_select)
         sel_btn_row.addWidget(btn_clear)
         left_layout.addLayout(sel_btn_row)
-
 
         # =========================
         # RIGHT AREA: Spectra (top) + Loadings (mid) + Metadata (bottom)
@@ -864,7 +876,6 @@ class SpectraViewer(QMainWindow):
         main_splitter.setStretchFactor(0, 0)
         main_splitter.setStretchFactor(1, 1)
         main_splitter.setSizes([520, 1200])
-
 
 
     def get_metadata_keys(self):
@@ -979,8 +990,12 @@ class SpectraViewer(QMainWindow):
                     pass
                 self.lasso = None
 
-            from matplotlib.widgets import LassoSelector
-            self.lasso = LassoSelector(self.ax_scatter, self.on_lasso_select, useblit=True)
+            self.lasso = LassoSelector(
+                self.ax_scatter,
+                self.on_lasso_select,
+                useblit=True,
+                props=dict(color="white", linewidth=1.5, alpha=0.95)
+            )
         else:
             self.btn_select.setText("Enable Lasso Selection")
             if self.lasso is not None:
@@ -1118,57 +1133,83 @@ class SpectraViewer(QMainWindow):
 
     def update_dim(self, text):
         self.embedding_dim = 2 if text == "2D" else 3
-        self.compute_embedding()
+        self.compute_embedding(indices=self.visible_indices, force=True)
         self.plot_embedding()
+        self.update_line_plot()
+        self.update_pca_loadings_plot()
 
     def update_method(self, text):
         self.embedding_method = text
-        self.compute_embedding()
+        self.compute_embedding(indices=self.visible_indices, force=True)
         self.plot_embedding()
         self.update_line_plot()
         self.update_line_highlights()
-        self.update_pca_loadings_plot()   # <-- add this
+        self.update_pca_loadings_plot()
 
-    def compute_embedding(self):
-        cache_key = (self.embedding_method, self.embedding_dim,
-                     getattr(self, "n_pcs_for_loading", None) if self.embedding_method == "PCA" else None)
+    def compute_embedding(self, indices=None, force=False):
+        """
+        Compute embedding for a subset of points (indices). If indices is None, use all points.
+        Stores result in self.embedding_result as a full-size array (N_total x emb_dim) with NaNs
+        for points not included in the fit, so the rest of the GUI can still index by global idx.
+        """
+        import hashlib
 
-        if cache_key in self.embedding_cache:
+        # ----- choose fit indices -----
+        N_total = len(self.data_objects)
+        if N_total == 0:
+            self.embedding_result = np.array([])
+            return
+
+        if indices is None:
+            fit_indices = list(range(N_total))
+        else:
+            fit_indices = list(indices)
+
+        if len(fit_indices) == 0:
+            # nothing to fit; keep empty embedding
+            self.embedding_result = np.full((N_total, self.embedding_dim), np.nan, dtype=float)
+            # also clear PCA state if not PCA
+            if self.embedding_method != "PCA":
+                self.pca_model = None
+                self.pca_loadings = None
+                self.pca_explained_var = None
+            return
+
+        # ----- build cache key that depends on the subset -----
+        idx_bytes = np.asarray(fit_indices, dtype=np.int32).tobytes()
+        idx_hash = hashlib.md5(idx_bytes).hexdigest()  # stable + short
+        cache_key = (
+            self.embedding_method,
+            self.embedding_dim,
+            int(getattr(self, "n_pcs_for_loading", 0)) if self.embedding_method == "PCA" else None,
+            idx_hash,
+        )
+
+        if (not force) and cache_key in self.embedding_cache:
             cached = self.embedding_cache[cache_key]
             if self.embedding_method == "PCA":
-                # cached tuple: (embedding_result, pca_model, pca_loadings, pca_explained_var)
                 self.embedding_result, self.pca_model, self.pca_loadings, self.pca_explained_var = cached
             else:
                 self.embedding_result = cached
             return
-        
-        # Check if we have data to process
-        if len(self.data_objects) == 0:
-            print("Warning: No data objects to compute embedding")
-            self.embedding_result = np.array([])
-            return
-            
-        data_matrix = np.array([obj.intensity for obj in self.data_objects])
-        
-        # Check if data matrix is valid
-        if data_matrix.size == 0:
-            print("Warning: Empty data matrix")
-            self.embedding_result = np.array([])
-            return
-        
-        # Ensure we don't request more components than available
-        n_samples, n_features = data_matrix.shape
 
-        # embedding dimension for TSNE/UMAP/PCA scatter
+        # ----- make matrix for ONLY the visible indices -----
+        data_matrix = np.array([self.data_objects[i].intensity for i in fit_indices])
+        if data_matrix.size == 0:
+            self.embedding_result = np.full((N_total, self.embedding_dim), np.nan, dtype=float)
+            return
+
+        n_samples, n_features = data_matrix.shape
         emb_components = min(self.embedding_dim, n_samples, n_features)
 
-        # PCA model dimension (for loadings) can be larger than emb dim
+        # PCA can fit more components than scatter dim for loadings
         pca_fit_components = min(
-            max(self.embedding_dim, getattr(self, "n_pcs_for_loading", 3)),
+            max(emb_components, int(getattr(self, "n_pcs_for_loading", 3))),
             n_samples,
             n_features
         )
 
+        # Clear PCA state when leaving PCA
         if self.embedding_method != "PCA":
             self.pca_model = None
             self.pca_loadings = None
@@ -1176,39 +1217,47 @@ class SpectraViewer(QMainWindow):
 
         try:
             if self.embedding_method == "T-SNE":
-                # emb_components = min(emb_components, 3)  # limit T-SNE to max 3 components
-                
-                # T-SNE requires at least n_components + 1 samples
+                # Barnes-Hut TSNE only supports n_components <= 3
+                emb_components = min(emb_components, 3)
+
                 if n_samples < emb_components + 1:
-                    print(f"Warning: Not enough samples ({n_samples}) for T-SNE with {emb_components} components")
-                    # Fall back to PCA
                     reducer = PCA(n_components=emb_components)
-                    self.embedding_result = reducer.fit_transform(data_matrix)
+                    sub_emb = reducer.fit_transform(data_matrix)
                 else:
-                    # Calculate appropriate perplexity (must be < n_samples)
                     perplexity = min(30, (n_samples - 1) / 3)
-                    reducer = TSNE(n_components=emb_components, perplexity=perplexity, random_state=42)
-                    self.embedding_result = reducer.fit_transform(data_matrix)
+                    reducer = TSNE(
+                        n_components=emb_components,
+                        perplexity=perplexity,
+                        random_state=42
+                    )
+                    sub_emb = reducer.fit_transform(data_matrix)
+
+            elif self.embedding_method == "UMAP":
+                reducer = umap.UMAP(n_components=emb_components, random_state=42)
+                sub_emb = reducer.fit_transform(data_matrix)
+
             elif self.embedding_method == "PCA":
                 reducer = PCA(n_components=pca_fit_components)
                 full_scores = reducer.fit_transform(data_matrix)
 
-                # Scatter uses only first emb_components
-                self.embedding_result = full_scores[:, :emb_components]
+                # Scatter uses first emb_components
+                sub_emb = full_scores[:, :emb_components]
 
-                # Store for loading plots
                 self.pca_model = reducer
-                self.pca_loadings = reducer.components_ # (n_components, n_features)
+                self.pca_loadings = reducer.components_
                 self.pca_explained_var = reducer.explained_variance_ratio_
 
-            elif self.embedding_method == "UMAP":
-                reducer = umap.UMAP(n_components=emb_components, random_state=42)
-                self.embedding_result = reducer.fit_transform(data_matrix)
             else:
                 print(f"Unknown embedding method: {self.embedding_method}")
-                self.embedding_result = np.array([])
+                self.embedding_result = np.full((N_total, self.embedding_dim), np.nan, dtype=float)
                 return
-                
+
+            # ----- write into full-size embedding array -----
+            full = np.full((N_total, emb_components), np.nan, dtype=float)
+            full[np.asarray(fit_indices, dtype=int), :] = sub_emb
+            self.embedding_result = full
+
+            # cache (store PCA state too)
             if self.embedding_method == "PCA":
                 self.embedding_cache[cache_key] = (
                     self.embedding_result, self.pca_model, self.pca_loadings, self.pca_explained_var
@@ -1216,13 +1265,14 @@ class SpectraViewer(QMainWindow):
             else:
                 self.embedding_cache[cache_key] = self.embedding_result
 
-            print(f"Computed {self.embedding_method} embedding: {self.embedding_result.shape}")
-            
+            print(f"Computed {self.embedding_method} embedding on {len(fit_indices)}/{N_total} points: {sub_emb.shape}")
+
         except Exception as e:
             print(f"Error computing embedding: {e}")
             import traceback
             traceback.print_exc()
-            self.embedding_result = np.array([])
+            self.embedding_result = np.full((N_total, self.embedding_dim), np.nan, dtype=float)
+
 
     def plot_embedding(self):
         """Plot embedding, keeping axis limits fixed and managing colorbar/selection/lasso."""
@@ -1252,12 +1302,7 @@ class SpectraViewer(QMainWindow):
 
         # Check if we have a valid embedding result
         if self.embedding_result is None or len(self.embedding_result) == 0:
-            self.ax_scatter.text(
-                0.5, 0.5,
-                'No embedding data available.\nPlease check data preprocessing.',
-                ha='center', va='center', transform=self.ax_scatter.transAxes
-            )
-            self.ax_scatter.set_title("Embedding Unavailable")
+            self.ax_text_center("No embedding data available.\nPlease check data preprocessing.", title="Embedding Unavailable")
             self.canvas_scatter.draw_idle()
             return
 
@@ -1265,8 +1310,13 @@ class SpectraViewer(QMainWindow):
         emb = self.embedding_result
         n_samples, n_dims = emb.shape
 
-        x_all = emb[:, 0]
-        y_all = emb[:, 1]
+        mask = np.isfinite(emb[:, 0]) & np.isfinite(emb[:, 1])
+        emb_valid = emb[mask]
+        if emb_valid.size == 0:
+            # show "no embedding"
+            ...
+        x_all = emb_valid[:, 0]
+        y_all = emb_valid[:, 1]
 
         x_min, x_max = float(x_all.min()), float(x_all.max())
         y_min, y_max = float(y_all.min()), float(y_all.max())
@@ -1285,17 +1335,18 @@ class SpectraViewer(QMainWindow):
         z_min = z_max = None
         if self.embedding_dim == 3 and n_dims >= 3:
             z_all = emb[:, 2]
-            z_min, z_max = float(z_all.min()), float(z_all.max())
-            z_min, z_max = with_margin(z_min, z_max)
+
+            # IMPORTANT: only finite values
+            z_valid = z_all[np.isfinite(z_all)]
+
+            if z_valid.size > 0:
+                z_min, z_max = float(z_valid.min()), float(z_valid.max())
+                z_min, z_max = with_margin(z_min, z_max)
 
         # ---- Visible indices based on filters ----
         indices = self.get_visible_indices()
         if len(indices) == 0:
-            self.ax_scatter.text(
-                0.5, 0.5,
-                'No points match the current filter.',
-                ha='center', va='center', transform=self.ax_scatter.transAxes
-            )
+            self.ax_text_center("No points match the current filter.", title=f"{self.embedding_method} Embedding (filtered)")
             self.ax_scatter.set_xlim(x_min, x_max)
             self.ax_scatter.set_ylim(y_min, y_max)
             self.ax_scatter.set_title(f"{self.embedding_method} Embedding (filtered)")
@@ -1315,12 +1366,31 @@ class SpectraViewer(QMainWindow):
 
         if color_attr != "None":
             values = [self.data_objects[i].metadata.get(color_attr, None) for i in indices]
-            unique_vals = sorted(set(v for v in values if v is not None))
+            # Filter out None, NaN, and ensure consistent types
+            valid_vals = []
+            for v in values:
+                if v is None:
+                    continue
+                # Check for NaN (works for both float and numpy types)
+                try:
+                    if pd.isna(v):
+                        continue
+                except (TypeError, ValueError):
+                    pass
+                valid_vals.append(v)
+            
+            # Sort with consistent type handling
+            try:
+                unique_vals = sorted(set(valid_vals))
+            except TypeError:
+                # Mixed types - convert all to strings for sorting
+                unique_vals = sorted(set(str(v) for v in valid_vals))
+            
             n_unique = len(unique_vals)
 
             if n_unique > 0:
                 color_map = {val: idx for idx, val in enumerate(unique_vals)}
-                colors_array = [color_map.get(v, -1) for v in values]
+                colors_array = [color_map.get(v, -1) if v is not None and not (isinstance(v, float) and pd.isna(v)) else -1 for v in values]
                 cmap_to_use = cmap_name
             else:
                 colors_array = DEFAULT_BLUE
@@ -1337,6 +1407,7 @@ class SpectraViewer(QMainWindow):
                     c=colors_array, cmap=cmap_to_use,
                     picker=5, zorder=1
                 )
+
                 # Overlay scatter for selected points (initially empty, always on top)
                 self.scatter_selected = self.ax_scatter.scatter(
                     [], [], marker='*', s=120,
@@ -1353,13 +1424,13 @@ class SpectraViewer(QMainWindow):
                 self.scatter = self.ax_scatter.scatter(
                     coords[:, 0], coords[:, 1], coords[:, 2],
                     c=colors_array, cmap=cmap_to_use,
-                    picker=5, zorder=1
+                    picker=10, zorder=1
                 )
                 # Overlay scatter for selected points (initially empty, always on top)
                 self.scatter_selected = self.ax_scatter.scatter(
                     [], [], marker='*', s=120,
                     edgecolors='white', facecolors='none',
-                    linewidths=1.0, zorder=10, picker=False
+                    linewidths=5.0, zorder=10, picker=False
                 )
 
                 self.ax_scatter.set_xlabel(f"{self.embedding_method} 1")
@@ -1373,16 +1444,12 @@ class SpectraViewer(QMainWindow):
                     self.ax_scatter.set_zlim(z_min, z_max)
 
             title_suffix = "" if len(indices) == len(self.data_objects) else f" (filtered: {len(indices)}/{len(self.data_objects)})"
-            self.ax_scatter.set_title(f"{self.embedding_method} Embedding{title_suffix}")
+            self.ax_scatter.set_title(f"{self.embedding_method} {title_suffix}")
         except Exception as e:
             print(f"Error plotting embedding: {e}")
             import traceback
             traceback.print_exc()
-            self.ax_scatter.text(
-                0.5, 0.5,
-                f'Error plotting embedding:\n{str(e)}',
-                ha='center', va='center', transform=self.ax_scatter.transAxes
-            )
+            self.ax_text_center(f"Error plotting embedding:\n{str(e)}", title=f"{self.embedding_method} Embedding (error)")
             self.canvas_scatter.draw_idle()
             return
 
@@ -1442,7 +1509,12 @@ class SpectraViewer(QMainWindow):
                     self.lasso = None
 
                 from matplotlib.widgets import LassoSelector
-                self.lasso = LassoSelector(self.ax_scatter, self.on_lasso_select, useblit=True)
+                self.lasso = LassoSelector(
+                    self.ax_scatter,
+                    self.on_lasso_select,
+                    useblit=True,
+                    props=dict(color="white", linewidth=1.5, alpha=0.95)
+                )
             else:
                 # ensure no stale lasso
                 if self.lasso is not None:
@@ -1589,15 +1661,9 @@ class SpectraViewer(QMainWindow):
             self.metadata_table.setRowCount(0)
             self.metadata_table.setColumnCount(0)
 
-        # No selection -> placeholder
+        # - else if startup default -> plot all visible spectra
         if not self.selected_indices:
-            ax = self.fig_line.add_subplot(111)
-            ax.set_title("Select points to view spectra", color="white")
-            ax.axis("off")
-            ax.set_facecolor("none")
-            self.canvas_line.draw_idle()
-            self.update_pca_loadings_plot()
-            return
+            self.selected_indices = self.get_visible_indices()
 
         # Shared x-axis range (authoritative!)
         # Spectra are aligned to a common grid, so use any selected spectrum.
@@ -1791,6 +1857,7 @@ class SpectraViewer(QMainWindow):
         self.selected_indices = [i for i in self.selected_indices if i in self.visible_indices]
 
         # Redraw
+        self.compute_embedding(indices=self.visible_indices, force=True)
         self.plot_embedding()
         self.update_line_plot()
 
@@ -2285,8 +2352,6 @@ class SpectraViewer(QMainWindow):
 
                 attr_combo.blockSignals(False)
 
-        # 10) Recompute which points are visible based on current filters
-        #     (this will call plot_embedding() and update_line_plot())
         self.update_visible_indices()
 
         print("Data re-processed with new parameters")
@@ -2449,6 +2514,25 @@ class SpectraViewer(QMainWindow):
                 except Exception:
                     pass
 
+    def ax_text_center(self, msg, title=None):
+        """Centered overlay text that works for both 2D and 3D axes."""
+        if getattr(self.ax_scatter, "name", "") == "3d":
+            self.ax_scatter.text2D(
+                0.5, 0.5, msg,
+                ha="center", va="center",
+                transform=self.ax_scatter.transAxes,
+                color="white"
+            )
+        else:
+            self.ax_scatter.text(
+                0.5, 0.5, msg,
+                ha="center", va="center",
+                transform=self.ax_scatter.transAxes,
+                color="white"
+            )
+        if title is not None:
+            self.ax_scatter.set_title(title)
+
 
 class ScrollableComboBox(QComboBox):
     """
@@ -2500,7 +2584,7 @@ class SortableTableWidgetItem(QTableWidgetItem):
 
 if __name__ == "__main__":
     # Example usage - update these paths to your actual data
-    data_folder = r'/Users/yifeigu/Documents/Carney_Lab/Data/RamanRobot/2025_12_10_only1-2_cleaned'
+    data_folder = r'/Users/yifeigu/Library/CloudStorage/Box-Box/Carney Lab Shared/Data/Raman_Robot/2026_01_28_1'
     
     # Create default config
     default_config = {
