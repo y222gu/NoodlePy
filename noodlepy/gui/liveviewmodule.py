@@ -555,9 +555,12 @@ class LiveViewModule(Publisher, tk.Frame):
                 self.captured_image_label.configure(image=self.image_to_display)
                 self.captured_image_label.configure(text="")
                 self.captured_image_label.image = self.image_to_display
-
-                # save the image with high resolution and no compression
-                self.captured_image.save('captured_image.png')  # Use a high-quality resampling filter for aliasing issues
+                # save the image with high DPI (600) and no compression (use TIFF if possible)
+                try:
+                    self.captured_image.save('captured_image_600dpi.tiff', dpi=(600, 600), compression='none')
+                except Exception:
+                    # fallback to PNG with DPI and minimal compression
+                    self.captured_image.save('captured_image_600dpi.png', dpi=(600, 600), compress_level=0)
 
                 self.edge_detection_point_button.configure(state=NORMAL)
 
@@ -578,7 +581,7 @@ class LiveViewModule(Publisher, tk.Frame):
         self.on_create_button_clicked()
 
         relative_distance_to_camera_center = self.convert_pixel_position_to_relative_distance(self.sampling_position_x, self.sampling_position_y)
-
+        
         # turn it into [[x1, y1], [x2, y2]...] format
         relative_distance_to_camera_center = np.stack([relative_distance_to_camera_center[0], relative_distance_to_camera_center[1]], axis=1)
         self.dispatch('update_sampling_points_to_protocol_module', relative_distance_to_camera_center, self.coordinates_order)

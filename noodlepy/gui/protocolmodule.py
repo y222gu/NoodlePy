@@ -23,7 +23,7 @@ class ProtocolModule(Publisher, ttk.Frame):
                                   "measure_spectra_and_save_to_specific_folder",
                                   "reposition_stage_and_nanodrive_in_objective_view", 
                                   "turn_on_laser",
-                                  "turn_off_laser",])
+                                  "turn_off_laser"]) # "update_capture_save_folder"
         ttk.Frame.__init__(self, parent)
 
         self.name = "ProtocolModule"
@@ -142,7 +142,7 @@ class ProtocolModule(Publisher, ttk.Frame):
             if self.abort_flag: break
             
             print('Moving the sample drop at row', sample_drop_row_column[0], 'column', sample_drop_row_column[1])
-            yield ("move_stage_to_target_sample_drop_during_aquisition", sample_drop_row_column)
+            yield ("move_stage_to_target_sample_drop_during_aquisition", 'WIDEFIELD', sample_drop_row_column)
             if self.abort_flag: break
 
             if self.autofocus_widefield_var.get() == "True":
@@ -177,7 +177,7 @@ class ProtocolModule(Publisher, ttk.Frame):
                         break
 
                     print(f"Measuring #{i_sampling_point} point at position {point}")
-                    yield ("move_to_a_single_sampling_point", 'OBJECTIVE', point)
+                    yield ("move_to_a_single_sampling_point", sample_drop_row_column, point)
                     if self.abort_flag: break
 
                     if self.wasatch_autofocus_with_prusa_var.get() == "True":
@@ -235,7 +235,7 @@ class ProtocolModule(Publisher, ttk.Frame):
             if self.abort_flag: break
             
             print('Moving the sample drop at row', sample_drop_row_column[0], 'column', sample_drop_row_column[1])
-            yield ("move_stage_to_target_sample_drop_during_aquisition", sample_drop_row_column)
+            yield ("move_stage_to_target_sample_drop_during_aquisition", 'WIDEFIELD', sample_drop_row_column)
             if self.abort_flag: break
 
             if self.autofocus_widefield_var.get() == "True":
@@ -245,20 +245,23 @@ class ProtocolModule(Publisher, ttk.Frame):
             yield ("capture_current_image_and_detect_sample_drop_and_create_sampling_points",)
             if self.abort_flag: break
             
-            yield ("call_switch_view_button_in_live_camera_module", "TO_OBJECTIVE")
-            if self.abort_flag: break
-            
-            yield ("check_current_camera_view", "OBJECTIVE")
-            if self.abort_flag: break
-            
             print("Sampling points relative to camera center:", self.sampling_points_relative_distance_to_camera_center)
             sampling_points_for_all_drops.append(self.sampling_points_relative_distance_to_camera_center)
             coordinates_order_for_all_drops.append(self.coordinates_order)
 
+        # move back to the first droplet before starting measurements
+        yield ("move_stage_to_target_sample_drop_during_aquisition", "WIDEFIELD", selected_circle_positions[0])
+        yield ("call_switch_view_button_in_live_camera_module", "TO_OBJECTIVE")
+        yield ("check_current_camera_view", "OBJECTIVE")
+
         # Now loop again to do the measurements for all sample drops
         for i_rep in range(int(self.number_of_repeats_var.get())):
+            if self.abort_flag: break
 
             for i_sample_drop, sample_drop_row_column in enumerate(selected_circle_positions):
+                # yield ("move_stage_to_target_sample_drop_during_aquisition", 'OBJECTIVE', sample_drop_row_column)
+                # if self.abort_flag: break
+
                 # turn on laser
                 if i_sample_drop == 0 and i_rep == 0:
                     yield ("turn_on_laser", "wait")
@@ -272,7 +275,7 @@ class ProtocolModule(Publisher, ttk.Frame):
                     if self.abort_flag: break
 
                     print(f"Measuring #{i_sampling_point} point at position {point}")
-                    yield ("move_to_a_single_sampling_point", 'OBJECTIVE', point)
+                    yield ("move_to_a_single_sampling_point", sample_drop_row_column, point)
                     if self.abort_flag: break
 
                     if self.wasatch_autofocus_with_prusa_var.get() == "True":
@@ -305,17 +308,16 @@ class ProtocolModule(Publisher, ttk.Frame):
 
             print("All points for the current sample drop are completed.")
 
-            yield ('turn_off_laser',)
-            if self.abort_flag: break
-            
-            yield ("reposition_stage_and_nanodrive_in_objective_view",)
-            if self.abort_flag: break
-            
-            yield ("call_switch_view_button_in_live_camera_module", "TO_WIDE")
-            if self.abort_flag: break
-            
-            yield ("check_current_camera_view", "WIDEFIELD")
-            if self.abort_flag: break
+        yield ('turn_off_laser',)
+        if self.abort_flag: return
+
+        # yield ("reposition_stage_and_nanodrive_in_objective_view",)
+        
+        yield ("call_switch_view_button_in_live_camera_module", "TO_WIDE")
+        if self.abort_flag: return
+
+        yield ("check_current_camera_view", "WIDEFIELD")
+        if self.abort_flag: return
 
     def handle_task_completed(self):
         # Check if we're aborting or if generator is None
