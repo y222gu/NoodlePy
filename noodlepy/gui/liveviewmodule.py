@@ -408,15 +408,15 @@ class LiveViewModule(Publisher, tk.Frame):
         thread.start()
 
     def edge_detection(self, detection_type):
-        self.edgedetector = EdgeDetectorSAM(self.captured_image)
-        # self.edgedetector = EdgeDetectorUnet(self.captured_image)
+        # self.edgedetector = EdgeDetectorSAM(self.captured_image)
+        self.edgedetector = EdgeDetectorUnet(self.captured_image)
         
-        if detection_type == "auto":
-            masked_image = self.edgedetector.auto_mask_generate()
-        elif detection_type == "point":
+        # if detection_type == "auto":
+        #     masked_image = self.edgedetector.auto_mask_generate()
+        if detection_type == "point":
             masked_image =self.edgedetector.point_prompt_mask_generate()
-        elif detection_type == "box":   
-            masked_image = self.edgedetector.box_prompt_mask_generate()
+        # elif detection_type == "box":   
+        #     masked_image = self.edgedetector.box_prompt_mask_generate()
         print("Edge detection button clicked")
 
         self.masked_image = masked_image
