@@ -3,8 +3,8 @@ import tkinter as tk
 import ttkbootstrap as ttk
 from ttkbootstrap.constants import *
 import logging
-from led_controller import LEDController, led_on, led_off
-from publisher_subscriber import Publisher, Subscriber
+from noodlepy.gui.led_controller import LEDController, led_on, led_off
+from noodlepy.gui.publisher_subscriber import Publisher, Subscriber
 import os
 
 

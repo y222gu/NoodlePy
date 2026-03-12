@@ -557,10 +557,26 @@ class LiveViewModule(Publisher, tk.Frame):
                 self.captured_image_label.image = self.image_to_display
                 # save the image with high DPI (600) and no compression (use TIFF if possible)
                 try:
-                    self.captured_image.save('captured_image_600dpi.tiff', dpi=(600, 600), compression='none')
+                    base_tiff = 'captured_image.tiff'
+                    if os.path.exists(base_tiff):
+                        idx = 1
+                        while os.path.exists(f'captured_image_{idx}.tiff'):
+                            idx += 1
+                        filename = f'captured_image_{idx}.tiff'
+                    else:
+                        filename = base_tiff
+                    self.captured_image.save(filename, dpi=(600, 600), compression='none')
                 except Exception:
-                    # fallback to PNG with DPI and minimal compression
-                    self.captured_image.save('captured_image_600dpi.png', dpi=(600, 600), compress_level=0)
+                    # fallback to PNG with DPI and minimal compression, also avoid overwrite by adding index
+                    base_png = 'captured_image.png'
+                    if os.path.exists(base_png):
+                        idx = 1
+                        while os.path.exists(f'captured_image_{idx}.png'):
+                            idx += 1
+                        filename = f'captured_image_{idx}.png'
+                    else:
+                        filename = base_png
+                    self.captured_image.save(filename, dpi=(600, 600), compress_level=0)
 
                 self.edge_detection_point_button.configure(state=NORMAL)
 
