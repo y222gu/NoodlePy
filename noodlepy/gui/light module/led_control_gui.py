@@ -26,9 +26,7 @@ class LEDControlGUI(ttk.Frame, Publisher, Subscriber):
         self._is_on = False
 
         # Load and resize lightbulb image
-        _DIR = os.path.dirname(os.path.abspath(__file__))
-        img = Image.open(os.path.join(_DIR, 'lightbulb.png')).resize((32, 32), Image.Resampling.LANCZOS)
-        self._bulb_img = ImageTk.PhotoImage(img)
+        self._bulb_img = Image.open(os.path.join(os.getcwd(), "noodlepy","assets","lightbulb.png")).resize((20, 20))
 
         self.create_widgets()
 
