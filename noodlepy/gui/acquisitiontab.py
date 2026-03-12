@@ -66,6 +66,7 @@ class AcquisitionGUI(ttk.Frame):
         self.acquisition_protocol_frame.add_subscriber('focus_wasatch_with_prusa', self.stage_control_frame, callback = self.wasatch_autofocus_frame.handle_autofocus_wasatch_with_prusa_during_aquisition)
         self.acquisition_protocol_frame.add_subscriber('focus_wasatch_with_nanodrive', self.wasatch_autofocus_frame, callback = self.wasatch_autofocus_frame.handle_autofocus_wasatch_with_nanodrive_during_aquisition)
         self.acquisition_protocol_frame.add_subscriber('measure_spectra_and_save_to_specific_folder', self.wasatch_autofocus_frame, callback = self.wasatch_autofocus_frame.handle_measure_spectra_and_save_to_specific_folder)
+        self.acquisition_protocol_frame.add_subscriber('move_nanodrive_to_during_aquisition', self.wasatch_autofocus_frame, callback = self.wasatch_autofocus_frame.handle_move_nanodrive_to_during_aquisition)
         # self.acquisition_protocol_frame.add_subscriber('update_capture_save_folder', self.wasatch_autofocus_frame, callback = self.wasatch_autofocus_frame.handle_update_save_folder)
         self.acquisition_protocol_frame.add_subscriber('turn_on_laser', self.wasatch_autofocus_frame, callback = self.wasatch_autofocus_frame.handle_turn_laser_on)
         self.acquisition_protocol_frame.add_subscriber('turn_off_laser', self.wasatch_autofocus_frame, callback = self.wasatch_autofocus_frame.handle_turn_laser_off)

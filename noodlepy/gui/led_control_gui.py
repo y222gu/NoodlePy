@@ -36,13 +36,14 @@ class LEDControlGUI(ttk.Frame, Publisher, Subscriber):
         main_frame.grid(row=0, column=0)
         main_frame.columnconfigure(2, weight=1, minsize=300)
 
-        # Toggle button 
+        # Toggle button
+        self._bulb_photo = ImageTk.PhotoImage(self._bulb_img)
         self._led_button = ttk.Button(
             main_frame,
-            image=self._bulb_img,
+            image=self._bulb_photo,
             command=self._toggle,
-            bootstyle='secondary',       # blue when off
-            width=4
+            width=4,
+            bootstyle='secondary'
         )
         self._led_button.grid(row=0, column=0, padx=(4, 8), pady=4)
 

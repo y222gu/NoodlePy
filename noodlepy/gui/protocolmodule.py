@@ -23,7 +23,9 @@ class ProtocolModule(Publisher, ttk.Frame):
                                   "measure_spectra_and_save_to_specific_folder",
                                   "reposition_stage_and_nanodrive_in_objective_view", 
                                   "turn_on_laser",
-                                  "turn_off_laser"]) # "update_capture_save_folder"
+                                  "turn_off_laser",
+                                  "move_nanodrive_to_during_aquisition"
+                                  ]) # "update_capture_save_folder"
         ttk.Frame.__init__(self, parent)
 
         self.name = "ProtocolModule"
@@ -109,7 +111,7 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.abort_flag = False  # Reset abort flag
         if self.generate_sample_points_upfront_var.get() == "True":
             print("Generating sampling points upfront.")
-            self.current_task_generator = self.task_sequence_generator_sampling_all_points_upfront(self.selected_circle_positions)
+            self.current_task_generator = self.task_sequence_generator_sampling_all_points_Z_stack(self.selected_circle_positions)
         else:
             self.current_task_generator = self.task_sequence_generator_one_by_one(self.selected_circle_positions)
         
@@ -319,6 +321,131 @@ class ProtocolModule(Publisher, ttk.Frame):
         yield ("check_current_camera_view", "WIDEFIELD")
         if self.abort_flag: return
 
+    def task_sequence_generator_sampling_all_points_Z_stack(self, selected_circle_positions):
+        sampling_points_for_all_drops = []
+        coordinates_order_for_all_drops = []
+
+        for i_sample_drop, sample_drop_row_column in enumerate(selected_circle_positions):
+            if self.abort_flag:
+                print("Aborting task sequence at sample drop", i_sample_drop)
+                break
+                
+            yield ('check_current_camera_view', "WIDEFIELD")
+            if self.abort_flag: break
+            
+            print('Moving the sample drop at row', sample_drop_row_column[0], 'column', sample_drop_row_column[1])
+            yield ("move_stage_to_target_sample_drop_during_aquisition", 'WIDEFIELD', sample_drop_row_column)
+            if self.abort_flag: break
+
+            if self.autofocus_widefield_var.get() == "True":
+                yield ("focus_widefield_camera",)
+                if self.abort_flag: break
+
+            yield ("capture_current_image_and_detect_sample_drop_and_create_sampling_points",)
+            if self.abort_flag: break
+            
+            print("Sampling points relative to camera center:", self.sampling_points_relative_distance_to_camera_center)
+            sampling_points_for_all_drops.append(self.sampling_points_relative_distance_to_camera_center)
+            coordinates_order_for_all_drops.append(self.coordinates_order)
+
+        # move back to the first droplet before starting measurements
+        yield ("move_stage_to_target_sample_drop_during_aquisition", "WIDEFIELD", selected_circle_positions[0])
+        yield ("call_switch_view_button_in_live_camera_module", "TO_OBJECTIVE")
+        yield ("check_current_camera_view", "OBJECTIVE")
+
+        # Now loop again to do the measurements for all sample drops
+        for i_rep in range(int(self.number_of_repeats_var.get())):
+            if self.abort_flag: break
+
+            for i_sample_drop, sample_drop_row_column in enumerate(selected_circle_positions):
+                # yield ("move_stage_to_target_sample_drop_during_aquisition", 'OBJECTIVE', sample_drop_row_column)
+                # if self.abort_flag: break
+
+                # turn on laser
+                if i_sample_drop == 0 and i_rep == 0:
+                    yield ("turn_on_laser", "wait")
+                    print("Turning on laser for the first sample drop and first sampling point.")
+                    print("Waiting for 6 seconds to allow the laser to stabilize.")# Wait for the laser to stabilize
+                else:
+                    yield ("turn_on_laser", "no_wait") # no wait
+                if self.abort_flag: break
+
+                for i_sampling_point, point in enumerate(sampling_points_for_all_drops[i_sample_drop]):
+                    if self.abort_flag: break
+
+                    print(f"Measuring #{i_sampling_point} point at position {point}")
+                    yield ("move_to_a_single_sampling_point", sample_drop_row_column, point)
+                    if self.abort_flag: break
+
+                    if self.wasatch_autofocus_with_prusa_var.get() == "True":
+                        print("Autofocusing Wasatch with Prusa for the first sampling point.")
+                        print("This step is only performed once per sample drop.")
+                        yield ("focus_wasatch_with_prusa",)
+                        if self.abort_flag: break
+
+                    if self.wasatch_autofocus_with_nanodrive_var.get() == "True":
+                        yield ("focus_wasatch_with_nanodrive",)
+                        if self.abort_flag: break
+
+                    folder = os.path.join(self.folder_path.get())
+                    if not os.path.exists(folder):
+                        os.makedirs(folder)
+
+                    coordinates_order = coordinates_order_for_all_drops[i_sample_drop][i_sampling_point]
+                    # join keys and values (key then value) with "_" sorted by ascending key
+                    sorted_items = sorted(coordinates_order.items(), key=lambda item: item[0])
+                    parts = []
+                    for k, v in sorted_items:
+                        parts.append(str(k))
+                        parts.append(f"{v}" if isinstance(v, (int, float)) else str(v))
+                    coordicates_str = "_".join(parts)
+
+                    filename = f"{self.file_base_name.get()}_sample_{i_sample_drop}_point_{i_sampling_point}_rep_{i_rep+1}_{coordicates_str}_x{point[0]:.2f}_y{point[1]:.2f}_first30"
+                    yield ("measure_spectra_and_save_to_specific_folder", 30, folder, filename)
+                    if self.abort_flag: break
+                    print(f"Data saved to {folder}")
+
+                    # get z stack range and step from the entry
+                    z_stack_range = self.z_stack_range_var.get()
+                    start, end, step = map(int, z_stack_range.split(','))
+                    print(f"Performing Z-stack acquisition from {start} to {end} with step {step}.")
+
+                    for z in range(start, end, step):
+                        yield ("move_nanodrive_to_during_aquisition", z)
+                        if self.abort_flag: break
+
+                        folder = os.path.join(self.folder_path.get())
+                        if not os.path.exists(folder):
+                            os.makedirs(folder)
+
+                        coordinates_order = coordinates_order_for_all_drops[i_sample_drop][i_sampling_point]
+                        # join keys and values (key then value) with "_" sorted by ascending key
+                        sorted_items = sorted(coordinates_order.items(), key=lambda item: item[0])
+                        parts = []
+                        for k, v in sorted_items:
+                            parts.append(str(k))
+                            parts.append(f"{v}" if isinstance(v, (int, float)) else str(v))
+                        coordicates_str = "_".join(parts)
+
+                        filename = f"{self.file_base_name.get()}_sample_{i_sample_drop}_point_{i_sampling_point}_rep_{i_rep+1}_{coordicates_str}_x{point[0]:.2f}_y{point[1]:.2f}_z{z}"
+                        yield ("measure_spectra_and_save_to_specific_folder", self.number_of_spectra_var.get(), folder, filename)
+                        if self.abort_flag: break
+                        print(f"Data saved to {folder}")
+
+            print("All points for the current sample drop are completed.")
+
+        yield ('turn_off_laser',)
+        if self.abort_flag: return
+
+        # yield ("reposition_stage_and_nanodrive_in_objective_view",)
+        
+        yield ("call_switch_view_button_in_live_camera_module", "TO_WIDE")
+        if self.abort_flag: return
+
+        yield ("check_current_camera_view", "WIDEFIELD")
+        if self.abort_flag: return
+
+
     def handle_task_completed(self):
         # Check if we're aborting or if generator is None
         if self.abort_flag or self.current_task_generator is None:
@@ -480,6 +607,16 @@ class ProtocolModule(Publisher, ttk.Frame):
         self.number_of_repeats_label = ttk.Label(self.set_protocol, text="Number of times to repeat each sample:").grid(row=2, column=0, padx=5, pady=5)
         self.number_of_repeats_entry = ttk.Entry(self.set_protocol, textvariable=self.number_of_repeats_var, width = 5).grid(row=2, column=1, padx=5, pady=5, sticky="nsew")
 
+        # entry for the z stack range and step - reuse existing StringVar if present so value persists between opens
+        if not hasattr(self, 'z_stack_range_var') or not isinstance(getattr(self,'z_stack_range_var'), StringVar):
+            try:
+                initial_z_stack_range = getattr(self, 'z_stack_range', "20,80,5")
+            except Exception:
+                initial_z_stack_range = "20,80,5"
+            self.z_stack_range_var = StringVar(value=initial_z_stack_range)
+        self.z_stack_range_label = ttk.Label(self.set_protocol, text="Z stack range and step (start,end,step):").grid(row=3, column=0, padx=5, pady=5)
+        self.z_stack_range_entry = ttk.Entry(self.set_protocol, textvariable=self.z_stack_range_var, width = 10).grid(row=3, column=1, padx=5, pady=5, sticky="nsew")
+
         # check box for autofocusing in widefield, objective, and wasatch - reuse StringVars if present
         if not hasattr(self, 'autofocus_widefield_var') or not isinstance(getattr(self, 'autofocus_widefield_var'), StringVar):
             self.autofocus_widefield_var = StringVar(value="True")
@@ -493,7 +630,7 @@ class ProtocolModule(Publisher, ttk.Frame):
          # Frame to hold the autofocus checkbuttons
 
         self.autofocus_checkbuttons_frame = ttk.Frame(self.set_protocol)
-        self.autofocus_checkbuttons_frame.grid(row=3, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
+        self.autofocus_checkbuttons_frame.grid(row=4, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
         self.autofocus_widefield = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Widefield", variable=self.autofocus_widefield_var, onvalue="True", offvalue="False", bootstyle='info')
         self.autofocus_widefield.grid(row=0, column=0, padx=5, pady=5, sticky="nsew")
         self.autofocus_objective = ttk.Checkbutton(self.autofocus_checkbuttons_frame, text="Autofocus Objective", variable=self.wasatch_autofocus_with_prusa_var, onvalue="True", offvalue="False", bootstyle='info')
@@ -505,7 +642,7 @@ class ProtocolModule(Publisher, ttk.Frame):
 
         # button to confirm the selection
         self.ok_button = ttk.Button(self.set_protocol, text="OK", command=self.confirm_sample_selection, bootstyle='info')
-        self.ok_button.grid(row=4, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
+        self.ok_button.grid(row=5, column=0, columnspan=3, pady=10, padx=10, sticky='ew')
 
         self.set_protocol_window.update_idletasks()
         self.set_protocol_window.geometry(f"{self.set_protocol_window.winfo_reqwidth()}x{self.set_protocol_window.winfo_reqheight()}")

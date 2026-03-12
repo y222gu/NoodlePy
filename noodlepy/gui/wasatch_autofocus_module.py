@@ -47,6 +47,7 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
 
         self.prusa_focus_score_method = 'ratio'  #  or 'entropy'
         self.nanodrive_focus_score_method = 'ratio'  #  or 'entropy'
+        self.best_nanodrive_focus_position = None
 
         self.wasatch_focus_prusa_lower_limit = None
         self.wasatch_focus_prusa_upper_limit = None
@@ -799,6 +800,12 @@ class WasatchAutofocusModule(Publisher, ttk.Frame):
         self.nano_drive.move_to(position) # starting from the lowest position
         self.handle_get_nanodrive_position()
         return None
+    
+    def handle_move_nanodrive_to_during_aquisition(self, position):
+        self.nano_drive.move_to(position) # starting from the lowest position
+        self.handle_get_nanodrive_position()
+        self.dispatch("task_completed")
+        return True
 
     # def handle_update_save_folder(self, folder_path):
     #     self.save_folder_path = folder_path

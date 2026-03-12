@@ -591,7 +591,7 @@ class LiveViewModule(Publisher, tk.Frame):
 
     def handling_create_sampling_points_during_aquisition(self):
         # add stablization delay
-        time.sleep(2)
+        time.sleep(1)
         self.capture_frame()
         self.edge_detection('point')
         self.on_create_button_clicked()
