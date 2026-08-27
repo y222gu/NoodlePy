@@ -1,17 +1,24 @@
-*.pdf
-*.asc
-.ipynb_checkpoints/
-.DS_Store
-scratch/
-*.gif
-.vscode/
+# Python
+__pycache__/
 *.pyc
-*.csv
-*.pickle
+.ipynb_checkpoints/
+
+# OS / editor
+.DS_Store
+.vscode/
+.claude/
+
+# Data folders (keep patient/experiment data out of the repo)
+data/
+
+# Model weights / checkpoints (never push trained weights)
+*.pt
+*.pth
+*.ckpt
+*.safetensors
+*.onnx
+*.h5
+*.npz
 *.pkl
-noodlepyvenv/
-wandb/
-*.html
-*.log
-noodlepyvenvwindows/
-sam_vit_b_01ec64.pth
+*.pickle
+model.json
