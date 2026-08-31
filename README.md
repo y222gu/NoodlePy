@@ -1,4 +1,4 @@
-# RamanPy
+# NoodlePy
 
 A metadata-centric, spatially aware analysis and visualization pipeline for Raman spectroscopy data collected from dried blood plasma droplets.
 
@@ -19,7 +19,7 @@ A metadata-centric, spatially aware analysis and visualization pipeline for Rama
 ## Project Structure
 
 ```
-RamanPy/
+NoodlePy/
 ├── utils/                      # Core modules
 │   ├── spectrum.py             #   Core Spectrum class
 │   ├── spectrumpreprocessor.py #   Preprocessing pipeline
